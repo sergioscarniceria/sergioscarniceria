@@ -47,14 +47,13 @@ type CustomerProfile = {
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
-  card: "rgba(255,255,255,0.72)",
-  cardStrong: "rgba(255,255,255,0.88)",
+  card: "rgba(255,255,255,0.88)",
+  cardStrong: "rgba(255,255,255,0.95)",
   border: "rgba(92, 27, 17, 0.10)",
   text: "#3b1c16",
   muted: "#7a5a52",
   primary: "#7b2218",
   primaryDark: "#5a190f",
-  accent: "#d9c9a3",
   success: "#1f7a4d",
   warning: "#a66a10",
   danger: "#b42318",
@@ -67,6 +66,8 @@ export default function ClientePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showCart, setShowCart] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -86,6 +87,18 @@ export default function ClientePage() {
 
   useEffect(() => {
     checkUser();
+  }, []);
+
+  useEffect(() => {
+    function handleResize() {
+      const mobile = window.innerWidth < 960;
+      setIsMobile(mobile);
+      if (!mobile) setShowCart(false);
+    }
+
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   function getPrice(product: Product) {
@@ -131,15 +144,11 @@ export default function ClientePage() {
   }
 
   async function loadData(userId: string) {
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile } = await supabase
       .from("customer_profiles")
       .select("*")
       .eq("id", userId)
       .maybeSingle();
-
-    if (profileError) {
-      console.log("PROFILE ERROR:", profileError);
-    }
 
     const customerProfile = profile as CustomerProfile | null;
 
@@ -191,7 +200,6 @@ export default function ClientePage() {
     }
 
     const createdUser = data.user;
-
     if (!createdUser) {
       alert("No se creó el usuario");
       setSaving(false);
@@ -239,11 +247,7 @@ export default function ClientePage() {
       return;
     }
 
-    await supabase.from("loyalty_accounts").upsert([
-      {
-        customer_id: customer.id,
-      },
-    ]);
+    await supabase.from("loyalty_accounts").upsert([{ customer_id: customer.id }]);
 
     alert("Cuenta creada. Ahora inicia sesión.");
 
@@ -306,8 +310,8 @@ export default function ClientePage() {
       kilos = Number((amount / price).toFixed(3));
     }
 
-    setCart([
-      ...cart,
+    setCart((prev) => [
+      ...prev,
       {
         name: product.name,
         price,
@@ -341,8 +345,9 @@ export default function ClientePage() {
 
     setCart(previousItems);
     setNotes(order.notes || "");
+    setShowCart(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
-    alert("Pedido cargado otra vez en tu carrito");
+    alert("Pedido cargado otra vez en tu pedido");
   }
 
   async function createOrder() {
@@ -413,6 +418,7 @@ export default function ClientePage() {
 
     setCart([]);
     setNotes("");
+    setShowCart(false);
     await loadData(user.id);
     setSaving(false);
   }
@@ -459,7 +465,7 @@ export default function ClientePage() {
               />
               <h1 style={{ margin: 0, color: COLORS.text }}>Portal cliente</h1>
               <p style={{ color: COLORS.muted, marginTop: 8 }}>
-                Haz tus pedidos de forma rápida, limpia y ordenada
+                Haz tus pedidos de forma rápida y clara
               </p>
             </div>
 
@@ -501,7 +507,7 @@ export default function ClientePage() {
                   onChange={(e) => setPassword(e.target.value)}
                   style={inputStyle}
                 />
-                <button onClick={login} style={primaryButtonStyle}>
+                <button onClick={login} style={{ ...primaryButtonStyle, width: "100%" }}>
                   {saving ? "Entrando..." : "Entrar"}
                 </button>
               </>
@@ -532,7 +538,7 @@ export default function ClientePage() {
                   onChange={(e) => setPassword(e.target.value)}
                   style={inputStyle}
                 />
-                <button onClick={register} style={primaryButtonStyle}>
+                <button onClick={register} style={{ ...primaryButtonStyle, width: "100%" }}>
                   {saving ? "Creando..." : "Crear cuenta"}
                 </button>
               </>
@@ -555,17 +561,18 @@ export default function ClientePage() {
               src="/logo.png"
               alt="Sergios Carnicería"
               style={{
-                width: 96,
-                maxWidth: "100%",
+                width: isMobile ? 72 : 96,
                 height: "auto",
                 display: "block",
               }}
             />
 
             <div>
-              <h1 style={{ margin: 0, color: COLORS.text }}>Portal cliente</h1>
+              <h1 style={{ margin: 0, color: COLORS.text, fontSize: isMobile ? 28 : 34 }}>
+                Portal cliente
+              </h1>
               <p style={{ color: COLORS.muted, margin: "6px 0 0 0" }}>
-                Pedido elegante, rápido y claro
+                Pedido rápido y claro
               </p>
             </div>
           </div>
@@ -590,15 +597,22 @@ export default function ClientePage() {
           </div>
 
           <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Resumen del carrito</div>
+            <div style={smallLabelStyle}>Resumen del pedido</div>
             <div style={heroValueStyle}>${cartTotal().toFixed(2)}</div>
             <div style={heroMetaStyle}>
-              {cart.length} artículo{cart.length === 1 ? "" : "s"} en tu pedido
+              {cart.length} artículo{cart.length === 1 ? "" : "s"}
             </div>
           </div>
         </div>
 
-        <div style={mainGridStyle}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(360px, 0.85fr)",
+            gap: 20,
+            alignItems: "start",
+          }}
+        >
           <div style={panelStyle}>
             <div style={panelHeaderStyle}>
               <div>
@@ -614,18 +628,26 @@ export default function ClientePage() {
               style={inputStyle}
             />
 
-            <div style={productsGridStyle}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile
+                  ? "repeat(2, minmax(0, 1fr))"
+                  : "repeat(auto-fit, minmax(210px, 1fr))",
+                gap: 14,
+              }}
+            >
               {filteredProducts.map((p) => (
                 <div key={p.id} style={productCardStyle}>
-                  <div style={{ minHeight: 46 }}>
+                  <div style={{ minHeight: isMobile ? 42 : 46 }}>
                     <div style={productNameStyle}>{p.name}</div>
                   </div>
 
                   <div style={productPriceStyle}>${getPrice(p).toFixed(2)}</div>
 
-                  <div style={{ minHeight: 30, marginBottom: 10 }}>
+                  <div style={{ minHeight: 28, marginBottom: 10 }}>
                     {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
-                      <span style={discountBadgeStyle}>Precio mayoreo -10%</span>
+                      <span style={discountBadgeStyle}>Precio mayoreo</span>
                     ) : null}
 
                     {p.is_excluded_from_discount ? (
@@ -638,7 +660,7 @@ export default function ClientePage() {
                       +1 kg
                     </button>
                     <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                      +0.5 kg
+                      +0.5
                     </button>
                     <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
                       $
@@ -649,118 +671,223 @@ export default function ClientePage() {
             </div>
           </div>
 
-          <div style={sideColumnStyle}>
-            <div style={panelStyle}>
-              <div style={panelHeaderStyle}>
-                <div>
-                  <h2 style={panelTitleStyle}>Mi pedido</h2>
-                  <p style={panelSubtitleStyle}>Revisa antes de enviar</p>
+          {!isMobile && (
+            <div style={{ display: "grid", gap: 20 }}>
+              <CartPanel
+                cart={cart}
+                notes={notes}
+                setNotes={setNotes}
+                removeCartItem={removeCartItem}
+                cartTotal={cartTotal}
+                createOrder={createOrder}
+                saving={saving}
+              />
+
+              <OrdersPanel orders={orders} repeatOrder={repeatOrder} />
+            </div>
+          )}
+        </div>
+
+        {isMobile && (
+          <>
+            <div style={{ height: 90 }} />
+
+            <button
+              onClick={() => setShowCart(true)}
+              style={floatingCartButtonStyle}
+            >
+              Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
+            </button>
+
+            {showCart && (
+              <div style={mobileOverlayStyle} onClick={() => setShowCart(false)}>
+                <div style={mobileSheetStyle} onClick={(e) => e.stopPropagation()}>
+                  <div style={mobileSheetHeaderStyle}>
+                    <div>
+                      <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 24 }}>
+                        Mi pedido
+                      </div>
+                      <div style={{ color: COLORS.muted }}>Revisa antes de enviar</div>
+                    </div>
+
+                    <button onClick={() => setShowCart(false)} style={closeButtonStyle}>
+                      ✕
+                    </button>
+                  </div>
+
+                  <CartPanel
+                    cart={cart}
+                    notes={notes}
+                    setNotes={setNotes}
+                    removeCartItem={removeCartItem}
+                    cartTotal={cartTotal}
+                    createOrder={createOrder}
+                    saving={saving}
+                    mobile
+                  />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 10 }}>
+              <OrdersPanel orders={orders} repeatOrder={repeatOrder} mobile />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CartPanel({
+  cart,
+  notes,
+  setNotes,
+  removeCartItem,
+  cartTotal,
+  createOrder,
+  saving,
+  mobile = false,
+}: {
+  cart: CartItem[];
+  notes: string;
+  setNotes: (value: string) => void;
+  removeCartItem: (index: number) => void;
+  cartTotal: () => number;
+  createOrder: () => void;
+  saving: boolean;
+  mobile?: boolean;
+}) {
+  return (
+    <div style={panelStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <h2 style={panelTitleStyle}>Mi pedido</h2>
+          <p style={panelSubtitleStyle}>Revisa antes de enviar</p>
+        </div>
+      </div>
+
+      {cart.length === 0 ? (
+        <div style={emptyBoxStyle}>Todavía no agregas productos</div>
+      ) : (
+        <>
+          {cart.map((c, i) => (
+            <div key={i} style={cartRowStyle}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 700, color: COLORS.text }}>{c.name}</div>
+                <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                  {c.kilos} kg · ${c.price.toFixed(2)}/kg
                 </div>
               </div>
 
-              {cart.length === 0 ? (
-                <div style={emptyBoxStyle}>Todavía no agregas productos</div>
-              ) : (
-                <>
-                  {cart.map((c, i) => (
-                    <div key={i} style={cartRowStyle}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, color: COLORS.text }}>{c.name}</div>
-                        <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                          {c.kilos} kg · ${c.price.toFixed(2)}/kg
-                        </div>
-                      </div>
+              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                  ${(c.kilos * c.price).toFixed(2)}
+                </div>
+                <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
+                  Quitar
+                </button>
+              </div>
+            </div>
+          ))}
 
-                      <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                          ${(c.kilos * c.price).toFixed(2)}
-                        </div>
-                        <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
-                          Quitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+          <div style={totalBoxStyle}>
+            <span>Total</span>
+            <span>${cartTotal().toFixed(2)}</span>
+          </div>
+        </>
+      )}
 
-                  <div style={totalBoxStyle}>
-                    <span>Total</span>
-                    <span>${cartTotal().toFixed(2)}</span>
+      <textarea
+        placeholder="Notas para tu pedido"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        style={{
+          ...textareaStyle,
+          minHeight: mobile ? 100 : 110,
+        }}
+      />
+
+      <button onClick={createOrder} style={{ ...primaryButtonStyle, width: "100%" }}>
+        {saving ? "Enviando..." : "Enviar pedido"}
+      </button>
+    </div>
+  );
+}
+
+function OrdersPanel({
+  orders,
+  repeatOrder,
+  mobile = false,
+}: {
+  orders: Order[];
+  repeatOrder: (order: Order) => void;
+  mobile?: boolean;
+}) {
+  return (
+    <div style={panelStyle}>
+      <div style={panelHeaderStyle}>
+        <div>
+          <h2 style={panelTitleStyle}>Mis pedidos</h2>
+          <p style={panelSubtitleStyle}>Historial y repetición rápida</p>
+        </div>
+      </div>
+
+      {orders.length === 0 ? (
+        <div style={emptyBoxStyle}>No hay pedidos</div>
+      ) : (
+        orders.map((o) => (
+          <div key={o.id} style={historyCardStyle}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 12,
+                marginBottom: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, color: COLORS.text, fontSize: mobile ? 18 : 20 }}>
+                  {o.customer_name} - {o.status}
+                </div>
+                {o.created_at ? (
+                  <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
+                    {new Date(o.created_at).toLocaleString()}
                   </div>
-                </>
-              )}
+                ) : null}
+              </div>
 
-              <textarea
-                placeholder="Notas para tu pedido"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                style={textareaStyle}
-              />
-
-              <button onClick={createOrder} style={primaryButtonStyle}>
-                {saving ? "Enviando..." : "Enviar pedido"}
+              <button onClick={() => repeatOrder(o)} style={repeatButtonStyle}>
+                Repetir
               </button>
             </div>
 
-            <div style={panelStyle}>
-              <div style={panelHeaderStyle}>
-                <div>
-                  <h2 style={panelTitleStyle}>Mis pedidos</h2>
-                  <p style={panelSubtitleStyle}>Historial y repetición rápida</p>
-                </div>
-              </div>
+            {o.notes ? (
+              <div style={{ marginBottom: 10, color: COLORS.muted }}>📝 {o.notes}</div>
+            ) : null}
 
-              {orders.length === 0 ? (
-                <div style={emptyBoxStyle}>No hay pedidos</div>
-              ) : (
-                orders.map((o) => (
-                  <div key={o.id} style={historyCardStyle}>
-                    <div style={historyTopStyle}>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, color: COLORS.text }}>
-                          {o.customer_name} - {o.status}
-                        </div>
-                        {o.created_at ? (
-                          <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
-                            {new Date(o.created_at).toLocaleString()}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <button onClick={() => repeatOrder(o)} style={repeatButtonStyle}>
-                        Repetir
-                      </button>
-                    </div>
-
-                    {o.notes ? (
-                      <div style={{ marginBottom: 10, color: COLORS.muted }}>
-                        📝 {o.notes}
-                      </div>
-                    ) : null}
-
-                    {o.order_items?.length ? (
-                      <div style={{ display: "grid", gap: 6 }}>
-                        {o.order_items.map((item) => (
-                          <div key={item.id} style={historyItemStyle}>
-                            <span>{item.product}</span>
-                            <span>
-                              {item.kilos} kg · ${item.price}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div style={{ marginTop: 12, color: COLORS.muted, fontSize: 14 }}>
-                      Puntos generados:{" "}
-                      <b style={{ color: COLORS.text }}>{o.loyalty_points_earned || 0}</b>
-                    </div>
+            {o.order_items?.length ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                {o.order_items.map((item) => (
+                  <div key={item.id} style={historyItemStyle}>
+                    <span style={{ minWidth: 0 }}>{item.product}</span>
+                    <span style={{ flexShrink: 0 }}>
+                      {item.kilos} kg · ${item.price}
+                    </span>
                   </div>
-                ))
-              )}
+                ))}
+              </div>
+            ) : null}
+
+            <div style={{ marginTop: 12, color: COLORS.muted, fontSize: 14 }}>
+              Puntos generados:{" "}
+              <b style={{ color: COLORS.text }}>{o.loyalty_points_earned || 0}</b>
             </div>
           </div>
-        </div>
-      </div>
+        ))
+      )}
     </div>
   );
 }
@@ -875,7 +1002,7 @@ const topBarStyle: React.CSSProperties = {
 
 const heroGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 16,
   marginBottom: 20,
 };
@@ -885,7 +1012,7 @@ const heroCardStyle: React.CSSProperties = {
   backdropFilter: "blur(10px)",
   border: `1px solid ${COLORS.border}`,
   borderRadius: 24,
-  padding: 22,
+  padding: 20,
   boxShadow: COLORS.shadow,
 };
 
@@ -896,7 +1023,7 @@ const smallLabelStyle: React.CSSProperties = {
 };
 
 const heroValueStyle: React.CSSProperties = {
-  fontSize: 34,
+  fontSize: 32,
   fontWeight: 800,
   color: COLORS.text,
   marginBottom: 6,
@@ -905,18 +1032,6 @@ const heroValueStyle: React.CSSProperties = {
 const heroMetaStyle: React.CSSProperties = {
   color: COLORS.muted,
   fontSize: 14,
-};
-
-const mainGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(0, 1.2fr) minmax(320px, 0.8fr)",
-  gap: 20,
-  alignItems: "start",
-};
-
-const sideColumnStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 20,
 };
 
 const panelStyle: React.CSSProperties = {
@@ -947,27 +1062,24 @@ const panelSubtitleStyle: React.CSSProperties = {
   fontSize: 14,
 };
 
-const productsGridStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
-  gap: 14,
-};
-
 const productCardStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   borderRadius: 20,
-  padding: 16,
+  padding: 14,
+  minWidth: 0,
 };
 
 const productNameStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 700,
-  lineHeight: 1.3,
+  lineHeight: 1.25,
+  fontSize: 15,
+  wordBreak: "break-word",
 };
 
 const productPriceStyle: React.CSSProperties = {
-  fontSize: 24,
+  fontSize: 22,
   fontWeight: 800,
   color: COLORS.primary,
   marginBottom: 6,
@@ -1012,15 +1124,6 @@ const historyCardStyle: React.CSSProperties = {
   marginBottom: 12,
 };
 
-const historyTopStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 10,
-  flexWrap: "wrap",
-};
-
 const historyItemStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
@@ -1044,7 +1147,6 @@ const inputStyle: React.CSSProperties = {
 
 const textareaStyle: React.CSSProperties = {
   width: "100%",
-  minHeight: 110,
   padding: 14,
   borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
@@ -1101,23 +1203,29 @@ const backButton: React.CSSProperties = {
 };
 
 const lightMiniButtonStyle: React.CSSProperties = {
-  padding: "10px 12px",
+  flex: 1,
+  minWidth: 0,
+  padding: "10px 10px",
   borderRadius: 12,
   border: `1px solid ${COLORS.border}`,
   background: "white",
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 700,
+  fontSize: 14,
 };
 
 const darkMiniButtonStyle: React.CSSProperties = {
-  padding: "10px 14px",
+  width: 46,
+  minWidth: 46,
+  height: 46,
   borderRadius: 12,
   border: "none",
   background: COLORS.primary,
   color: "white",
   cursor: "pointer",
   fontWeight: 700,
+  fontSize: 20,
 };
 
 const removeButtonStyle: React.CSSProperties = {
@@ -1166,4 +1274,60 @@ const excludedBadgeStyle: React.CSSProperties = {
   color: COLORS.warning,
   fontSize: 12,
   fontWeight: 700,
+};
+
+const floatingCartButtonStyle: React.CSSProperties = {
+  position: "fixed",
+  left: 16,
+  right: 16,
+  bottom: 16,
+  zIndex: 40,
+  padding: "16px 18px",
+  borderRadius: 18,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  fontWeight: 800,
+  fontSize: 16,
+  boxShadow: "0 16px 30px rgba(123, 34, 24, 0.28)",
+};
+
+const mobileOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.28)",
+  zIndex: 60,
+  display: "flex",
+  alignItems: "flex-end",
+};
+
+const mobileSheetStyle: React.CSSProperties = {
+  width: "100%",
+  maxHeight: "85vh",
+  overflowY: "auto",
+  background: COLORS.cardStrong,
+  borderTopLeftRadius: 26,
+  borderTopRightRadius: 26,
+  padding: 18,
+  boxShadow: "0 -10px 30px rgba(0,0,0,0.15)",
+};
+
+const mobileSheetHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 12,
+};
+
+const closeButtonStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 999,
+  border: "none",
+  background: "#efe8df",
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 18,
+  cursor: "pointer",
 };
