@@ -82,6 +82,7 @@ export default function ClientePage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [points, setPoints] = useState(0);
   const [notes, setNotes] = useState("");
+  const [address, setAddress] = useState("");
   const [search, setSearch] = useState("");
   const [customerType, setCustomerType] = useState("menudeo");
 
@@ -154,6 +155,14 @@ export default function ClientePage() {
 
     if (customerProfile?.customer_id) {
       setCustomerType(customerProfile.customer_type || "menudeo");
+
+      const { data: customerData } = await supabase
+        .from("customers")
+        .select("address")
+        .eq("id", customerProfile.customer_id)
+        .maybeSingle();
+
+      setAddress(customerData?.address || "");
 
       const { data: loyalty } = await supabase
         .from("loyalty_accounts")
@@ -290,8 +299,37 @@ export default function ClientePage() {
     setOrders([]);
     setPoints(0);
     setNotes("");
+    setAddress("");
     setSearch("");
     setCustomerType("menudeo");
+  }
+
+  async function saveAddress() {
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("customer_profiles")
+      .select("*")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile?.customer_id) {
+      alert("No encontramos tu perfil");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("customers")
+      .update({ address: address })
+      .eq("id", profile.customer_id);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo guardar la dirección");
+      return;
+    }
+
+    alert("Dirección guardada");
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money") {
@@ -361,6 +399,11 @@ export default function ClientePage() {
       return;
     }
 
+    if (!address.trim()) {
+      alert("Agrega tu dirección antes de enviar el pedido");
+      return;
+    }
+
     setSaving(true);
 
     const { data: profile, error: profileError } = await supabase
@@ -376,6 +419,18 @@ export default function ClientePage() {
       return;
     }
 
+    const { error: addressError } = await supabase
+      .from("customers")
+      .update({ address: address })
+      .eq("id", profile.customer_id);
+
+    if (addressError) {
+      console.log(addressError);
+      alert("No se pudo guardar la dirección");
+      setSaving(false);
+      return;
+    }
+
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert([
@@ -386,6 +441,7 @@ export default function ClientePage() {
           status: "nuevo",
           source: "cliente",
           notes,
+          delivery_address: address,
         },
       ])
       .select()
@@ -605,12 +661,33 @@ export default function ClientePage() {
           </div>
         </div>
 
+        <div style={panelStyle}>
+          <div style={panelHeaderStyle}>
+            <div>
+              <h2 style={panelTitleStyle}>Dirección de entrega</h2>
+              <p style={panelSubtitleStyle}>Esta dirección se guardará en tu pedido</p>
+            </div>
+          </div>
+
+          <textarea
+            placeholder="Escribe calle, número, colonia, referencias..."
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            style={{ ...textareaStyle, minHeight: 100 }}
+          />
+
+          <button onClick={saveAddress} style={primaryButtonStyle}>
+            Guardar dirección
+          </button>
+        </div>
+
         <div
           style={{
             display: "grid",
             gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(360px, 0.85fr)",
             gap: 20,
             alignItems: "start",
+            marginTop: 20,
           }}
         >
           <div style={panelStyle}>
