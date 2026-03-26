@@ -41,19 +41,22 @@ export default function RepartidoresPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [driverName, setDriverName] = useState("");
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
-    loadOrders();
+    loadOrders(true);
 
     const interval = setInterval(() => {
-      loadOrders();
-    }, 4000);
+      loadOrders(false);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
 
-  async function loadOrders() {
-    setLoading(true);
+  async function loadOrders(showLoader = false) {
+    if (showLoader) {
+      setLoading(true);
+    }
 
     const { data, error } = await supabase
       .from("orders")
@@ -73,7 +76,9 @@ export default function RepartidoresPage() {
 
     if (error) {
       console.log(error);
-      alert("No se pudieron cargar los pedidos para reparto");
+      if (showLoader) {
+        alert("No se pudieron cargar los pedidos para reparto");
+      }
       setLoading(false);
       return;
     }
@@ -88,6 +93,7 @@ export default function RepartidoresPage() {
     });
 
     setOrders(rows);
+    setLastUpdated(new Date());
     setLoading(false);
   }
 
@@ -111,10 +117,12 @@ export default function RepartidoresPage() {
     if (error) {
       console.log(error);
       alert("No se pudo marcar como en camino");
+      setSavingId(null);
+      return;
     }
 
     setSavingId(null);
-    loadOrders();
+    loadOrders(false);
   }
 
   async function markEntregado(order: Order) {
@@ -131,10 +139,12 @@ export default function RepartidoresPage() {
     if (error) {
       console.log(error);
       alert("No se pudo marcar como entregado");
+      setSavingId(null);
+      return;
     }
 
     setSavingId(null);
-    loadOrders();
+    loadOrders(false);
   }
 
   function minutesBetween(from?: string | null, to?: string | null) {
@@ -245,6 +255,11 @@ export default function RepartidoresPage() {
             <div style={{ color: COLORS.muted, fontSize: 14 }}>
               Se guardará al marcar un pedido como en camino
             </div>
+            {lastUpdated ? (
+              <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 8 }}>
+                Última actualización: {lastUpdated.toLocaleTimeString()}
+              </div>
+            ) : null}
           </div>
 
           <input
@@ -355,7 +370,11 @@ export default function RepartidoresPage() {
                   <div style={buttonsWrapStyle}>
                     <button
                       onClick={() => markEnCamino(order)}
-                      disabled={savingId === order.id || order.delivery_status === "en_camino" || order.delivery_status === "entregado"}
+                      disabled={
+                        savingId === order.id ||
+                        order.delivery_status === "en_camino" ||
+                        order.delivery_status === "entregado"
+                      }
                       style={{
                         ...warningButtonStyle,
                         opacity:
