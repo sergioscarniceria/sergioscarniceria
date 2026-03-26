@@ -470,3 +470,6 @@ const secondaryButtonStyle: React.CSSProperties = {
   textDecoration: "none",
   fontWeight: 700,
 };
+<Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>
+  Nuevo pedido
+</Link>
