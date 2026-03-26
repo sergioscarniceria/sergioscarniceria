@@ -143,6 +143,7 @@ export default function PedidosPage() {
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
+            <Link href="/admin/nuevo-pedido" style={primaryHeaderButtonStyle}>+ Nuevo pedido</Link>
           </div>
         </div>
 
@@ -470,6 +471,15 @@ const secondaryButtonStyle: React.CSSProperties = {
   textDecoration: "none",
   fontWeight: 700,
 };
-<Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>
-  Nuevo pedido
-</Link>
+
+const primaryHeaderButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+};
