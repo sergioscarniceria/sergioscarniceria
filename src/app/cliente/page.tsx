@@ -32,6 +32,7 @@ type Order = {
   notes?: string | null;
   loyalty_points_earned?: number;
   created_at?: string;
+  delivery_date?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -57,8 +58,24 @@ const COLORS = {
   success: "#1f7a4d",
   warning: "#a66a10",
   danger: "#b42318",
+  info: "#355c7d",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
+
+function getTodayDateInput() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatOrderDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  const date = new Date(`${value}T12:00:00`);
+  if (isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
 
 export default function ClientePage() {
   const supabase = getSupabaseClient();
@@ -83,8 +100,10 @@ export default function ClientePage() {
   const [points, setPoints] = useState(0);
   const [notes, setNotes] = useState("");
   const [address, setAddress] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
   const [search, setSearch] = useState("");
   const [customerType, setCustomerType] = useState("menudeo");
+  const [showCatalog, setShowCatalog] = useState(false);
 
   useEffect(() => {
     checkUser();
@@ -300,8 +319,10 @@ export default function ClientePage() {
     setPoints(0);
     setNotes("");
     setAddress("");
+    setDeliveryDate(getTodayDateInput());
     setSearch("");
     setCustomerType("menudeo");
+    setShowCatalog(false);
   }
 
   async function saveAddress() {
@@ -383,6 +404,7 @@ export default function ClientePage() {
 
     setCart(previousItems);
     setNotes(order.notes || "");
+    setDeliveryDate(order.delivery_date || getTodayDateInput());
     setShowCart(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
     alert("Pedido cargado otra vez en tu pedido");
@@ -401,6 +423,11 @@ export default function ClientePage() {
 
     if (!address.trim()) {
       alert("Agrega tu dirección antes de enviar el pedido");
+      return;
+    }
+
+    if (!deliveryDate) {
+      alert("Selecciona la fecha de entrega");
       return;
     }
 
@@ -442,6 +469,8 @@ export default function ClientePage() {
           source: "cliente",
           notes,
           delivery_address: address,
+          delivery_date: deliveryDate,
+          delivery_status: "pendiente",
         },
       ])
       .select()
@@ -475,15 +504,21 @@ export default function ClientePage() {
     setCart([]);
     setNotes("");
     setShowCart(false);
+    setDeliveryDate(getTodayDateInput());
     await loadData(user.id);
     setSaving(false);
   }
 
   const filteredProducts = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return products;
-    return products.filter((p) => p.name.toLowerCase().includes(q));
+    if (!q) return [];
+    return products.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 12);
   }, [search, products]);
+
+  const catalogProducts = useMemo(() => {
+    if (!showCatalog) return [];
+    return products;
+  }, [showCatalog, products]);
 
   if (loading) {
     return (
@@ -681,6 +716,27 @@ export default function ClientePage() {
           </button>
         </div>
 
+        <div style={{ ...panelStyle, marginTop: 20 }}>
+          <div style={panelHeaderStyle}>
+            <div>
+              <h2 style={panelTitleStyle}>Fecha de entrega</h2>
+              <p style={panelSubtitleStyle}>Selecciona cuándo quieres recibir tu pedido</p>
+            </div>
+          </div>
+
+          <input
+            type="date"
+            value={deliveryDate}
+            min={getTodayDateInput()}
+            onChange={(e) => setDeliveryDate(e.target.value)}
+            style={inputStyle}
+          />
+
+          <div style={datePreviewStyle}>
+            Fecha seleccionada: <b>{formatOrderDate(deliveryDate)}</b>
+          </div>
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -694,58 +750,120 @@ export default function ClientePage() {
             <div style={panelHeaderStyle}>
               <div>
                 <h2 style={panelTitleStyle}>Productos</h2>
-                <p style={panelSubtitleStyle}>Elige lo que quieres agregar</p>
+                <p style={panelSubtitleStyle}>
+                  Busca uno específico o abre el catálogo completo
+                </p>
               </div>
             </div>
 
-            <input
-              placeholder="Buscar producto"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={inputStyle}
-            />
+            <div style={searchHeaderWrapStyle}>
+              <input
+                placeholder="Buscar producto"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0 }}
+              />
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile
-                  ? "repeat(2, minmax(0, 1fr))"
-                  : "repeat(auto-fit, minmax(210px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {filteredProducts.map((p) => (
-                <div key={p.id} style={productCardStyle}>
-                  <div style={{ minHeight: isMobile ? 42 : 46 }}>
-                    <div style={productNameStyle}>{p.name}</div>
-                  </div>
-
-                  <div style={productPriceStyle}>${getPrice(p).toFixed(2)}</div>
-
-                  <div style={{ minHeight: 28, marginBottom: 10 }}>
-                    {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
-                      <span style={discountBadgeStyle}>Precio mayoreo</span>
-                    ) : null}
-
-                    {p.is_excluded_from_discount ? (
-                      <span style={excludedBadgeStyle}>Sin descuento</span>
-                    ) : null}
-                  </div>
-
-                  <div style={productButtonsWrapStyle}>
-                    <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                      +1 kg
-                    </button>
-                    <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                      +0.5
-                    </button>
-                    <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                      $
-                    </button>
-                  </div>
-                </div>
-              ))}
+              <button
+                onClick={() => setShowCatalog((prev) => !prev)}
+                style={catalogToggleButtonStyle}
+              >
+                {showCatalog ? "Ocultar catálogo" : "Ver catálogo"}
+              </button>
             </div>
+
+            {search.trim() ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={miniSectionTitleStyle}>Resultados de búsqueda</div>
+
+                {filteredProducts.length === 0 ? (
+                  <div style={emptyBoxStyle}>No encontramos productos con ese nombre</div>
+                ) : (
+                  <div style={searchResultsListStyle}>
+                    {filteredProducts.map((p) => (
+                      <div key={p.id} style={searchResultRowStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={productNameStyle}>{p.name}</div>
+                          <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4 }}>
+                            ${getPrice(p).toFixed(2)}
+                          </div>
+                        </div>
+
+                        <div style={productButtonsWrapStyle}>
+                          <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                            +1 kg
+                          </button>
+                          <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                            +0.5
+                          </button>
+                          <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                            $
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {showCatalog ? (
+              <div style={{ marginTop: 18 }}>
+                <div style={miniSectionTitleStyle}>Catálogo de productos</div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: isMobile
+                      ? "repeat(2, minmax(0, 1fr))"
+                      : "repeat(auto-fit, minmax(210px, 1fr))",
+                    gap: 14,
+                    marginTop: 12,
+                    maxHeight: 620,
+                    overflowY: "auto",
+                    paddingRight: 4,
+                  }}
+                >
+                  {catalogProducts.map((p) => (
+                    <div key={p.id} style={productCardStyle}>
+                      <div style={{ minHeight: isMobile ? 42 : 46 }}>
+                        <div style={productNameStyle}>{p.name}</div>
+                      </div>
+
+                      <div style={productPriceStyle}>${getPrice(p).toFixed(2)}</div>
+
+                      <div style={{ minHeight: 28, marginBottom: 10 }}>
+                        {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
+                          <span style={discountBadgeStyle}>Precio mayoreo</span>
+                        ) : null}
+
+                        {p.is_excluded_from_discount ? (
+                          <span style={excludedBadgeStyle}>Sin descuento</span>
+                        ) : null}
+                      </div>
+
+                      <div style={productButtonsWrapStyle}>
+                        <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                          +1 kg
+                        </button>
+                        <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                          +0.5
+                        </button>
+                        <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                          $
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {!search.trim() && !showCatalog ? (
+              <div style={{ ...emptyBoxStyle, marginTop: 16 }}>
+                Escribe en buscar producto o presiona <b>Ver catálogo</b>.
+              </div>
+            ) : null}
           </div>
 
           {!isMobile && (
@@ -758,6 +876,7 @@ export default function ClientePage() {
                 cartTotal={cartTotal}
                 createOrder={createOrder}
                 saving={saving}
+                deliveryDate={deliveryDate}
               />
 
               <OrdersPanel orders={orders} repeatOrder={repeatOrder} />
@@ -801,6 +920,7 @@ export default function ClientePage() {
                     createOrder={createOrder}
                     saving={saving}
                     mobile
+                    deliveryDate={deliveryDate}
                   />
                 </div>
               </div>
@@ -825,6 +945,7 @@ function CartPanel({
   createOrder,
   saving,
   mobile = false,
+  deliveryDate,
 }: {
   cart: CartItem[];
   notes: string;
@@ -834,6 +955,7 @@ function CartPanel({
   createOrder: () => void;
   saving: boolean;
   mobile?: boolean;
+  deliveryDate: string;
 }) {
   return (
     <div style={panelStyle}>
@@ -842,6 +964,10 @@ function CartPanel({
           <h2 style={panelTitleStyle}>Mi pedido</h2>
           <p style={panelSubtitleStyle}>Revisa antes de enviar</p>
         </div>
+      </div>
+
+      <div style={{ ...emptyBoxStyle, marginBottom: 12 }}>
+        Fecha de entrega: <b>{formatOrderDate(deliveryDate)}</b>
       </div>
 
       {cart.length === 0 ? (
@@ -934,6 +1060,9 @@ function OrdersPanel({
                     {new Date(o.created_at).toLocaleString()}
                   </div>
                 ) : null}
+                <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
+                  Fecha de entrega: <b>{formatOrderDate(o.delivery_date)}</b>
+                </div>
               </div>
 
               <button onClick={() => repeatOrder(o)} style={repeatButtonStyle}>
@@ -1407,4 +1536,54 @@ const closeButtonStyle: React.CSSProperties = {
   fontWeight: 800,
   fontSize: 18,
   cursor: "pointer",
+};
+
+const datePreviewStyle: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  marginTop: -2,
+};
+
+const searchHeaderWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
+  gap: 10,
+  alignItems: "center",
+};
+
+const catalogToggleButtonStyle: React.CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "none",
+  background: "rgba(123, 34, 24, 0.12)",
+  color: COLORS.primary,
+  cursor: "pointer",
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+const miniSectionTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  marginBottom: 10,
+  fontSize: 18,
+};
+
+const searchResultsListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const searchResultRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: 12,
+  padding: 14,
+  borderRadius: 16,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  alignItems: "center",
 };
