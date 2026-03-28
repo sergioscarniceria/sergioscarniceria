@@ -207,6 +207,7 @@ export default function ProduccionPage() {
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
+            <Link href="/repartidores" style={repartidoresButtonStyle}>Repartidores</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
           </div>
         </div>
@@ -586,4 +587,16 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
+};
+
+const repartidoresButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
 };
