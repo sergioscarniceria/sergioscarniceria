@@ -76,6 +76,7 @@ export default function NuevoPedidoPage() {
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
   const [showCatalog, setShowCatalog] = useState(false);
+  const [showCustomers, setShowCustomers] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -126,6 +127,8 @@ export default function NuevoPedidoPage() {
   function selectCustomer(customer: Customer) {
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.address || "");
+    setShowCustomers(false);
+    setCustomerSearch("");
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money") {
@@ -258,6 +261,7 @@ export default function NuevoPedidoPage() {
     setDeliveryAddress("");
     setDeliveryDate(getTodayDateInput());
     setShowCatalog(false);
+    setShowCustomers(false);
     setSaving(false);
 
     await loadData();
@@ -265,7 +269,7 @@ export default function NuevoPedidoPage() {
 
   const filteredCustomers = useMemo(() => {
     const q = customerSearch.toLowerCase().trim();
-    if (!q) return customers.slice(0, 30);
+    if (!q) return [];
 
     return customers
       .filter((c) => {
@@ -276,8 +280,13 @@ export default function NuevoPedidoPage() {
           (c.business_name || "").toLowerCase().includes(q)
         );
       })
-      .slice(0, 30);
+      .slice(0, 20);
   }, [customers, customerSearch]);
+
+  const customerCatalog = useMemo(() => {
+    if (!showCustomers) return [];
+    return customers.slice(0, 200);
+  }, [customers, showCustomers]);
 
   const filteredProducts = useMemo(() => {
     const q = productSearch.toLowerCase().trim();
@@ -324,16 +333,25 @@ export default function NuevoPedidoPage() {
               <div style={panelHeaderStyle}>
                 <div>
                   <h2 style={panelTitleStyle}>1. Seleccionar cliente</h2>
-                  <p style={panelSubtitleStyle}>Busca por nombre, teléfono o correo</p>
+                  <p style={panelSubtitleStyle}>Busca uno específico o abre la cartera</p>
                 </div>
               </div>
 
-              <input
-                placeholder="Buscar cliente"
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={searchHeaderWrapStyle}>
+                <input
+                  placeholder="Buscar cliente"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0 }}
+                />
+
+                <button
+                  onClick={() => setShowCustomers((prev) => !prev)}
+                  style={catalogToggleButtonStyle}
+                >
+                  {showCustomers ? "Ocultar cartera" : "Ver cartera"}
+                </button>
+              </div>
 
               {selectedCustomer ? (
                 <div style={selectedCustomerBoxStyle}>
@@ -361,27 +379,76 @@ export default function NuevoPedidoPage() {
                 </div>
               ) : null}
 
-              <div style={{ display: "grid", gap: 10 }}>
-                {filteredCustomers.map((customer) => (
-                  <button
-                    key={customer.id}
-                    onClick={() => selectCustomer(customer)}
-                    style={customerButtonStyle}
-                  >
-                    <div style={{ textAlign: "left", minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: COLORS.text }}>
-                        {customer.name}
-                      </div>
-                      <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                        {customer.phone || "Sin teléfono"}
-                      </div>
+              {customerSearch.trim() ? (
+                <div style={{ marginTop: 14 }}>
+                  <div style={miniSectionTitleStyle}>Resultados de búsqueda</div>
+
+                  {filteredCustomers.length === 0 ? (
+                    <div style={emptyBoxStyle}>No encontramos clientes con ese dato</div>
+                  ) : (
+                    <div style={searchResultsListStyle}>
+                      {filteredCustomers.map((customer) => (
+                        <button
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          style={customerSearchRowStyle}
+                        >
+                          <div style={{ textAlign: "left", minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text }}>
+                              {customer.name}
+                            </div>
+                            <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                              {customer.phone || "Sin teléfono"}
+                            </div>
+                          </div>
+                          <div style={customerTypeBadgeStyle}>
+                            {customer.customer_type || "menudeo"}
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                    <div style={customerTypeBadgeStyle}>
-                      {customer.customer_type || "menudeo"}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                  )}
+                </div>
+              ) : null}
+
+              {showCustomers ? (
+                <div style={{ marginTop: 18 }}>
+                  <div style={miniSectionTitleStyle}>Cartera de clientes</div>
+
+                  <div style={customerCatalogListStyle}>
+                    {customerCatalog.map((customer) => (
+                      <button
+                        key={customer.id}
+                        onClick={() => selectCustomer(customer)}
+                        style={customerButtonStyle}
+                      >
+                        <div style={{ textAlign: "left", minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: COLORS.text }}>
+                            {customer.name}
+                          </div>
+                          <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                            {customer.phone || "Sin teléfono"}
+                          </div>
+                          {customer.business_name ? (
+                            <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 3 }}>
+                              {customer.business_name}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div style={customerTypeBadgeStyle}>
+                          {customer.customer_type || "menudeo"}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!customerSearch.trim() && !showCustomers ? (
+                <div style={{ ...emptyBoxStyle, marginTop: 16 }}>
+                  Escribe en buscar cliente o presiona <b>Ver cartera</b>.
+                </div>
+              ) : null}
             </div>
 
             <div style={panelStyle}>
@@ -787,6 +854,19 @@ const customerButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
+const customerSearchRowStyle: React.CSSProperties = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: 14,
+  borderRadius: 16,
+  border: `1px solid ${COLORS.border}`,
+  background: COLORS.bgSoft,
+  cursor: "pointer",
+};
+
 const customerTypeBadgeStyle: React.CSSProperties = {
   display: "inline-block",
   padding: "6px 10px",
@@ -808,7 +888,7 @@ const selectedCustomerBoxStyle: React.CSSProperties = {
   borderRadius: 18,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
-  marginBottom: 12,
+  marginTop: 12,
 };
 
 const selectedCustomerSummaryStyle: React.CSSProperties = {
@@ -970,6 +1050,14 @@ const searchResultRowStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   alignItems: "center",
+};
+
+const customerCatalogListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  maxHeight: 460,
+  overflowY: "auto",
+  paddingRight: 4,
 };
 
 const catalogGridStyle: React.CSSProperties = {
