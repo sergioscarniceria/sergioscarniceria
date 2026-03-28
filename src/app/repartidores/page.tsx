@@ -39,23 +39,20 @@ export default function RepartidoresPage() {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [driverName, setDriverName] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     loadOrders(true);
-
-    const interval = setInterval(() => {
-      loadOrders(false);
-    }, 5000);
-
-    return () => clearInterval(interval);
   }, []);
 
   async function loadOrders(showLoader = false) {
     if (showLoader) {
       setLoading(true);
+    } else {
+      setRefreshing(true);
     }
 
     const { data, error } = await supabase
@@ -80,21 +77,24 @@ export default function RepartidoresPage() {
         alert("No se pudieron cargar los pedidos para reparto");
       }
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     const rows = ((data as Order[]) || []).filter((order) => {
-      const productionDone = order.status === "terminado";
-      const alreadyInDelivery =
-        order.delivery_status === "en_camino" ||
-        order.delivery_status === "entregado";
+      const readyToShip =
+        order.status === "terminado" &&
+        (!order.delivery_status || order.delivery_status === "pendiente");
 
-      return productionDone || alreadyInDelivery;
+      const alreadyOnTheWay = order.delivery_status === "en_camino";
+
+      return readyToShip || alreadyOnTheWay;
     });
 
     setOrders(rows);
     setLastUpdated(new Date());
     setLoading(false);
+    setRefreshing(false);
   }
 
   async function markEnCamino(order: Order) {
@@ -122,7 +122,7 @@ export default function RepartidoresPage() {
     }
 
     setSavingId(null);
-    loadOrders(false);
+    await loadOrders(false);
   }
 
   async function markEntregado(order: Order) {
@@ -144,7 +144,7 @@ export default function RepartidoresPage() {
     }
 
     setSavingId(null);
-    loadOrders(false);
+    await loadOrders(false);
   }
 
   function minutesBetween(from?: string | null, to?: string | null) {
@@ -170,13 +170,13 @@ export default function RepartidoresPage() {
   }
 
   const stats = useMemo(() => {
-    const enCamino = orders.filter((o) => o.delivery_status === "en_camino").length;
-    const entregados = orders.filter((o) => o.delivery_status === "entregado").length;
     const pendientes = orders.filter(
       (o) => !o.delivery_status || o.delivery_status === "pendiente"
     ).length;
 
-    return { enCamino, entregados, pendientes };
+    const enCamino = orders.filter((o) => o.delivery_status === "en_camino").length;
+
+    return { pendientes, enCamino };
   }, [orders]);
 
   function deliveryBadgeStyle(status?: string | null): React.CSSProperties {
@@ -184,13 +184,6 @@ export default function RepartidoresPage() {
       return {
         background: "rgba(166,106,16,0.12)",
         color: COLORS.warning,
-      };
-    }
-
-    if (status === "entregado") {
-      return {
-        background: "rgba(31,122,77,0.12)",
-        color: COLORS.success,
       };
     }
 
@@ -218,7 +211,7 @@ export default function RepartidoresPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Repartidores</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Control de entregas, tiempos y estatus
+              Pedidos activos para entrega
             </p>
           </div>
 
@@ -240,11 +233,6 @@ export default function RepartidoresPage() {
             <div style={statLabelStyle}>En camino</div>
             <div style={statValueStyle}>{stats.enCamino}</div>
           </div>
-
-          <div style={statCardStyle}>
-            <div style={statLabelStyle}>Entregados</div>
-            <div style={statValueStyle}>{stats.entregados}</div>
-          </div>
         </div>
 
         <div style={driverBarStyle}>
@@ -253,8 +241,9 @@ export default function RepartidoresPage() {
               Nombre del repartidor
             </div>
             <div style={{ color: COLORS.muted, fontSize: 14 }}>
-              Se guardará al marcar un pedido como en camino
+              Se guarda al marcar el pedido como en camino
             </div>
+
             {lastUpdated ? (
               <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 8 }}>
                 Última actualización: {lastUpdated.toLocaleTimeString()}
@@ -262,16 +251,26 @@ export default function RepartidoresPage() {
             ) : null}
           </div>
 
-          <input
-            placeholder="Ejemplo: Juan"
-            value={driverName}
-            onChange={(e) => setDriverName(e.target.value)}
-            style={inputStyle}
-          />
+          <div style={{ display: "flex", gap: 10 }}>
+            <input
+              placeholder="Ejemplo: Juan"
+              value={driverName}
+              onChange={(e) => setDriverName(e.target.value)}
+              style={inputStyle}
+            />
+
+            <button
+              onClick={() => loadOrders(false)}
+              style={refreshButtonStyle}
+              disabled={refreshing}
+            >
+              {refreshing ? "..." : "Actualizar"}
+            </button>
+          </div>
         </div>
 
         {orders.length === 0 ? (
-          <div style={emptyBoxStyle}>No hay pedidos listos para reparto</div>
+          <div style={emptyBoxStyle}>No hay pedidos activos para reparto</div>
         ) : (
           <div style={gridStyle}>
             {orders.map((order) => {
@@ -337,15 +336,6 @@ export default function RepartidoresPage() {
                         </span>
                       </div>
                     ) : null}
-
-                    {order.delivered_at ? (
-                      <div style={infoRowStyle}>
-                        <span style={infoLabelStyle}>Entrega:</span>
-                        <span style={infoValueStyle}>
-                          {new Date(order.delivered_at).toLocaleString()}
-                        </span>
-                      </div>
-                    ) : null}
                   </div>
 
                   {order.notes ? (
@@ -372,15 +362,13 @@ export default function RepartidoresPage() {
                       onClick={() => markEnCamino(order)}
                       disabled={
                         savingId === order.id ||
-                        order.delivery_status === "en_camino" ||
-                        order.delivery_status === "entregado"
+                        order.delivery_status === "en_camino"
                       }
                       style={{
                         ...warningButtonStyle,
                         opacity:
                           savingId === order.id ||
-                          order.delivery_status === "en_camino" ||
-                          order.delivery_status === "entregado"
+                          order.delivery_status === "en_camino"
                             ? 0.6
                             : 1,
                       }}
@@ -390,13 +378,10 @@ export default function RepartidoresPage() {
 
                     <button
                       onClick={() => markEntregado(order)}
-                      disabled={savingId === order.id || order.delivery_status === "entregado"}
+                      disabled={savingId === order.id}
                       style={{
                         ...successButtonStyle,
-                        opacity:
-                          savingId === order.id || order.delivery_status === "entregado"
-                            ? 0.6
-                            : 1,
+                        opacity: savingId === order.id ? 0.6 : 1,
                       }}
                     >
                       Pedido entregado
@@ -506,7 +491,7 @@ const statValueStyle: React.CSSProperties = {
 
 const driverBarStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr minmax(240px, 320px)",
+  gridTemplateColumns: "1fr minmax(320px, 430px)",
   gap: 16,
   alignItems: "center",
   background: COLORS.cardStrong,
@@ -527,6 +512,17 @@ const inputStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.82)",
   color: COLORS.text,
   fontSize: 15,
+};
+
+const refreshButtonStyle: React.CSSProperties = {
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  cursor: "pointer",
+  fontWeight: 700,
+  minWidth: 110,
 };
 
 const gridStyle: React.CSSProperties = {
