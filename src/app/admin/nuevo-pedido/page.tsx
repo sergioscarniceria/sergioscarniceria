@@ -11,6 +11,7 @@ type Customer = {
   email: string | null;
   customer_type: string | null;
   business_name?: string | null;
+  address?: string | null;
 };
 
 type Product = {
@@ -57,6 +58,7 @@ export default function NuevoPedidoPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
 
   useEffect(() => {
     loadData();
@@ -102,6 +104,11 @@ export default function NuevoPedidoPage() {
     }
 
     return basePrice;
+  }
+
+  function selectCustomer(customer: Customer) {
+    setSelectedCustomer(customer);
+    setDeliveryAddress(customer.address || "");
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money") {
@@ -156,11 +163,28 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    if (!deliveryAddress.trim()) {
+      alert("Agrega la dirección de entrega");
+      return;
+    }
+
     setSaving(true);
 
     const finalNotes = notes?.trim()
       ? `Pedido por teléfono. ${notes.trim()}`
       : "Pedido por teléfono.";
+
+    const { error: addressError } = await supabase
+      .from("customers")
+      .update({ address: deliveryAddress.trim() })
+      .eq("id", selectedCustomer.id);
+
+    if (addressError) {
+      console.log(addressError);
+      alert("No se pudo guardar la dirección del cliente");
+      setSaving(false);
+      return;
+    }
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
@@ -171,6 +195,8 @@ export default function NuevoPedidoPage() {
           status: "nuevo",
           source: "telefono",
           notes: finalNotes,
+          delivery_status: "pendiente",
+          delivery_address: deliveryAddress.trim(),
         },
       ])
       .select()
@@ -206,7 +232,10 @@ export default function NuevoPedidoPage() {
     setSelectedCustomer(null);
     setCustomerSearch("");
     setProductSearch("");
+    setDeliveryAddress("");
     setSaving(false);
+
+    await loadData();
   }
 
   const filteredCustomers = useMemo(() => {
@@ -247,7 +276,7 @@ export default function NuevoPedidoPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Nuevo pedido por teléfono</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Selecciona cliente, agrega productos y envía a producción
+              Selecciona cliente, agrega productos y guarda el pedido
             </p>
           </div>
 
@@ -255,6 +284,7 @@ export default function NuevoPedidoPage() {
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
+            <Link href="/repartidores" style={secondaryButtonStyle}>Repartidores</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
           </div>
         </div>
@@ -291,7 +321,10 @@ export default function NuevoPedidoPage() {
                   </div>
 
                   <button
-                    onClick={() => setSelectedCustomer(null)}
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setDeliveryAddress("");
+                    }}
                     style={dangerButtonStyle}
                   >
                     Quitar
@@ -303,7 +336,7 @@ export default function NuevoPedidoPage() {
                 {filteredCustomers.map((customer) => (
                   <button
                     key={customer.id}
-                    onClick={() => setSelectedCustomer(customer)}
+                    onClick={() => selectCustomer(customer)}
                     style={customerButtonStyle}
                   >
                     <div style={{ textAlign: "left", minWidth: 0 }}>
@@ -325,8 +358,24 @@ export default function NuevoPedidoPage() {
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
-                  <h2 style={panelTitleStyle}>2. Agregar productos</h2>
-                  <p style={panelSubtitleStyle}>Los precios respetan mayoreo/menudeo</p>
+                  <h2 style={panelTitleStyle}>2. Dirección de entrega</h2>
+                  <p style={panelSubtitleStyle}>Esta dirección se guarda también para repartidores</p>
+                </div>
+              </div>
+
+              <textarea
+                placeholder="Calle, número, colonia, referencias..."
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                style={{ ...textareaStyle, minHeight: 110 }}
+              />
+            </div>
+
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>3. Agregar productos</h2>
+                  <p style={panelSubtitleStyle}>Los precios respetan mayoreo o menudeo</p>
                 </div>
               </div>
 
@@ -378,7 +427,7 @@ export default function NuevoPedidoPage() {
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
-                  <h2 style={panelTitleStyle}>3. Confirmar pedido</h2>
+                  <h2 style={panelTitleStyle}>4. Confirmar pedido</h2>
                   <p style={panelSubtitleStyle}>Revisa antes de guardar</p>
                 </div>
               </div>
@@ -392,6 +441,9 @@ export default function NuevoPedidoPage() {
                   </div>
                   <div style={{ color: COLORS.muted }}>
                     {selectedCustomer.phone || "Sin teléfono"}
+                  </div>
+                  <div style={{ color: COLORS.muted, marginTop: 8 }}>
+                    <b>Dirección:</b> {deliveryAddress || "Sin dirección"}
                   </div>
                 </div>
               )}
