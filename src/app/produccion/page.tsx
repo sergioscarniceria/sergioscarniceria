@@ -19,6 +19,7 @@ type Order = {
   butcher_name?: string | null;
   prepared_by?: string | null;
   created_at?: string;
+  delivery_date?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -45,6 +46,14 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+function getTodayDateString() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function ProduccionPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [butchers, setButchers] = useState<Butcher[]>([]);
@@ -59,6 +68,7 @@ export default function ProduccionPage() {
         *,
         order_items (*)
       `)
+      .order("delivery_date", { ascending: true })
       .order("created_at", { ascending: true });
 
     const { data: butchersData } = await supabase
@@ -183,6 +193,22 @@ export default function ProduccionPage() {
       .sort((a, b) => b.count - a.count);
   }, [orders, butchers]);
 
+  const today = getTodayDateString();
+
+  const todayOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const orderDate = o.delivery_date || today;
+      return orderDate === today;
+    });
+  }, [orders]);
+
+  const upcomingOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const orderDate = o.delivery_date || today;
+      return orderDate > today;
+    });
+  }, [orders]);
+
   return (
     <div style={pageStyle}>
       <div style={glowTopLeft} />
@@ -199,7 +225,7 @@ export default function ProduccionPage() {
             <div>
               <h1 style={{ margin: 0, color: COLORS.text }}>Producción</h1>
               <p style={{ color: COLORS.muted, margin: "6px 0 0 0" }}>
-                Preparación en tiempo real
+                Hoy y próximos
               </p>
             </div>
           </div>
@@ -214,9 +240,15 @@ export default function ProduccionPage() {
 
         <div style={statsWrapStyle}>
           <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Pedidos activos</div>
-            <div style={heroValueStyle}>{orders.length}</div>
-            <div style={heroMetaStyle}>En preparación o pendientes</div>
+            <div style={smallLabelStyle}>Pedidos de hoy</div>
+            <div style={heroValueStyle}>{todayOrders.length}</div>
+            <div style={heroMetaStyle}>Solo los que deben salir hoy</div>
+          </div>
+
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Pedidos próximos</div>
+            <div style={heroValueStyle}>{upcomingOrders.length}</div>
+            <div style={heroMetaStyle}>Programados para fechas futuras</div>
           </div>
 
           <div style={heroCardStyle}>
@@ -234,122 +266,189 @@ export default function ProduccionPage() {
           </div>
         </div>
 
-        {orders.length === 0 ? (
-          <div style={emptyBigStyle}>No hay pedidos activos</div>
-        ) : (
-          <div style={ordersGridStyle}>
-            {orders.map((o) => (
-              <div key={o.id} style={orderCardStyle}>
-                <div style={orderHeaderStyle}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={customerNameStyle}>{o.customer_name}</div>
-                    <div
+        <Section
+          title="Producción de hoy"
+          subtitle="Estos son los pedidos que deben trabajarse hoy"
+          orders={todayOrders}
+          butchers={butchers}
+          changingId={changingId}
+          assignButcher={assignButcher}
+          updateStatus={updateStatus}
+          deleteOrder={deleteOrder}
+          total={total}
+          statusBadgeStyle={statusBadgeStyle}
+        />
+
+        <div style={{ height: 24 }} />
+
+        <Section
+          title="Pedidos próximos"
+          subtitle="Pedidos futuros apartados para no revolver la operación del día"
+          orders={upcomingOrders}
+          butchers={butchers}
+          changingId={changingId}
+          assignButcher={assignButcher}
+          updateStatus={updateStatus}
+          deleteOrder={deleteOrder}
+          total={total}
+          statusBadgeStyle={statusBadgeStyle}
+        />
+      </div>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  orders,
+  butchers,
+  changingId,
+  assignButcher,
+  updateStatus,
+  deleteOrder,
+  total,
+  statusBadgeStyle,
+}: {
+  title: string;
+  subtitle: string;
+  orders: Order[];
+  butchers: Butcher[];
+  changingId: string | null;
+  assignButcher: (orderId: string, butcherName: string) => void;
+  updateStatus: (id: string, status: string) => void;
+  deleteOrder: (id: string) => void;
+  total: (order: Order) => number;
+  statusBadgeStyle: (status: string) => React.CSSProperties;
+}) {
+  return (
+    <div style={sectionCardStyle}>
+      <div style={{ marginBottom: 16 }}>
+        <h2 style={{ margin: 0, color: COLORS.text }}>{title}</h2>
+        <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>{subtitle}</p>
+      </div>
+
+      {orders.length === 0 ? (
+        <div style={emptyBigStyle}>No hay pedidos en esta sección</div>
+      ) : (
+        <div style={ordersGridStyle}>
+          {orders.map((o) => (
+            <div key={o.id} style={orderCardStyle}>
+              <div style={orderHeaderStyle}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={customerNameStyle}>{o.customer_name}</div>
+                  <div
+                    style={{
+                      ...statusPillStyle,
+                      ...statusBadgeStyle(o.status),
+                    }}
+                  >
+                    {o.status}
+                  </div>
+                </div>
+
+                <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
+              </div>
+
+              {o.delivery_date ? (
+                <div style={{ color: COLORS.muted, marginBottom: 10, fontSize: 14 }}>
+                  Entrega: <b>{o.delivery_date}</b>
+                </div>
+              ) : null}
+
+              <div style={itemsBoxStyle}>
+                {(o.order_items || []).map((item) => (
+                  <div key={item.id} style={itemRowStyle}>
+                    <div style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
+                      {item.product}
+                    </div>
+                    <div style={{ color: COLORS.muted, flexShrink: 0 }}>
+                      {item.kilos} kg
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {o.notes ? (
+                <div style={notesBoxStyle}>
+                  <b>Notas:</b> {o.notes}
+                </div>
+              ) : null}
+
+              <div style={assignedRowStyle}>
+                <span style={{ color: COLORS.muted }}>Carnicero asignado:</span>
+                <b style={{ color: COLORS.text }}>
+                  {o.butcher_name || "Sin asignar"}
+                </b>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={subLabelStyle}>Asignar carnicero</div>
+
+                <div style={butchersWrapStyle}>
+                  {butchers.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => assignButcher(o.id, b.name)}
+                      disabled={changingId === o.id}
                       style={{
-                        ...statusPillStyle,
-                        ...statusBadgeStyle(o.status),
+                        ...butcherButtonStyle,
+                        background: o.butcher_name === b.name ? COLORS.primary : "white",
+                        color: o.butcher_name === b.name ? "white" : COLORS.text,
+                        border:
+                          o.butcher_name === b.name
+                            ? "none"
+                            : `1px solid ${COLORS.border}`,
+                        opacity: changingId === o.id ? 0.7 : 1,
                       }}
                     >
-                      {o.status}
-                    </div>
-                  </div>
-
-                  <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
-                </div>
-
-                <div style={itemsBoxStyle}>
-                  {(o.order_items || []).map((item) => (
-                    <div key={item.id} style={itemRowStyle}>
-                      <div style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
-                        {item.product}
-                      </div>
-                      <div style={{ color: COLORS.muted, flexShrink: 0 }}>
-                        {item.kilos} kg
-                      </div>
-                    </div>
+                      {b.name}
+                    </button>
                   ))}
                 </div>
-
-                {o.notes ? (
-                  <div style={notesBoxStyle}>
-                    <b>Notas:</b> {o.notes}
-                  </div>
-                ) : null}
-
-                <div style={assignedRowStyle}>
-                  <span style={{ color: COLORS.muted }}>Carnicero asignado:</span>
-                  <b style={{ color: COLORS.text }}>
-                    {o.butcher_name || "Sin asignar"}
-                  </b>
-                </div>
-
-                <div style={{ marginBottom: 16 }}>
-                  <div style={subLabelStyle}>Asignar carnicero</div>
-
-                  <div style={butchersWrapStyle}>
-                    {butchers.map((b) => (
-                      <button
-                        key={b.id}
-                        onClick={() => assignButcher(o.id, b.name)}
-                        disabled={changingId === o.id}
-                        style={{
-                          ...butcherButtonStyle,
-                          background: o.butcher_name === b.name ? COLORS.primary : "white",
-                          color: o.butcher_name === b.name ? "white" : COLORS.text,
-                          border:
-                            o.butcher_name === b.name
-                              ? "none"
-                              : `1px solid ${COLORS.border}`,
-                          opacity: changingId === o.id ? 0.7 : 1,
-                        }}
-                      >
-                        {b.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div style={actionButtonsWrapStyle}>
-                  <button
-                    onClick={() => updateStatus(o.id, "proceso")}
-                    disabled={changingId === o.id}
-                    style={{
-                      ...actionButtonStyle,
-                      background: "rgba(166,106,16,0.12)",
-                      color: COLORS.warning,
-                    }}
-                  >
-                    En proceso
-                  </button>
-
-                  <button
-                    onClick={() => updateStatus(o.id, "terminado")}
-                    disabled={changingId === o.id}
-                    style={{
-                      ...actionButtonStyle,
-                      background: "rgba(31,122,77,0.12)",
-                      color: COLORS.success,
-                    }}
-                  >
-                    Terminado
-                  </button>
-
-                  <button
-                    onClick={() => deleteOrder(o.id)}
-                    disabled={changingId === o.id}
-                    style={{
-                      ...actionButtonStyle,
-                      background: "rgba(180,35,24,0.10)",
-                      color: COLORS.danger,
-                    }}
-                  >
-                    Borrar
-                  </button>
-                </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+
+              <div style={actionButtonsWrapStyle}>
+                <button
+                  onClick={() => updateStatus(o.id, "proceso")}
+                  disabled={changingId === o.id}
+                  style={{
+                    ...actionButtonStyle,
+                    background: "rgba(166,106,16,0.12)",
+                    color: COLORS.warning,
+                  }}
+                >
+                  En proceso
+                </button>
+
+                <button
+                  onClick={() => updateStatus(o.id, "terminado")}
+                  disabled={changingId === o.id}
+                  style={{
+                    ...actionButtonStyle,
+                    background: "rgba(31,122,77,0.12)",
+                    color: COLORS.success,
+                  }}
+                >
+                  Terminado
+                </button>
+
+                <button
+                  onClick={() => deleteOrder(o.id)}
+                  disabled={changingId === o.id}
+                  style={{
+                    ...actionButtonStyle,
+                    background: "rgba(180,35,24,0.10)",
+                    color: COLORS.danger,
+                  }}
+                >
+                  Borrar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -447,6 +546,14 @@ const butcherMiniCardStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   borderRadius: 16,
   padding: 14,
+};
+
+const sectionCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 24,
+  padding: 18,
+  boxShadow: COLORS.shadow,
 };
 
 const ordersGridStyle: React.CSSProperties = {
