@@ -44,6 +44,21 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+function getTodayDateInput() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatOrderDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  const date = new Date(`${value}T12:00:00`);
+  if (isNaN(date.getTime())) return value;
+  return date.toLocaleDateString();
+}
+
 export default function NuevoPedidoPage() {
   const supabase = getSupabaseClient();
 
@@ -59,6 +74,7 @@ export default function NuevoPedidoPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
 
   useEffect(() => {
     loadData();
@@ -168,6 +184,11 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    if (!deliveryDate) {
+      alert("Selecciona la fecha de entrega");
+      return;
+    }
+
     setSaving(true);
 
     const finalNotes = notes?.trim()
@@ -197,6 +218,7 @@ export default function NuevoPedidoPage() {
           notes: finalNotes,
           delivery_status: "pendiente",
           delivery_address: deliveryAddress.trim(),
+          delivery_date: deliveryDate,
         },
       ])
       .select()
@@ -233,6 +255,7 @@ export default function NuevoPedidoPage() {
     setCustomerSearch("");
     setProductSearch("");
     setDeliveryAddress("");
+    setDeliveryDate(getTodayDateInput());
     setSaving(false);
 
     await loadData();
@@ -374,7 +397,28 @@ export default function NuevoPedidoPage() {
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
-                  <h2 style={panelTitleStyle}>3. Agregar productos</h2>
+                  <h2 style={panelTitleStyle}>3. Fecha de entrega</h2>
+                  <p style={panelSubtitleStyle}>Elige cuándo quiere recibir el pedido</p>
+                </div>
+              </div>
+
+              <input
+                type="date"
+                value={deliveryDate}
+                min={getTodayDateInput()}
+                onChange={(e) => setDeliveryDate(e.target.value)}
+                style={inputStyle}
+              />
+
+              <div style={datePreviewStyle}>
+                Fecha seleccionada: <b>{formatOrderDate(deliveryDate)}</b>
+              </div>
+            </div>
+
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>4. Agregar productos</h2>
                   <p style={panelSubtitleStyle}>Los precios respetan mayoreo o menudeo</p>
                 </div>
               </div>
@@ -427,7 +471,7 @@ export default function NuevoPedidoPage() {
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
-                  <h2 style={panelTitleStyle}>4. Confirmar pedido</h2>
+                  <h2 style={panelTitleStyle}>5. Confirmar pedido</h2>
                   <p style={panelSubtitleStyle}>Revisa antes de guardar</p>
                 </div>
               </div>
@@ -444,6 +488,9 @@ export default function NuevoPedidoPage() {
                   </div>
                   <div style={{ color: COLORS.muted, marginTop: 8 }}>
                     <b>Dirección:</b> {deliveryAddress || "Sin dirección"}
+                  </div>
+                  <div style={{ color: COLORS.muted, marginTop: 8 }}>
+                    <b>Fecha de entrega:</b> {formatOrderDate(deliveryDate)}
                   </div>
                 </div>
               )}
@@ -814,4 +861,13 @@ const excludedBadgeStyle: React.CSSProperties = {
   color: COLORS.warning,
   fontSize: 12,
   fontWeight: 700,
+};
+
+const datePreviewStyle: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  marginTop: -2,
 };
