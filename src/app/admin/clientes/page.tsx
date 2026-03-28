@@ -9,41 +9,35 @@ type Customer = {
   name: string;
   phone: string | null;
   email: string | null;
-  customer_type: string | null;
   business_name?: string | null;
+  customer_type?: string | null;
+  address?: string | null;
+  created_at?: string | null;
 };
 
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
-  card: "rgba(255,255,255,0.74)",
-  cardStrong: "rgba(255,255,255,0.9)",
+  card: "rgba(255,255,255,0.80)",
+  cardStrong: "rgba(255,255,255,0.92)",
   border: "rgba(92, 27, 17, 0.10)",
   text: "#3b1c16",
   muted: "#7a5a52",
   primary: "#7b2218",
   primaryDark: "#5a190f",
-  accent: "#d9c9a3",
   success: "#1f7a4d",
   warning: "#a66a10",
   danger: "#b42318",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-export default function AdminClientes() {
+export default function AdminClientesPage() {
   const supabase = getSupabaseClient();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [changingId, setChangingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [type, setType] = useState("menudeo");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCustomers();
@@ -68,121 +62,31 @@ export default function AdminClientes() {
     setLoading(false);
   }
 
-  async function toggleType(customer: Customer) {
-    const newType =
-      customer.customer_type === "mayoreo" ? "menudeo" : "mayoreo";
+  async function deleteCustomer(customer: Customer) {
+    const confirmText = `¿Seguro que quieres eliminar a ${customer.name}?`;
+    const confirmed = window.confirm(confirmText);
 
-    setChangingId(customer.id);
+    if (!confirmed) return;
 
-    const { error: customerError } = await supabase
+    setDeletingId(customer.id);
+
+    const { error } = await supabase
       .from("customers")
-      .update({ customer_type: newType })
+      .delete()
       .eq("id", customer.id);
 
-    if (customerError) {
-      console.log(customerError);
-      alert("No se pudo cambiar el tipo del cliente");
-      setChangingId(null);
-      return;
-    }
-
-    const { error: profileError } = await supabase
-      .from("customer_profiles")
-      .update({ customer_type: newType })
-      .eq("customer_id", customer.id);
-
-    if (profileError) {
-      console.log(profileError);
-      alert("Se cambió en customers, pero falló en customer_profiles");
-      setChangingId(null);
-      await loadCustomers();
-      return;
-    }
-
-    setChangingId(null);
-    await loadCustomers();
-  }
-
-  async function createCustomer() {
-    if (!name || !email || !password) {
-      alert("Faltan datos");
-      return;
-    }
-
-    setSaving(true);
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (error || !data.user) {
+    if (error) {
       console.log(error);
-      alert("Error creando usuario");
-      setSaving(false);
+      alert(
+        "No se pudo eliminar el cliente. Puede ser que tenga pedidos o registros relacionados."
+      );
+      setDeletingId(null);
       return;
     }
 
-    const user = data.user;
-
-    const { data: customer, error: customerError } = await supabase
-      .from("customers")
-      .insert([
-        {
-          name,
-          phone,
-          business_name: name,
-          email,
-          customer_type: type,
-        },
-      ])
-      .select()
-      .single();
-
-    if (customerError || !customer) {
-      console.log(customerError);
-      alert("Error creando cliente");
-      setSaving(false);
-      return;
-    }
-
-    const { error: profileError } = await supabase
-      .from("customer_profiles")
-      .insert([
-        {
-          id: user.id,
-          customer_id: customer.id,
-          full_name: name,
-          phone,
-          email,
-          customer_type: type,
-          role: "customer",
-        },
-      ]);
-
-    if (profileError) {
-      console.log(profileError);
-      alert("Error creando perfil");
-      setSaving(false);
-      return;
-    }
-
-    await supabase.from("loyalty_accounts").insert([
-      {
-        customer_id: customer.id,
-      },
-    ]);
-
-    alert("Cliente creado correctamente");
-
-    setName("");
-    setPhone("");
-    setEmail("");
-    setPassword("");
-    setType("menudeo");
-
-    setSaving(false);
-    loadCustomers();
+    setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+    setDeletingId(null);
+    alert("Cliente eliminado correctamente");
   }
 
   const filteredCustomers = useMemo(() => {
@@ -194,7 +98,9 @@ export default function AdminClientes() {
         (c.name || "").toLowerCase().includes(q) ||
         (c.phone || "").toLowerCase().includes(q) ||
         (c.email || "").toLowerCase().includes(q) ||
-        (c.business_name || "").toLowerCase().includes(q)
+        (c.business_name || "").toLowerCase().includes(q) ||
+        (c.address || "").toLowerCase().includes(q) ||
+        (c.customer_type || "").toLowerCase().includes(q)
       );
     });
   }, [customers, search]);
@@ -202,7 +108,7 @@ export default function AdminClientes() {
   if (loading) {
     return (
       <div style={loadingPageStyle}>
-        <div style={loadingCardStyle}>Cargando...</div>
+        <div style={loadingCardStyle}>Cargando clientes...</div>
       </div>
     );
   }
@@ -214,164 +120,106 @@ export default function AdminClientes() {
 
       <div style={shellStyle}>
         <div style={topBarStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <img
-              src="/logo.png"
-              alt="Sergios Carnicería"
-              style={{
-                width: 110,
-                height: "auto",
-                display: "block",
-              }}
-            />
-
-            <div>
-              <h1 style={{ margin: 0, color: COLORS.text }}>Admin clientes</h1>
-              <p style={{ color: COLORS.muted, margin: "6px 0 0 0" }}>
-                Alta manual y control de mayoreo / menudeo
-              </p>
-            </div>
+          <div>
+            <h1 style={{ margin: 0, color: COLORS.text }}>Clientes</h1>
+            <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
+              Administración de cartera de clientes
+            </p>
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <Link href="/" style={secondaryButtonStyle}>
-              Inicio
-            </Link>
-            <Link href="/pedidos" style={secondaryButtonStyle}>
-              Pedidos
-            </Link>
-            <Link href="/produccion" style={secondaryButtonStyle}>
-              Producción
-            </Link>
-            <Link href="/admin/dashboard" style={secondaryButtonStyle}>
-              Dashboard
-            </Link>
+            <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
+            <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
+            <Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>Nuevo pedido</Link>
+            <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
           </div>
         </div>
 
-        <div style={mainGridStyle}>
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <div>
-                <h2 style={panelTitleStyle}>Crear cliente</h2>
-                <p style={panelSubtitleStyle}>
-                  Alta manual con acceso al portal
-                </p>
-              </div>
-            </div>
-
-            <input
-              placeholder="Nombre / empresa"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              placeholder="Teléfono"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              placeholder="Correo (login)"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-            />
-
-            <input
-              placeholder="Contraseña"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={inputStyle}
-            />
-
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="menudeo">Menudeo</option>
-              <option value="mayoreo">Mayoreo</option>
-            </select>
-
-            <button onClick={createCustomer} style={primaryButtonStyle}>
-              {saving ? "Creando..." : "Crear cliente"}
-            </button>
+        <div style={summaryGridStyle}>
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Clientes totales</div>
+            <div style={summaryValueStyle}>{customers.length}</div>
           </div>
 
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <div>
-                <h2 style={panelTitleStyle}>Clientes</h2>
-                <p style={panelSubtitleStyle}>
-                  Busca y cambia el tipo cuando lo necesites
-                </p>
-              </div>
-            </div>
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Resultados visibles</div>
+            <div style={summaryValueStyle}>{filteredCustomers.length}</div>
+          </div>
+        </div>
 
-            <input
-              placeholder="Buscar por nombre, teléfono o correo"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={inputStyle}
-            />
+        <div style={toolbarCardStyle}>
+          <input
+            placeholder="Buscar cliente por nombre, teléfono, correo o negocio"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
 
-            <div style={{ display: "grid", gap: 12 }}>
-              {filteredCustomers.map((c) => (
-                <div key={c.id} style={customerCardStyle}>
-                  <div style={customerTopStyle}>
-                    <div>
-                      <div style={customerNameStyle}>{c.name}</div>
-                      <div style={customerMetaStyle}>
-                        {c.phone || "Sin teléfono"}
+        {filteredCustomers.length === 0 ? (
+          <div style={emptyBoxStyle}>No hay clientes para mostrar</div>
+        ) : (
+          <div style={gridStyle}>
+            {filteredCustomers.map((customer) => (
+              <div key={customer.id} style={cardStyle}>
+                <div style={cardHeaderStyle}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={customerNameStyle}>{customer.name}</div>
+
+                    {customer.business_name ? (
+                      <div style={metaTextStyle}>
+                        Negocio: <b>{customer.business_name}</b>
                       </div>
-                      <div style={customerMetaStyle}>
-                        {c.email || "Sin correo"}
-                      </div>
-                    </div>
+                    ) : null}
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span
-                        style={{
-                          ...typeBadgeStyle,
-                          background:
-                            c.customer_type === "mayoreo"
-                              ? "rgba(31,122,77,0.12)"
-                              : "rgba(123, 34, 24, 0.10)",
-                          color:
-                            c.customer_type === "mayoreo"
-                              ? COLORS.success
-                              : COLORS.primary,
-                        }}
-                      >
-                        {c.customer_type || "menudeo"}
-                      </span>
-
-                      <button
-                        onClick={() => toggleType(c)}
-                        disabled={changingId === c.id}
-                        style={{
-                          ...miniButtonStyle,
-                          opacity: changingId === c.id ? 0.7 : 1,
-                        }}
-                      >
-                        {changingId === c.id ? "Cambiando..." : "Cambiar"}
-                      </button>
+                    <div style={typeBadgeStyle}>
+                      {customer.customer_type || "menudeo"}
                     </div>
                   </div>
                 </div>
-              ))}
 
-              {filteredCustomers.length === 0 ? (
-                <div style={emptyBoxStyle}>No hay clientes para mostrar</div>
-              ) : null}
-            </div>
+                <div style={infoBoxStyle}>
+                  <div style={infoRowStyle}>
+                    <span style={infoLabelStyle}>Teléfono:</span>
+                    <span style={infoValueStyle}>{customer.phone || "Sin teléfono"}</span>
+                  </div>
+
+                  <div style={infoRowStyle}>
+                    <span style={infoLabelStyle}>Correo:</span>
+                    <span style={infoValueStyle}>{customer.email || "Sin correo"}</span>
+                  </div>
+
+                  <div style={infoRowStyle}>
+                    <span style={infoLabelStyle}>Dirección:</span>
+                    <span style={infoValueStyle}>{customer.address || "Sin dirección"}</span>
+                  </div>
+
+                  {customer.created_at ? (
+                    <div style={infoRowStyle}>
+                      <span style={infoLabelStyle}>Creado:</span>
+                      <span style={infoValueStyle}>
+                        {new Date(customer.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div style={actionsWrapStyle}>
+                  <button
+                    onClick={() => deleteCustomer(customer)}
+                    disabled={deletingId === customer.id}
+                    style={{
+                      ...dangerButtonStyle,
+                      opacity: deletingId === customer.id ? 0.6 : 1,
+                    }}
+                  >
+                    {deletingId === customer.id ? "Eliminando..." : "Eliminar cliente"}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -398,7 +246,7 @@ const loadingCardStyle: React.CSSProperties = {
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`,
-  padding: 24,
+  padding: 16,
   position: "relative",
   overflow: "hidden",
   fontFamily: "Arial, sans-serif",
@@ -427,7 +275,7 @@ const glowTopRight: React.CSSProperties = {
 };
 
 const shellStyle: React.CSSProperties = {
-  maxWidth: 1440,
+  maxWidth: 1400,
   margin: "0 auto",
   position: "relative",
   zIndex: 2,
@@ -442,39 +290,41 @@ const topBarStyle: React.CSSProperties = {
   marginBottom: 20,
 };
 
-const mainGridStyle: React.CSSProperties = {
+const summaryGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "420px 1fr",
-  gap: 20,
-  alignItems: "start",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+  marginBottom: 16,
 };
 
-const panelStyle: React.CSSProperties = {
-  background: COLORS.card,
-  backdropFilter: "blur(10px)",
+const summaryCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
   border: `1px solid ${COLORS.border}`,
-  borderRadius: 24,
-  padding: 20,
+  borderRadius: 22,
+  padding: 18,
   boxShadow: COLORS.shadow,
 };
 
-const panelHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  marginBottom: 14,
-};
-
-const panelTitleStyle: React.CSSProperties = {
-  margin: 0,
-  color: COLORS.text,
-};
-
-const panelSubtitleStyle: React.CSSProperties = {
-  margin: "6px 0 0 0",
+const summaryLabelStyle: React.CSSProperties = {
   color: COLORS.muted,
   fontSize: 14,
+  marginBottom: 8,
+};
+
+const summaryValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontSize: 30,
+  fontWeight: 800,
+  lineHeight: 1.1,
+};
+
+const toolbarCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 22,
+  padding: 16,
+  boxShadow: COLORS.shadow,
+  marginBottom: 18,
 };
 
 const inputStyle: React.CSSProperties = {
@@ -484,21 +334,107 @@ const inputStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
-  marginBottom: 12,
   background: "rgba(255,255,255,0.82)",
   color: COLORS.text,
   fontSize: 15,
 };
 
-const primaryButtonStyle: React.CSSProperties = {
-  padding: "12px 18px",
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 16,
+};
+
+const cardStyle: React.CSSProperties = {
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 24,
+  padding: 18,
+  boxShadow: COLORS.shadow,
+};
+
+const cardHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 14,
+};
+
+const customerNameStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 24,
+  lineHeight: 1.2,
+  marginBottom: 8,
+};
+
+const metaTextStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 14,
+  marginBottom: 8,
+};
+
+const typeBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(123, 34, 24, 0.10)",
+  color: COLORS.primary,
+  textTransform: "capitalize",
+};
+
+const infoBoxStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 18,
+  padding: 14,
+};
+
+const infoRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "90px 1fr",
+  gap: 10,
+  padding: "8px 0",
+  borderBottom: `1px solid ${COLORS.border}`,
+};
+
+const infoLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontWeight: 700,
+};
+
+const infoValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  wordBreak: "break-word",
+};
+
+const actionsWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 14,
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 16px",
   borderRadius: 14,
   border: "none",
-  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
-  color: "white",
+  background: "rgba(180,35,24,0.10)",
+  color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 700,
-  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+};
+
+const emptyBoxStyle: React.CSSProperties = {
+  padding: 18,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px dashed ${COLORS.border}`,
+  color: COLORS.muted,
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
@@ -510,58 +446,4 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
-};
-
-const customerCardStyle: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 18,
-  background: COLORS.bgSoft,
-  border: `1px solid ${COLORS.border}`,
-};
-
-const customerTopStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "start",
-  gap: 12,
-};
-
-const customerNameStyle: React.CSSProperties = {
-  color: COLORS.text,
-  fontWeight: 800,
-  fontSize: 18,
-  marginBottom: 6,
-};
-
-const customerMetaStyle: React.CSSProperties = {
-  color: COLORS.muted,
-  fontSize: 14,
-  marginBottom: 4,
-};
-
-const typeBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "6px 10px",
-  borderRadius: 999,
-  fontSize: 12,
-  fontWeight: 700,
-  textTransform: "capitalize",
-};
-
-const miniButtonStyle: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
-  border: "none",
-  background: COLORS.primary,
-  color: "white",
-  cursor: "pointer",
-  fontWeight: 700,
-};
-
-const emptyBoxStyle: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 18,
-  background: COLORS.bgSoft,
-  border: `1px dashed ${COLORS.border}`,
-  color: COLORS.muted,
 };
