@@ -79,6 +79,14 @@ export default function NuevoPedidoPage() {
   const [showCustomerCatalog, setShowCustomerCatalog] = useState(false);
   const [showProductCatalog, setShowProductCatalog] = useState(false);
 
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerBusinessName, setNewCustomerBusinessName] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
+
   useEffect(() => {
     loadData();
   }, []);
@@ -130,6 +138,66 @@ export default function NuevoPedidoPage() {
     setDeliveryAddress(customer.address || "");
     setShowCustomerCatalog(false);
     setCustomerSearch("");
+  }
+
+  async function createQuickCustomer() {
+    if (!newCustomerName.trim()) {
+      alert("Escribe el nombre del cliente");
+      return;
+    }
+
+    setCreatingCustomer(true);
+
+    const payload = {
+      name: newCustomerName.trim(),
+      phone: newCustomerPhone.trim() || null,
+      email: newCustomerEmail.trim() || null,
+      business_name: newCustomerBusinessName.trim() || null,
+      address: newCustomerAddress.trim() || null,
+      customer_type: "menudeo",
+    };
+
+    const { data, error } = await supabase
+      .from("customers")
+      .insert([payload])
+      .select("*")
+      .single();
+
+    if (error || !data) {
+      console.log(error);
+      alert("No se pudo crear el cliente");
+      setCreatingCustomer(false);
+      return;
+    }
+
+    const createdCustomer = data as Customer;
+
+    setCustomers((prev) =>
+      [createdCustomer, ...prev].sort((a, b) => a.name.localeCompare(b.name))
+    );
+
+    setSelectedCustomer(createdCustomer);
+    setDeliveryAddress(createdCustomer.address || "");
+    setShowNewCustomerModal(false);
+    setCustomerSearch("");
+
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
+    setNewCustomerBusinessName("");
+    setNewCustomerAddress("");
+    setCreatingCustomer(false);
+  }
+
+  function closeNewCustomerModal() {
+    if (creatingCustomer) return;
+
+    setShowNewCustomerModal(false);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
+    setNewCustomerBusinessName("");
+    setNewCustomerAddress("");
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money") {
@@ -375,6 +443,13 @@ export default function NuevoPedidoPage() {
                   style={catalogButtonStyle}
                 >
                   {showCustomerCatalog ? "Ocultar cartera" : "Ver cartera"}
+                </button>
+
+                <button
+                  onClick={() => setShowNewCustomerModal(true)}
+                  style={catalogButtonStyle}
+                >
+                  + Cliente nuevo
                 </button>
               </div>
 
@@ -760,6 +835,84 @@ export default function NuevoPedidoPage() {
           </div>
         </div>
       </div>
+
+      {showNewCustomerModal ? (
+        <div style={modalOverlayStyle}>
+          <div style={modalCardStyle}>
+            <div style={modalHeaderStyle}>
+              <div>
+                <h2 style={{ margin: 0, color: COLORS.text }}>Cliente nuevo</h2>
+                <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
+                  Crea un cliente rápido sin salir de esta pantalla
+                </p>
+              </div>
+
+              <button
+                onClick={closeNewCustomerModal}
+                style={modalCloseButtonStyle}
+                disabled={creatingCustomer}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={modalFormGridStyle}>
+              <input
+                placeholder="Nombre del cliente"
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Teléfono"
+                value={newCustomerPhone}
+                onChange={(e) => setNewCustomerPhone(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Correo"
+                value={newCustomerEmail}
+                onChange={(e) => setNewCustomerEmail(e.target.value)}
+                style={inputStyle}
+              />
+
+              <input
+                placeholder="Nombre del negocio (opcional)"
+                value={newCustomerBusinessName}
+                onChange={(e) => setNewCustomerBusinessName(e.target.value)}
+                style={inputStyle}
+              />
+
+              <textarea
+                placeholder="Dirección"
+                value={newCustomerAddress}
+                onChange={(e) => setNewCustomerAddress(e.target.value)}
+                style={{ ...textareaStyle, marginTop: 0, minHeight: 110 }}
+              />
+            </div>
+
+            <div style={modalActionsStyle}>
+              <button
+                onClick={closeNewCustomerModal}
+                style={secondaryModalButtonStyle}
+                disabled={creatingCustomer}
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={createQuickCustomer}
+                style={primaryButtonStyle}
+                disabled={creatingCustomer}
+              >
+                {creatingCustomer ? "Guardando..." : "Guardar cliente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -898,6 +1051,16 @@ const primaryButtonStyle: React.CSSProperties = {
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
 };
 
+const secondaryModalButtonStyle: React.CSSProperties = {
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "rgba(255,255,255,0.82)",
+  color: COLORS.text,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
 const catalogButtonStyle: React.CSSProperties = {
   padding: "14px 16px",
   borderRadius: 16,
@@ -951,7 +1114,7 @@ const selectedSummaryStyle: React.CSSProperties = {
 
 const searchBarRowStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr auto",
+  gridTemplateColumns: "1fr auto auto",
   gap: 10,
   alignItems: "center",
 };
@@ -1190,4 +1353,58 @@ const datePreviewStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
   marginTop: 12,
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.28)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: 20,
+  zIndex: 80,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 620,
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 24,
+  padding: 20,
+  boxShadow: COLORS.shadow,
+};
+
+const modalHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 16,
+};
+
+const modalCloseButtonStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 999,
+  border: "none",
+  background: "rgba(123, 34, 24, 0.10)",
+  color: COLORS.primary,
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const modalFormGridStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const modalActionsStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 8,
 };
