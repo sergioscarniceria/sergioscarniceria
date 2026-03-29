@@ -167,10 +167,35 @@ export default function NuevoPedidoPage() {
     setCart((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function updateCartItemKilos(index: number, delta: number) {
+    setCart((prev) =>
+      prev.flatMap((item, i) => {
+        if (i !== index) return [item];
+
+        const nextKilos = Number((item.kilos + delta).toFixed(3));
+        if (nextKilos <= 0) return [];
+
+        return [{ ...item, kilos: nextKilos }];
+      })
+    );
+  }
+
+  function clearOrder() {
+    const confirmed = window.confirm("¿Quieres limpiar todo el pedido actual?");
+    if (!confirmed) return;
+
+    setCart([]);
+    setNotes("");
+  }
+
   function cartTotal() {
     return cart.reduce((acc, item) => {
       return acc + Number(item.price || 0) * Number(item.kilos || 0);
     }, 0);
+  }
+
+  function totalKilos() {
+    return cart.reduce((acc, item) => acc + Number(item.kilos || 0), 0);
   }
 
   async function createPhoneOrder() {
@@ -362,6 +387,11 @@ export default function NuevoPedidoPage() {
                     <div style={{ color: COLORS.muted, marginTop: 4 }}>
                       {selectedCustomer.phone || "Sin teléfono"}
                     </div>
+                    {selectedCustomer.email ? (
+                      <div style={{ color: COLORS.muted, marginTop: 4 }}>
+                        {selectedCustomer.email}
+                      </div>
+                    ) : null}
                     <div style={{ color: COLORS.muted, marginTop: 4 }}>
                       Tipo: <b>{selectedCustomer.customer_type || "menudeo"}</b>
                     </div>
@@ -619,6 +649,11 @@ export default function NuevoPedidoPage() {
                   <div style={{ color: COLORS.muted, marginTop: 4 }}>
                     {selectedCustomer.phone || "Sin teléfono"}
                   </div>
+                  {selectedCustomer.email ? (
+                    <div style={{ color: COLORS.muted, marginTop: 4 }}>
+                      {selectedCustomer.email}
+                    </div>
+                  ) : null}
                   <div style={{ color: COLORS.muted, marginTop: 8 }}>
                     <b>Dirección:</b> {deliveryAddress || "Sin dirección"}
                   </div>
@@ -627,6 +662,18 @@ export default function NuevoPedidoPage() {
                   </div>
                 </div>
               )}
+
+              <div style={summaryStatsWrapStyle}>
+                <div style={summaryStatCardStyle}>
+                  <div style={summaryStatLabelStyle}>Artículos</div>
+                  <div style={summaryStatValueStyle}>{cart.length}</div>
+                </div>
+
+                <div style={summaryStatCardStyle}>
+                  <div style={summaryStatLabelStyle}>Kilos totales</div>
+                  <div style={summaryStatValueStyle}>{totalKilos().toFixed(2)}</div>
+                </div>
+              </div>
 
               {cart.length === 0 ? (
                 <div style={{ ...emptyBoxStyle, marginTop: 12 }}>
@@ -637,10 +684,31 @@ export default function NuevoPedidoPage() {
                   <div style={{ marginTop: 12 }}>
                     {cart.map((item, index) => (
                       <div key={index} style={cartRowStyle}>
-                        <div style={{ minWidth: 0 }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text }}>{item.name}</div>
-                          <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
                             {item.kilos} kg · ${item.price.toFixed(2)}/kg
+                          </div>
+
+                          <div style={cartActionsRowStyle}>
+                            <button
+                              onClick={() => updateCartItemKilos(index, 1)}
+                              style={cartMiniButtonStyle}
+                            >
+                              +1 kg
+                            </button>
+                            <button
+                              onClick={() => updateCartItemKilos(index, 0.5)}
+                              style={cartMiniButtonStyle}
+                            >
+                              +0.5
+                            </button>
+                            <button
+                              onClick={() => updateCartItemKilos(index, -0.5)}
+                              style={cartMiniButtonStyle}
+                            >
+                              -0.5
+                            </button>
                           </div>
                         </div>
 
@@ -664,6 +732,13 @@ export default function NuevoPedidoPage() {
                     <span>Total</span>
                     <span>${cartTotal().toFixed(2)}</span>
                   </div>
+
+                  <button
+                    onClick={clearOrder}
+                    style={{ ...clearButtonStyle, marginTop: 12 }}
+                  >
+                    Limpiar pedido
+                  </button>
                 </>
               )}
 
@@ -840,6 +915,17 @@ const dangerSoftButtonStyle: React.CSSProperties = {
   border: "none",
   background: "rgba(180,35,24,0.10)",
   color: COLORS.danger,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const clearButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "rgba(255,255,255,0.70)",
+  color: COLORS.text,
   cursor: "pointer",
   fontWeight: 700,
 };
@@ -1032,6 +1118,24 @@ const cartRowStyle: React.CSSProperties = {
   alignItems: "flex-start",
 };
 
+const cartActionsRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
+};
+
+const cartMiniButtonStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 13,
+};
+
 const totalBoxStyle: React.CSSProperties = {
   marginTop: 14,
   display: "flex",
@@ -1043,6 +1147,32 @@ const totalBoxStyle: React.CSSProperties = {
   color: "white",
   fontWeight: 700,
   fontSize: 18,
+};
+
+const summaryStatsWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: 10,
+  marginTop: 12,
+};
+
+const summaryStatCardStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 16,
+  padding: 12,
+};
+
+const summaryStatLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+  marginBottom: 6,
+};
+
+const summaryStatValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 22,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
