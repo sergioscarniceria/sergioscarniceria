@@ -59,6 +59,10 @@ function formatOrderDate(value?: string | null) {
   return date.toLocaleDateString();
 }
 
+function formatDateTime(value: Date) {
+  return value.toLocaleString();
+}
+
 export default function NuevoPedidoPage() {
   const supabase = getSupabaseClient();
 
@@ -75,6 +79,7 @@ export default function NuevoPedidoPage() {
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
+  const [takenBy, setTakenBy] = useState("");
 
   const [showCustomerCatalog, setShowCustomerCatalog] = useState(false);
   const [showProductCatalog, setShowProductCatalog] = useState(false);
@@ -287,11 +292,20 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    const captureTime = new Date();
     setSaving(true);
 
+    const takenByText = takenBy.trim() ? takenBy.trim() : "Sin especificar";
+
+    const adminMeta = [
+      "Pedido por teléfono.",
+      `Capturó: ${takenByText}.`,
+      `Hora de captura: ${formatDateTime(captureTime)}.`,
+    ].join(" ");
+
     const finalNotes = notes?.trim()
-      ? `Pedido por teléfono. ${notes.trim()}`
-      : "Pedido por teléfono.";
+      ? `${adminMeta} ${notes.trim()}`
+      : adminMeta;
 
     const { error: addressError } = await supabase
       .from("customers")
@@ -349,6 +363,7 @@ export default function NuevoPedidoPage() {
 
     setCart([]);
     setNotes("");
+    setTakenBy("");
     setSelectedCustomer(null);
     setCustomerSearch("");
     setProductSearch("");
@@ -391,6 +406,8 @@ export default function NuevoPedidoPage() {
     if (!showProductCatalog) return [];
     return products;
   }, [products, showProductCatalog]);
+
+  const capturePreview = useMemo(() => formatDateTime(new Date()), []);
 
   if (loading) {
     return (
@@ -603,7 +620,7 @@ export default function NuevoPedidoPage() {
                 </div>
               </div>
 
-              <div style={searchBarRowStyle}>
+              <div style={searchBarRowStyleProducts}>
                 <input
                   placeholder="Buscar producto"
                   value={productSearch}
@@ -747,6 +764,20 @@ export default function NuevoPedidoPage() {
                 <div style={summaryStatCardStyle}>
                   <div style={summaryStatLabelStyle}>Kilos totales</div>
                   <div style={summaryStatValueStyle}>{totalKilos().toFixed(2)}</div>
+                </div>
+              </div>
+
+              <div style={captureBlockStyle}>
+                <div style={fieldLabelStyle}>Capturó el pedido</div>
+                <input
+                  placeholder="Nombre de quien tomó el pedido"
+                  value={takenBy}
+                  onChange={(e) => setTakenBy(e.target.value)}
+                  style={inputStyle}
+                />
+
+                <div style={captureTimeBoxStyle}>
+                  <b>Hora visible de captura:</b> {capturePreview}
                 </div>
               </div>
 
@@ -1119,6 +1150,13 @@ const searchBarRowStyle: React.CSSProperties = {
   alignItems: "center",
 };
 
+const searchBarRowStyleProducts: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
+  gap: 10,
+  alignItems: "center",
+};
+
 const miniTitleStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 800,
@@ -1336,6 +1374,26 @@ const summaryStatValueStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 800,
   fontSize: 22,
+};
+
+const captureBlockStyle: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 10,
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+const captureTimeBoxStyle: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
