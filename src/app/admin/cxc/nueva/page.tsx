@@ -30,6 +30,8 @@ type NoteItem = {
   price: string;
 };
 
+type DiscountType = "amount" | "percent";
+
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
@@ -95,7 +97,10 @@ export default function NuevaNotaCxcPage() {
   const [noteDate, setNoteDate] = useState(todayDateString());
   const [dueDate, setDueDate] = useState(todayDateString());
   const [noteNumber, setNoteNumber] = useState(makeNoteNumber());
-  const [discountAmount, setDiscountAmount] = useState("0");
+
+  const [discountType, setDiscountType] = useState<DiscountType>("amount");
+  const [discountValue, setDiscountValue] = useState("0");
+
   const [notes, setNotes] = useState("");
   const [showCustomerCatalog, setShowCustomerCatalog] = useState(false);
   const [showProductCatalog, setShowProductCatalog] = useState(false);
@@ -225,7 +230,17 @@ export default function NuevaNotaCxcPage() {
     }, 0);
   }, [items]);
 
-  const discount = Math.max(0, Number(discountAmount || 0));
+  const rawDiscountValue = Math.max(0, Number(discountValue || 0));
+
+  const discount = useMemo(() => {
+    if (discountType === "percent") {
+      const safePercent = Math.min(rawDiscountValue, 100);
+      return (subtotal * safePercent) / 100;
+    }
+
+    return Math.min(rawDiscountValue, subtotal);
+  }, [discountType, rawDiscountValue, subtotal]);
+
   const total = Math.max(0, subtotal - discount);
 
   useEffect(() => {
@@ -263,6 +278,11 @@ export default function NuevaNotaCxcPage() {
 
     const finalNoteNumber = noteNumber.trim() || makeNoteNumber();
 
+    const finalDiscount =
+      discountType === "percent"
+        ? Math.min(discount, subtotal)
+        : Math.min(discount, subtotal);
+
     const { data: insertedNote, error: noteError } = await supabase
       .from("cxc_notes")
       .insert([
@@ -274,7 +294,7 @@ export default function NuevaNotaCxcPage() {
           due_date: dueDate,
           source_type: "manual",
           subtotal: Number(subtotal.toFixed(2)),
-          discount_amount: Number(discount.toFixed(2)),
+          discount_amount: Number(finalDiscount.toFixed(2)),
           total_amount: Number(total.toFixed(2)),
           balance_due: Number(total.toFixed(2)),
           status: total > 0 ? "abierta" : "pagada",
@@ -322,7 +342,8 @@ export default function NuevaNotaCxcPage() {
     setCustomerSearch("");
     setProductSearch("");
     setItems([]);
-    setDiscountAmount("0");
+    setDiscountType("amount");
+    setDiscountValue("0");
     setNotes("");
     setNoteDate(todayDateString());
     setDueDate(todayDateString());
@@ -513,15 +534,61 @@ export default function NuevaNotaCxcPage() {
                 </div>
 
                 <div>
-                  <div style={fieldLabelStyle}>Descuento total</div>
+                  <div style={fieldLabelStyle}>Tipo de descuento</div>
+                  <div style={discountTypeWrapStyle}>
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType("amount")}
+                      style={{
+                        ...discountTypeButtonStyle,
+                        background:
+                          discountType === "amount" ? COLORS.primary : "white",
+                        color:
+                          discountType === "amount" ? "white" : COLORS.text,
+                        border:
+                          discountType === "amount"
+                            ? "none"
+                            : `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      $
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setDiscountType("percent")}
+                      style={{
+                        ...discountTypeButtonStyle,
+                        background:
+                          discountType === "percent" ? COLORS.primary : "white",
+                        color:
+                          discountType === "percent" ? "white" : COLORS.text,
+                        border:
+                          discountType === "percent"
+                            ? "none"
+                            : `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      %
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div style={fieldLabelStyle}>
+                    {discountType === "percent"
+                      ? "Descuento en porcentaje"
+                      : "Descuento en dinero"}
+                  </div>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
-                    value={discountAmount}
-                    onChange={(e) => setDiscountAmount(e.target.value)}
+                    max={discountType === "percent" ? "100" : undefined}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
                     style={inputStyle}
-                    placeholder="0.00"
+                    placeholder={discountType === "percent" ? "0 a 100" : "0.00"}
                   />
                 </div>
               </div>
@@ -731,8 +798,14 @@ export default function NuevaNotaCxcPage() {
                 </div>
 
                 <div style={summaryRowStyle}>
-                  <span>Descuento</span>
-                  <b>${money(discount)}</b>
+                  <span>
+                    Descuento {discountType === "percent" ? "(%)" : "($)"}
+                  </span>
+                  <b>
+                    {discountType === "percent"
+                      ? `${Math.min(rawDiscountValue, 100).toFixed(2)}% · $${money(discount)}`
+                      : `$${money(discount)}`}
+                  </b>
                 </div>
 
                 <div style={totalBoxStyle}>
@@ -1107,4 +1180,19 @@ const primaryButtonStyle: React.CSSProperties = {
   fontWeight: 700,
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
   cursor: "pointer",
+};
+
+const discountTypeWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const discountTypeButtonStyle: React.CSSProperties = {
+  minWidth: 52,
+  padding: "12px 14px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontWeight: 800,
 };
