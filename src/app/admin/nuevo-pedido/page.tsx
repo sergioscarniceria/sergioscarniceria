@@ -31,8 +31,8 @@ type CartItem = {
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
-  card: "rgba(255,255,255,0.74)",
-  cardStrong: "rgba(255,255,255,0.9)",
+  card: "rgba(255,255,255,0.82)",
+  cardStrong: "rgba(255,255,255,0.92)",
   border: "rgba(92, 27, 17, 0.10)",
   text: "#3b1c16",
   muted: "#7a5a52",
@@ -75,6 +75,9 @@ export default function NuevoPedidoPage() {
   const [notes, setNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
+
+  const [showCustomerCatalog, setShowCustomerCatalog] = useState(false);
+  const [showProductCatalog, setShowProductCatalog] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -125,6 +128,8 @@ export default function NuevoPedidoPage() {
   function selectCustomer(customer: Customer) {
     setSelectedCustomer(customer);
     setDeliveryAddress(customer.address || "");
+    setShowCustomerCatalog(false);
+    setCustomerSearch("");
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money") {
@@ -256,15 +261,16 @@ export default function NuevoPedidoPage() {
     setProductSearch("");
     setDeliveryAddress("");
     setDeliveryDate(getTodayDateInput());
+    setShowCustomerCatalog(false);
+    setShowProductCatalog(false);
     setSaving(false);
 
     await loadData();
   }
 
-  const filteredCustomers = useMemo(() => {
+  const searchedCustomers = useMemo(() => {
     const q = customerSearch.toLowerCase().trim();
-    if (!q) return customers.slice(0, 30);
-
+    if (!q) return [];
     return customers
       .filter((c) => {
         return (
@@ -274,15 +280,24 @@ export default function NuevoPedidoPage() {
           (c.business_name || "").toLowerCase().includes(q)
         );
       })
-      .slice(0, 30);
+      .slice(0, 20);
   }, [customers, customerSearch]);
 
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.toLowerCase().trim();
-    if (!q) return products;
+  const customerCatalog = useMemo(() => {
+    if (!showCustomerCatalog) return [];
+    return customers.slice(0, 150);
+  }, [customers, showCustomerCatalog]);
 
-    return products.filter((p) => p.name.toLowerCase().includes(q));
+  const searchedProducts = useMemo(() => {
+    const q = productSearch.toLowerCase().trim();
+    if (!q) return [];
+    return products.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 12);
   }, [products, productSearch]);
+
+  const productCatalog = useMemo(() => {
+    if (!showProductCatalog) return [];
+    return products;
+  }, [products, showProductCatalog]);
 
   if (loading) {
     return (
@@ -318,16 +333,25 @@ export default function NuevoPedidoPage() {
               <div style={panelHeaderStyle}>
                 <div>
                   <h2 style={panelTitleStyle}>1. Seleccionar cliente</h2>
-                  <p style={panelSubtitleStyle}>Busca por nombre, teléfono o correo</p>
+                  <p style={panelSubtitleStyle}>Busca uno específico o abre la cartera</p>
                 </div>
               </div>
 
-              <input
-                placeholder="Buscar cliente"
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={searchBarRowStyle}>
+                <input
+                  placeholder="Buscar cliente"
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0 }}
+                />
+
+                <button
+                  onClick={() => setShowCustomerCatalog((prev) => !prev)}
+                  style={catalogButtonStyle}
+                >
+                  {showCustomerCatalog ? "Ocultar cartera" : "Ver cartera"}
+                </button>
+              </div>
 
               {selectedCustomer ? (
                 <div style={selectedCustomerBoxStyle}>
@@ -338,7 +362,7 @@ export default function NuevoPedidoPage() {
                     <div style={{ color: COLORS.muted, marginTop: 4 }}>
                       {selectedCustomer.phone || "Sin teléfono"}
                     </div>
-                    <div style={{ color: COLORS.muted }}>
+                    <div style={{ color: COLORS.muted, marginTop: 4 }}>
                       Tipo: <b>{selectedCustomer.customer_type || "menudeo"}</b>
                     </div>
                   </div>
@@ -348,34 +372,85 @@ export default function NuevoPedidoPage() {
                       setSelectedCustomer(null);
                       setDeliveryAddress("");
                     }}
-                    style={dangerButtonStyle}
+                    style={dangerSoftButtonStyle}
                   >
                     Quitar
                   </button>
                 </div>
               ) : null}
 
-              <div style={{ display: "grid", gap: 10 }}>
-                {filteredCustomers.map((customer) => (
-                  <button
-                    key={customer.id}
-                    onClick={() => selectCustomer(customer)}
-                    style={customerButtonStyle}
-                  >
-                    <div style={{ textAlign: "left", minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: COLORS.text }}>
-                        {customer.name}
-                      </div>
-                      <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                        {customer.phone || "Sin teléfono"}
-                      </div>
+              {customerSearch.trim() ? (
+                <div style={{ marginTop: 16 }}>
+                  <div style={miniTitleStyle}>Resultados de búsqueda</div>
+
+                  {searchedCustomers.length === 0 ? (
+                    <div style={emptyBoxStyle}>No encontramos clientes con ese dato</div>
+                  ) : (
+                    <div style={listWrapStyle}>
+                      {searchedCustomers.map((customer) => (
+                        <button
+                          key={customer.id}
+                          onClick={() => selectCustomer(customer)}
+                          style={customerRowStyle}
+                        >
+                          <div style={{ textAlign: "left", minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text }}>
+                              {customer.name}
+                            </div>
+                            <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                              {customer.phone || "Sin teléfono"}
+                            </div>
+                          </div>
+
+                          <div style={badgeStyle}>
+                            {customer.customer_type || "menudeo"}
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                    <div style={customerTypeBadgeStyle}>
-                      {customer.customer_type || "menudeo"}
-                    </div>
-                  </button>
-                ))}
-              </div>
+                  )}
+                </div>
+              ) : null}
+
+              {showCustomerCatalog ? (
+                <div style={{ marginTop: 18 }}>
+                  <div style={miniTitleStyle}>Cartera de clientes</div>
+
+                  <div style={catalogListStyle}>
+                    {customerCatalog.map((customer) => (
+                      <button
+                        key={customer.id}
+                        onClick={() => selectCustomer(customer)}
+                        style={customerCardStyle}
+                      >
+                        <div style={{ textAlign: "left", minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: COLORS.text }}>
+                            {customer.name}
+                          </div>
+                          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+                            {customer.phone || "Sin teléfono"}
+                          </div>
+                          {customer.business_name ? (
+                            <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 3 }}>
+                              {customer.business_name}
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div style={badgeStyle}>
+                          {customer.customer_type || "menudeo"}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!customerSearch.trim() && !showCustomerCatalog ? (
+                <div style={{ ...emptyBoxStyle, marginTop: 16 }}>
+                  Escribe en buscar cliente o presiona <b>Ver cartera</b>.
+                </div>
+              ) : null}
             </div>
 
             <div style={panelStyle}>
@@ -418,52 +493,110 @@ export default function NuevoPedidoPage() {
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>
                 <div>
-                  <h2 style={panelTitleStyle}>4. Agregar productos</h2>
-                  <p style={panelSubtitleStyle}>Los precios respetan mayoreo o menudeo</p>
+                  <h2 style={panelTitleStyle}>4. Productos</h2>
+                  <p style={panelSubtitleStyle}>Busca uno específico o abre el catálogo completo</p>
                 </div>
               </div>
 
-              <input
-                placeholder="Buscar producto"
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={searchBarRowStyle}>
+                <input
+                  placeholder="Buscar producto"
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  style={{ ...inputStyle, marginBottom: 0 }}
+                />
 
-              <div style={productsGridStyle}>
-                {filteredProducts.map((p) => (
-                  <div key={p.id} style={productCardStyle}>
-                    <div style={{ minHeight: 48 }}>
-                      <div style={productNameStyle}>{p.name}</div>
-                    </div>
-
-                    <div style={productPriceStyle}>${getPrice(p).toFixed(2)}</div>
-
-                    <div style={{ minHeight: 26, marginBottom: 10 }}>
-                      {selectedCustomer?.customer_type === "mayoreo" &&
-                      !p.is_excluded_from_discount ? (
-                        <span style={discountBadgeStyle}>Precio mayoreo</span>
-                      ) : null}
-
-                      {p.is_excluded_from_discount ? (
-                        <span style={excludedBadgeStyle}>Sin descuento</span>
-                      ) : null}
-                    </div>
-
-                    <div style={productButtonsWrapStyle}>
-                      <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                        +1 kg
-                      </button>
-                      <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                        +0.5 kg
-                      </button>
-                      <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                        $
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                <button
+                  onClick={() => setShowProductCatalog((prev) => !prev)}
+                  style={catalogButtonStyle}
+                >
+                  {showProductCatalog ? "Ocultar catálogo" : "Ver catálogo"}
+                </button>
               </div>
+
+              {productSearch.trim() ? (
+                <div style={{ marginTop: 16 }}>
+                  <div style={miniTitleStyle}>Resultados de búsqueda</div>
+
+                  {searchedProducts.length === 0 ? (
+                    <div style={emptyBoxStyle}>No encontramos productos con ese nombre</div>
+                  ) : (
+                    <div style={listWrapStyle}>
+                      {searchedProducts.map((product) => (
+                        <div key={product.id} style={searchProductRowStyle}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text }}>
+                              {product.name}
+                            </div>
+                            <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4 }}>
+                              ${getPrice(product).toFixed(2)}
+                            </div>
+                          </div>
+
+                          <div style={productButtonsWrapStyle}>
+                            <button onClick={() => addProduct(product, "kg")} style={miniLightButtonStyle}>
+                              +1 kg
+                            </button>
+                            <button onClick={() => addProduct(product, "half")} style={miniLightButtonStyle}>
+                              +0.5
+                            </button>
+                            <button onClick={() => addProduct(product, "money")} style={miniDarkButtonStyle}>
+                              $
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {showProductCatalog ? (
+                <div style={{ marginTop: 18 }}>
+                  <div style={miniTitleStyle}>Catálogo de productos</div>
+
+                  <div style={catalogGridStyle}>
+                    {productCatalog.map((product) => (
+                      <div key={product.id} style={productCardStyle}>
+                        <div style={{ minHeight: 46 }}>
+                          <div style={productNameStyle}>{product.name}</div>
+                        </div>
+
+                        <div style={productPriceStyle}>${getPrice(product).toFixed(2)}</div>
+
+                        <div style={{ minHeight: 28, marginBottom: 10 }}>
+                          {selectedCustomer?.customer_type === "mayoreo" &&
+                          !product.is_excluded_from_discount ? (
+                            <span style={successBadgeStyle}>Precio mayoreo</span>
+                          ) : null}
+
+                          {product.is_excluded_from_discount ? (
+                            <span style={warningBadgeStyle}>Sin descuento</span>
+                          ) : null}
+                        </div>
+
+                        <div style={productButtonsWrapStyle}>
+                          <button onClick={() => addProduct(product, "kg")} style={miniLightButtonStyle}>
+                            +1 kg
+                          </button>
+                          <button onClick={() => addProduct(product, "half")} style={miniLightButtonStyle}>
+                            +0.5
+                          </button>
+                          <button onClick={() => addProduct(product, "money")} style={miniDarkButtonStyle}>
+                            $
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!productSearch.trim() && !showProductCatalog ? (
+                <div style={{ ...emptyBoxStyle, marginTop: 16 }}>
+                  Escribe en buscar producto o presiona <b>Ver catálogo</b>.
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -479,11 +612,11 @@ export default function NuevoPedidoPage() {
               {!selectedCustomer ? (
                 <div style={emptyBoxStyle}>Primero selecciona un cliente</div>
               ) : (
-                <div style={selectedCustomerSummaryStyle}>
+                <div style={selectedSummaryStyle}>
                   <div style={{ fontWeight: 800, color: COLORS.text }}>
                     {selectedCustomer.name}
                   </div>
-                  <div style={{ color: COLORS.muted }}>
+                  <div style={{ color: COLORS.muted, marginTop: 4 }}>
                     {selectedCustomer.phone || "Sin teléfono"}
                   </div>
                   <div style={{ color: COLORS.muted, marginTop: 8 }}>
@@ -502,22 +635,23 @@ export default function NuevoPedidoPage() {
               ) : (
                 <>
                   <div style={{ marginTop: 12 }}>
-                    {cart.map((c, i) => (
-                      <div key={i} style={cartRowStyle}>
+                    {cart.map((item, index) => (
+                      <div key={index} style={cartRowStyle}>
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, color: COLORS.text }}>{c.name}</div>
+                          <div style={{ fontWeight: 700, color: COLORS.text }}>{item.name}</div>
                           <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                            {c.kilos} kg · ${c.price.toFixed(2)}/kg
+                            {item.kilos} kg · ${item.price.toFixed(2)}/kg
                           </div>
                         </div>
 
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                            ${(c.kilos * c.price).toFixed(2)}
+                            ${(item.kilos * item.price).toFixed(2)}
                           </div>
+
                           <button
-                            onClick={() => removeCartItem(i)}
-                            style={dangerMiniButtonStyle}
+                            onClick={() => removeCartItem(index)}
+                            style={dangerSoftButtonStyle}
                           >
                             Quitar
                           </button>
@@ -542,8 +676,8 @@ export default function NuevoPedidoPage() {
 
               <button
                 onClick={createPhoneOrder}
-                style={{ ...primaryButtonStyle, width: "100%" }}
                 disabled={saving}
+                style={{ ...primaryButtonStyle, width: "100%" }}
               >
                 {saving ? "Guardando..." : "Guardar pedido por teléfono"}
               </button>
@@ -646,7 +780,6 @@ const inputStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
-  marginBottom: 12,
   background: "rgba(255,255,255,0.82)",
   color: COLORS.text,
   fontSize: 15,
@@ -690,27 +823,79 @@ const primaryButtonStyle: React.CSSProperties = {
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
 };
 
-const dangerButtonStyle: React.CSSProperties = {
+const catalogButtonStyle: React.CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: "none",
+  background: "rgba(123, 34, 24, 0.12)",
+  color: COLORS.primary,
+  cursor: "pointer",
+  fontWeight: 700,
+  whiteSpace: "nowrap",
+};
+
+const dangerSoftButtonStyle: React.CSSProperties = {
   padding: "10px 14px",
   borderRadius: 12,
   border: "none",
-  background: COLORS.danger,
-  color: "white",
+  background: "rgba(180,35,24,0.10)",
+  color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 700,
 };
 
-const dangerMiniButtonStyle: React.CSSProperties = {
-  padding: "7px 10px",
-  borderRadius: 10,
-  border: "none",
-  background: COLORS.danger,
-  color: "white",
-  cursor: "pointer",
-  fontWeight: 700,
+const selectedCustomerBoxStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: 16,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  marginTop: 12,
 };
 
-const customerButtonStyle: React.CSSProperties = {
+const selectedSummaryStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+};
+
+const searchBarRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr auto",
+  gap: 10,
+  alignItems: "center",
+};
+
+const miniTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  marginBottom: 10,
+  fontSize: 18,
+};
+
+const listWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const customerRowStyle: React.CSSProperties = {
+  width: "100%",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  padding: 14,
+  borderRadius: 16,
+  border: `1px solid ${COLORS.border}`,
+  background: COLORS.bgSoft,
+  cursor: "pointer",
+};
+
+const customerCardStyle: React.CSSProperties = {
   width: "100%",
   display: "flex",
   justifyContent: "space-between",
@@ -723,7 +908,7 @@ const customerButtonStyle: React.CSSProperties = {
   cursor: "pointer",
 };
 
-const customerTypeBadgeStyle: React.CSSProperties = {
+const badgeStyle: React.CSSProperties = {
   display: "inline-block",
   padding: "6px 10px",
   borderRadius: 999,
@@ -735,29 +920,33 @@ const customerTypeBadgeStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const selectedCustomerBoxStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  gap: 12,
-  padding: 16,
-  borderRadius: 18,
-  background: COLORS.bgSoft,
-  border: `1px solid ${COLORS.border}`,
-  marginBottom: 12,
+const catalogListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+  maxHeight: 460,
+  overflowY: "auto",
+  paddingRight: 4,
 };
 
-const selectedCustomerSummaryStyle: React.CSSProperties = {
+const searchProductRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  gap: 12,
   padding: 14,
   borderRadius: 16,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
+  alignItems: "center",
 };
 
-const productsGridStyle: React.CSSProperties = {
+const catalogGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
   gap: 14,
+  marginTop: 12,
+  maxHeight: 620,
+  overflowY: "auto",
+  paddingRight: 4,
 };
 
 const productCardStyle: React.CSSProperties = {
@@ -771,6 +960,7 @@ const productNameStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 700,
   lineHeight: 1.3,
+  wordBreak: "break-word",
 };
 
 const productPriceStyle: React.CSSProperties = {
@@ -786,7 +976,7 @@ const productButtonsWrapStyle: React.CSSProperties = {
   flexWrap: "wrap",
 };
 
-const lightMiniButtonStyle: React.CSSProperties = {
+const miniLightButtonStyle: React.CSSProperties = {
   padding: "10px 12px",
   borderRadius: 12,
   border: `1px solid ${COLORS.border}`,
@@ -797,7 +987,7 @@ const lightMiniButtonStyle: React.CSSProperties = {
   flex: 1,
 };
 
-const darkMiniButtonStyle: React.CSSProperties = {
+const miniDarkButtonStyle: React.CSSProperties = {
   width: 46,
   minWidth: 46,
   height: 46,
@@ -808,6 +998,26 @@ const darkMiniButtonStyle: React.CSSProperties = {
   cursor: "pointer",
   fontWeight: 700,
   fontSize: 20,
+};
+
+const successBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "rgba(31, 122, 77, 0.10)",
+  color: COLORS.success,
+  fontSize: 12,
+  fontWeight: 700,
+};
+
+const warningBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "4px 10px",
+  borderRadius: 999,
+  background: "rgba(166, 106, 16, 0.12)",
+  color: COLORS.warning,
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const cartRowStyle: React.CSSProperties = {
@@ -843,31 +1053,11 @@ const emptyBoxStyle: React.CSSProperties = {
   color: COLORS.muted,
 };
 
-const discountBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "rgba(31, 122, 77, 0.10)",
-  color: COLORS.success,
-  fontSize: 12,
-  fontWeight: 700,
-};
-
-const excludedBadgeStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "4px 10px",
-  borderRadius: 999,
-  background: "rgba(166, 106, 16, 0.12)",
-  color: COLORS.warning,
-  fontSize: 12,
-  fontWeight: 700,
-};
-
 const datePreviewStyle: React.CSSProperties = {
   padding: 12,
   borderRadius: 14,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
-  marginTop: -2,
+  marginTop: 12,
 };
