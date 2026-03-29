@@ -18,6 +18,7 @@ type Order = {
   notes?: string;
   created_at?: string;
   butcher_name?: string | null;
+  delivery_date?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -37,6 +38,40 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+function getTodayDateInput() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateOnly(value?: string | null) {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? match[1] + "-" + match[2] + "-" + match[3] : null;
+}
+
+function formatDeliveryDate(value?: string | null) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return "Sin fecha";
+  const date = new Date(`${normalized}T12:00:00`);
+  if (isNaN(date.getTime())) return normalized;
+  return date.toLocaleDateString();
+}
+
+function isFutureDate(value?: string | null) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return false;
+  return normalized > getTodayDateInput();
+}
+
+function isTodayDate(value?: string | null) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return true;
+  return normalized === getTodayDateInput();
+}
+
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState("todos");
@@ -48,6 +83,7 @@ export default function PedidosPage() {
     const { data, error } = await supabase
       .from("orders")
       .select(`*, order_items(*)`)
+      .order("delivery_date", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -70,8 +106,8 @@ export default function PedidosPage() {
     );
   }
 
-  function filteredOrders() {
-    let result = orders;
+  function applyBaseFilters(list: Order[]) {
+    let result = list;
 
     if (filter !== "todos") {
       result = result.filter((o) => o.status === filter);
@@ -84,18 +120,26 @@ export default function PedidosPage() {
       const hayCliente = (o.customer_name || "").toLowerCase().includes(q);
       const hayNotas = (o.notes || "").toLowerCase().includes(q);
       const hayCarnicero = (o.butcher_name || "").toLowerCase().includes(q);
+      const hayFecha = (o.delivery_date || "").toLowerCase().includes(q);
       const hayProducto = (o.order_items || []).some((i) =>
         (i.product || "").toLowerCase().includes(q)
       );
 
-      return hayCliente || hayNotas || hayCarnicero || hayProducto;
+      return hayCliente || hayNotas || hayCarnicero || hayProducto || hayFecha;
     });
   }
 
-  const visibleOrders = useMemo(
-    () => filteredOrders(),
-    [orders, filter, search]
-  );
+  const todayOrders = useMemo(() => {
+    return applyBaseFilters(
+      orders.filter((o) => isTodayDate(o.delivery_date))
+    );
+  }, [orders, filter, search]);
+
+  const futureOrders = useMemo(() => {
+    return applyBaseFilters(
+      orders.filter((o) => isFutureDate(o.delivery_date))
+    );
+  }, [orders, filter, search]);
 
   function statusStyle(status: string): React.CSSProperties {
     if (status === "nuevo") {
@@ -116,6 +160,70 @@ export default function PedidosPage() {
       background: "rgba(31,122,77,0.12)",
       color: COLORS.success,
     };
+  }
+
+  function renderOrderCard(o: Order) {
+    return (
+      <div key={o.id} style={cardStyle}>
+        <div style={cardHeaderStyle}>
+          <div style={{ minWidth: 0 }}>
+            <div style={customerNameStyle}>{o.customer_name}</div>
+
+            <div
+              style={{
+                ...statusBadgeStyle,
+                ...statusStyle(o.status),
+              }}
+            >
+              {o.status}
+            </div>
+          </div>
+
+          <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
+        </div>
+
+        <div style={metaGridStyle}>
+          {o.delivery_date ? (
+            <div style={metaPillStyle}>
+              Entrega: <b>{formatDeliveryDate(o.delivery_date)}</b>
+            </div>
+          ) : (
+            <div style={metaPillStyle}>
+              Entrega: <b>Hoy</b>
+            </div>
+          )}
+
+          {o.created_at ? (
+            <div style={metaPillStyle}>
+              Creado: <b>{new Date(o.created_at).toLocaleString()}</b>
+            </div>
+          ) : null}
+        </div>
+
+        {o.butcher_name ? (
+          <div style={metaTextStyle}>Carnicero: {o.butcher_name}</div>
+        ) : null}
+
+        <div style={itemsBoxStyle}>
+          {(o.order_items || []).map((i) => (
+            <div key={i.id} style={itemStyle}>
+              <span style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
+                {i.product}
+              </span>
+              <span style={{ color: COLORS.muted, flexShrink: 0 }}>
+                {i.kilos} kg
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {o.notes ? (
+          <div style={notesStyle}>
+            <b>Notas:</b> {o.notes}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   return (
@@ -152,7 +260,7 @@ export default function PedidosPage() {
         <div style={toolbarCardStyle}>
           <div style={toolbarGridStyle}>
             <input
-              placeholder="Buscar cliente, producto, notas o carnicero"
+              placeholder="Buscar cliente, producto, notas, fecha o carnicero"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={inputStyle}
@@ -182,76 +290,63 @@ export default function PedidosPage() {
 
         <div style={summaryGridStyle}>
           <div style={summaryCardStyle}>
-            <div style={summaryLabelStyle}>Pedidos visibles</div>
-            <div style={summaryValueStyle}>{visibleOrders.length}</div>
+            <div style={summaryLabelStyle}>Pedidos para hoy</div>
+            <div style={summaryValueStyle}>{todayOrders.length}</div>
           </div>
 
           <div style={summaryCardStyle}>
-            <div style={summaryLabelStyle}>Total visible</div>
+            <div style={summaryLabelStyle}>Pedidos próximos</div>
+            <div style={summaryValueStyle}>{futureOrders.length}</div>
+          </div>
+
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Total visible hoy</div>
             <div style={summaryValueStyle}>
               $
-              {visibleOrders
+              {todayOrders
                 .reduce((acc, order) => acc + total(order), 0)
                 .toFixed(2)}
             </div>
           </div>
         </div>
 
-        {visibleOrders.length === 0 ? (
-          <div style={emptyBoxStyle}>No hay pedidos para mostrar</div>
-        ) : (
-          <div style={gridStyle}>
-            {visibleOrders.map((o) => (
-              <div key={o.id} style={cardStyle}>
-                <div style={cardHeaderStyle}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={customerNameStyle}>{o.customer_name}</div>
-
-                    <div
-                      style={{
-                        ...statusBadgeStyle,
-                        ...statusStyle(o.status),
-                      }}
-                    >
-                      {o.status}
-                    </div>
-                  </div>
-
-                  <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
-                </div>
-
-                {o.created_at ? (
-                  <div style={metaTextStyle}>
-                    {new Date(o.created_at).toLocaleString()}
-                  </div>
-                ) : null}
-
-                {o.butcher_name ? (
-                  <div style={metaTextStyle}>Carnicero: {o.butcher_name}</div>
-                ) : null}
-
-                <div style={itemsBoxStyle}>
-                  {(o.order_items || []).map((i) => (
-                    <div key={i.id} style={itemStyle}>
-                      <span style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
-                        {i.product}
-                      </span>
-                      <span style={{ color: COLORS.muted, flexShrink: 0 }}>
-                        {i.kilos} kg
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {o.notes ? (
-                  <div style={notesStyle}>
-                    <b>Notas:</b> {o.notes}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+        <div style={sectionWrapStyle}>
+          <div style={sectionHeaderStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Pedidos para hoy</h2>
+              <p style={sectionSubtitleStyle}>
+                Esta sección muestra por default solo los pedidos del día actual
+              </p>
+            </div>
           </div>
-        )}
+
+          {todayOrders.length === 0 ? (
+            <div style={emptyBoxStyle}>No hay pedidos para hoy</div>
+          ) : (
+            <div style={gridStyle}>
+              {todayOrders.map((o) => renderOrderCard(o))}
+            </div>
+          )}
+        </div>
+
+        <div style={sectionWrapStyle}>
+          <div style={sectionHeaderStyle}>
+            <div>
+              <h2 style={sectionTitleStyle}>Pedidos próximos</h2>
+              <p style={sectionSubtitleStyle}>
+                Aquí aparecen los pedidos con fecha futura
+              </p>
+            </div>
+          </div>
+
+          {futureOrders.length === 0 ? (
+            <div style={emptyBoxStyle}>No hay pedidos próximos</div>
+          ) : (
+            <div style={gridStyle}>
+              {futureOrders.map((o) => renderOrderCard(o))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -374,6 +469,26 @@ const summaryValueStyle: React.CSSProperties = {
   lineHeight: 1.1,
 };
 
+const sectionWrapStyle: React.CSSProperties = {
+  marginBottom: 24,
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  marginBottom: 14,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  margin: 0,
+  color: COLORS.text,
+  fontSize: 26,
+};
+
+const sectionSubtitleStyle: React.CSSProperties = {
+  margin: "6px 0 0 0",
+  color: COLORS.muted,
+  fontSize: 14,
+};
+
 const gridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
@@ -422,6 +537,23 @@ const totalBadgeStyle: React.CSSProperties = {
   fontWeight: 800,
   fontSize: 18,
   flexShrink: 0,
+};
+
+const metaGridStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  marginBottom: 8,
+};
+
+const metaPillStyle: React.CSSProperties = {
+  display: "inline-block",
+  width: "fit-content",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  fontSize: 13,
 };
 
 const metaTextStyle: React.CSSProperties = {
