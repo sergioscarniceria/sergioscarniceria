@@ -45,6 +45,35 @@ type CustomerProfile = {
   customer_type?: string | null;
 };
 
+type CxcNote = {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  note_number?: string | null;
+  note_date: string;
+  due_date?: string | null;
+  source_type: string;
+  subtotal: number;
+  discount_amount: number;
+  total_amount: number;
+  balance_due: number;
+  status: string;
+  notes?: string | null;
+  created_at?: string | null;
+};
+
+type CxcPayment = {
+  id: string;
+  customer_id: string;
+  customer_name: string;
+  payment_date: string;
+  amount: number;
+  payment_method?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+};
+
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
@@ -77,6 +106,35 @@ function formatOrderDate(value?: string | null) {
   return date.toLocaleDateString();
 }
 
+function normalizeDateOnly(value?: string | null) {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function formatCxcDate(value?: string | null) {
+  const normalized = normalizeDateOnly(value);
+  if (!normalized) return "Sin fecha";
+  const date = new Date(`${normalized}T12:00:00`);
+  if (isNaN(date.getTime())) return normalized;
+  return date.toLocaleDateString();
+}
+
+function todayDateOnly() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isOverdue(note: CxcNote) {
+  if (Number(note.balance_due || 0) <= 0) return false;
+  const due = normalizeDateOnly(note.due_date || note.note_date);
+  if (!due) return false;
+  return due < todayDateOnly();
+}
+
 export default function ClientePage() {
   const supabase = getSupabaseClient();
 
@@ -104,6 +162,12 @@ export default function ClientePage() {
   const [search, setSearch] = useState("");
   const [customerType, setCustomerType] = useState("menudeo");
   const [showCatalog, setShowCatalog] = useState(false);
+
+  const [cxcNotes, setCxcNotes] = useState<CxcNote[]>([]);
+  const [cxcPayments, setCxcPayments] = useState<CxcPayment[]>([]);
+  const [creditEnabled, setCreditEnabled] = useState(false);
+  const [creditLimit, setCreditLimit] = useState(0);
+  const [creditDays, setCreditDays] = useState(0);
 
   useEffect(() => {
     checkUser();
@@ -177,11 +241,14 @@ export default function ClientePage() {
 
       const { data: customerData } = await supabase
         .from("customers")
-        .select("address")
+        .select("address, credit_enabled, credit_limit, credit_days")
         .eq("id", customerProfile.customer_id)
         .maybeSingle();
 
       setAddress(customerData?.address || "");
+      setCreditEnabled(Boolean(customerData?.credit_enabled));
+      setCreditLimit(Number(customerData?.credit_limit || 0));
+      setCreditDays(Number(customerData?.credit_days || 0));
 
       const { data: loyalty } = await supabase
         .from("loyalty_accounts")
@@ -198,10 +265,33 @@ export default function ClientePage() {
         .order("created_at", { ascending: false });
 
       setOrders((ordersData as Order[]) || []);
+
+      const { data: notesData } = await supabase
+        .from("cxc_notes")
+        .select("*")
+        .eq("customer_id", customerProfile.customer_id)
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      setCxcNotes((notesData as CxcNote[]) || []);
+
+      const { data: paymentsData } = await supabase
+        .from("cxc_payments")
+        .select("*")
+        .eq("customer_id", customerProfile.customer_id)
+        .order("payment_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      setCxcPayments((paymentsData as CxcPayment[]) || []);
     } else {
       setPoints(0);
       setOrders([]);
       setCustomerType("menudeo");
+      setCxcNotes([]);
+      setCxcPayments([]);
+      setCreditEnabled(false);
+      setCreditLimit(0);
+      setCreditDays(0);
     }
 
     await loadProducts();
@@ -323,6 +413,11 @@ export default function ClientePage() {
     setSearch("");
     setCustomerType("menudeo");
     setShowCatalog(false);
+    setCxcNotes([]);
+    setCxcPayments([]);
+    setCreditEnabled(false);
+    setCreditLimit(0);
+    setCreditDays(0);
   }
 
   async function saveAddress() {
@@ -520,6 +615,22 @@ export default function ClientePage() {
     return products;
   }, [showCatalog, products]);
 
+  const totalDebt = useMemo(() => {
+    return cxcNotes.reduce((acc, note) => acc + Number(note.balance_due || 0), 0);
+  }, [cxcNotes]);
+
+  const openNotes = useMemo(() => {
+    return cxcNotes.filter((note) => Number(note.balance_due || 0) > 0);
+  }, [cxcNotes]);
+
+  const overdueNotes = useMemo(() => {
+    return openNotes.filter((note) => isOverdue(note));
+  }, [openNotes]);
+
+  const paidNotes = useMemo(() => {
+    return cxcNotes.filter((note) => Number(note.balance_due || 0) <= 0 || note.status === "pagada");
+  }, [cxcNotes]);
+
   if (loading) {
     return (
       <div style={loadingPageStyle}>
@@ -694,7 +805,209 @@ export default function ClientePage() {
               {cart.length} artículo{cart.length === 1 ? "" : "s"}
             </div>
           </div>
+
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Adeudo pendiente</div>
+            <div style={heroValueStyle}>${totalDebt.toFixed(2)}</div>
+            <div style={heroMetaStyle}>
+              {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta{openNotes.length === 1 ? "" : "s"}
+            </div>
+          </div>
+
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Crédito</div>
+            <div style={heroValueStyle}>{creditEnabled ? "Activo" : "No"}</div>
+            <div style={heroMetaStyle}>
+              Límite: <b>${creditLimit.toFixed(2)}</b> · {creditDays || 0} días
+            </div>
+          </div>
         </div>
+
+        {creditEnabled || cxcNotes.length > 0 || cxcPayments.length > 0 ? (
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <h2 style={panelTitleStyle}>Mi estado de cuenta</h2>
+                <p style={panelSubtitleStyle}>
+                  Solo consulta. Aquí puedes ver tus adeudos, notas y pagos.
+                </p>
+              </div>
+            </div>
+
+            <div style={accountSummaryGridStyle}>
+              <div style={accountSummaryCardStyle}>
+                <div style={smallLabelStyle}>Saldo pendiente</div>
+                <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
+              </div>
+
+              <div style={accountSummaryCardStyle}>
+                <div style={smallLabelStyle}>Notas abiertas</div>
+                <div style={accountValueStyle}>{openNotes.length}</div>
+              </div>
+
+              <div style={accountSummaryCardStyle}>
+                <div style={smallLabelStyle}>Vencidas</div>
+                <div style={accountValueStyle}>{overdueNotes.length}</div>
+              </div>
+
+              <div style={accountSummaryCardStyle}>
+                <div style={smallLabelStyle}>Pagos registrados</div>
+                <div style={accountValueStyle}>{cxcPayments.length}</div>
+              </div>
+            </div>
+
+            <div style={accountGridStyle}>
+              <div style={subPanelStyle}>
+                <div style={subPanelTitleStyle}>Notas abiertas</div>
+
+                {openNotes.length === 0 ? (
+                  <div style={emptyBoxStyle}>No tienes notas abiertas</div>
+                ) : (
+                  openNotes.map((note) => (
+                    <div key={note.id} style={accountCardStyle}>
+                      <div style={accountCardHeaderStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={accountCardTitleStyle}>
+                            {note.note_number || "Sin folio"}
+                          </div>
+                          <div style={accountMetaStyle}>
+                            Fecha: <b>{formatCxcDate(note.note_date)}</b>
+                          </div>
+                          <div style={accountMetaStyle}>
+                            Vence: <b>{formatCxcDate(note.due_date || note.note_date)}</b>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...accountBadgeStyle,
+                            background: isOverdue(note)
+                              ? "rgba(180,35,24,0.10)"
+                              : "rgba(166,106,16,0.12)",
+                            color: isOverdue(note) ? COLORS.danger : COLORS.warning,
+                          }}
+                        >
+                          {isOverdue(note) ? "Vencida" : note.status}
+                        </div>
+                      </div>
+
+                      <div style={accountMetaWrapStyle}>
+                        <span style={metaPillStyle}>
+                          Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                        </span>
+                        <span style={metaPillStyle}>
+                          Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                        </span>
+                        <span style={metaPillStyle}>
+                          Origen: <b>{note.source_type || "manual"}</b>
+                        </span>
+                      </div>
+
+                      {Number(note.discount_amount || 0) > 0 ? (
+                        <div style={accountMetaStyle}>
+                          Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
+                        </div>
+                      ) : null}
+
+                      {note.notes ? (
+                        <div style={accountNotesStyle}>
+                          <b>Notas:</b> {note.notes}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div style={subPanelStyle}>
+                <div style={subPanelTitleStyle}>Pagos realizados</div>
+
+                {cxcPayments.length === 0 ? (
+                  <div style={emptyBoxStyle}>Todavía no tienes pagos registrados</div>
+                ) : (
+                  cxcPayments.map((payment) => (
+                    <div key={payment.id} style={accountCardStyle}>
+                      <div style={accountCardHeaderStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={accountCardTitleStyle}>
+                            Pago del {formatCxcDate(payment.payment_date)}
+                          </div>
+                          <div style={accountMetaStyle}>
+                            Método: <b>{payment.payment_method || "No definido"}</b>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...accountBadgeStyle,
+                            background: "rgba(31,122,77,0.12)",
+                            color: COLORS.success,
+                          }}
+                        >
+                          ${Number(payment.amount || 0).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {payment.reference ? (
+                        <div style={accountMetaStyle}>
+                          Referencia: <b>{payment.reference}</b>
+                        </div>
+                      ) : null}
+
+                      {payment.notes ? (
+                        <div style={accountNotesStyle}>
+                          <b>Notas:</b> {payment.notes}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {paidNotes.length > 0 ? (
+              <div style={{ marginTop: 20 }}>
+                <div style={subPanelTitleStyle}>Notas pagadas</div>
+
+                <div style={paidNotesGridStyle}>
+                  {paidNotes.map((note) => (
+                    <div key={note.id} style={paidNoteCardStyle}>
+                      <div style={accountCardHeaderStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={accountCardTitleStyle}>
+                            {note.note_number || "Sin folio"}
+                          </div>
+                          <div style={accountMetaStyle}>
+                            Fecha: <b>{formatCxcDate(note.note_date)}</b>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...accountBadgeStyle,
+                            background: "rgba(31,122,77,0.12)",
+                            color: COLORS.success,
+                          }}
+                        >
+                          Pagada
+                        </div>
+                      </div>
+
+                      <div style={accountMetaWrapStyle}>
+                        <span style={metaPillStyle}>
+                          Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                        </span>
+                        <span style={metaPillStyle}>
+                          Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div style={panelStyle}>
           <div style={panelHeaderStyle}>
@@ -1268,6 +1581,113 @@ const panelSubtitleStyle: React.CSSProperties = {
   fontSize: 14,
 };
 
+const accountSummaryGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 14,
+  marginBottom: 18,
+};
+
+const accountSummaryCardStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 20,
+  padding: 16,
+};
+
+const accountValueStyle: React.CSSProperties = {
+  fontSize: 28,
+  fontWeight: 800,
+  color: COLORS.text,
+};
+
+const accountGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 18,
+};
+
+const subPanelStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.55)",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 20,
+  padding: 14,
+};
+
+const subPanelTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 20,
+  marginBottom: 12,
+};
+
+const accountCardStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  marginBottom: 12,
+};
+
+const accountCardHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  marginBottom: 10,
+};
+
+const accountCardTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const accountBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "capitalize",
+  flexShrink: 0,
+};
+
+const accountMetaStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 14,
+  marginTop: 4,
+};
+
+const accountMetaWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginTop: 10,
+};
+
+const accountNotesStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.7)",
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+};
+
+const paidNotesGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 12,
+};
+
+const paidNoteCardStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+};
+
 const productCardStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
@@ -1586,4 +2006,14 @@ const searchResultRowStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   alignItems: "center",
+};
+
+const metaPillStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "8px 12px",
+  borderRadius: 999,
+  background: "white",
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  fontSize: 13,
 };
