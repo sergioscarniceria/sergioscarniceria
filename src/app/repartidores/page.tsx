@@ -34,6 +34,19 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+function isToday(dateValue?: string | null) {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  if (isNaN(date.getTime())) return false;
+
+  const now = new Date();
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
+
 export default function RepartidoresPage() {
   const supabase = getSupabaseClient();
 
@@ -43,9 +56,18 @@ export default function RepartidoresPage() {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [driverName, setDriverName] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [clockTick, setClockTick] = useState(0);
 
   useEffect(() => {
     loadOrders(true);
+  }, []);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setClockTick((prev) => prev + 1);
+    }, 60000);
+
+    return () => window.clearInterval(interval);
   }, []);
 
   async function loadOrders(showLoader = false) {
@@ -81,17 +103,7 @@ export default function RepartidoresPage() {
       return;
     }
 
-    const rows = ((data as Order[]) || []).filter((order) => {
-      const readyToShip =
-        order.status === "terminado" &&
-        (!order.delivery_status || order.delivery_status === "pendiente");
-
-      const alreadyOnTheWay = order.delivery_status === "en_camino";
-
-      return readyToShip || alreadyOnTheWay;
-    });
-
-    setOrders(rows);
+    setOrders((data as Order[]) || []);
     setLastUpdated(new Date());
     setLoading(false);
     setRefreshing(false);
@@ -169,21 +181,77 @@ export default function RepartidoresPage() {
     return Math.round((now - start) / 60000);
   }
 
+  async function copyAddress(address?: string | null) {
+    if (!address) {
+      alert("Este pedido no tiene dirección");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(address);
+      alert("Dirección copiada");
+    } catch (error) {
+      console.log(error);
+      alert("No se pudo copiar la dirección");
+    }
+  }
+
+  function openMaps(address?: string | null) {
+    if (!address) {
+      alert("Este pedido no tiene dirección");
+      return;
+    }
+
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+    window.open(url, "_blank");
+  }
+
+  const activeOrders = useMemo(() => {
+    return orders.filter((order) => {
+      const readyToShip =
+        order.status === "terminado" &&
+        (!order.delivery_status || order.delivery_status === "pendiente");
+
+      const alreadyOnTheWay = order.delivery_status === "en_camino";
+
+      return readyToShip || alreadyOnTheWay;
+    });
+  }, [orders]);
+
+  const deliveredTodayOrders = useMemo(() => {
+    return orders.filter(
+      (order) =>
+        order.delivery_status === "entregado" &&
+        isToday(order.delivered_at || order.created_at || null)
+    );
+  }, [orders]);
+
   const stats = useMemo(() => {
-    const pendientes = orders.filter(
+    const pendientes = activeOrders.filter(
       (o) => !o.delivery_status || o.delivery_status === "pendiente"
     ).length;
 
-    const enCamino = orders.filter((o) => o.delivery_status === "en_camino").length;
+    const enCamino = activeOrders.filter(
+      (o) => o.delivery_status === "en_camino"
+    ).length;
 
-    return { pendientes, enCamino };
-  }, [orders]);
+    const entregadosHoy = deliveredTodayOrders.length;
+
+    return { pendientes, enCamino, entregadosHoy };
+  }, [activeOrders, deliveredTodayOrders]);
 
   function deliveryBadgeStyle(status?: string | null): React.CSSProperties {
     if (status === "en_camino") {
       return {
         background: "rgba(166,106,16,0.12)",
         color: COLORS.warning,
+      };
+    }
+
+    if (status === "entregado") {
+      return {
+        background: "rgba(31,122,77,0.12)",
+        color: COLORS.success,
       };
     }
 
@@ -233,6 +301,11 @@ export default function RepartidoresPage() {
             <div style={statLabelStyle}>En camino</div>
             <div style={statValueStyle}>{stats.enCamino}</div>
           </div>
+
+          <div style={statCardStyle}>
+            <div style={statLabelStyle}>Entregados hoy</div>
+            <div style={statValueStyle}>{stats.entregadosHoy}</div>
+          </div>
         </div>
 
         <div style={driverBarStyle}>
@@ -269,129 +342,249 @@ export default function RepartidoresPage() {
           </div>
         </div>
 
-        {orders.length === 0 ? (
-          <div style={emptyBoxStyle}>No hay pedidos activos para reparto</div>
-        ) : (
-          <div style={gridStyle}>
-            {orders.map((order) => {
-              const deliveryMinutes = minutesBetween(
-                order.delivery_started_at,
-                order.delivered_at
-              );
+        <div style={sectionWrapStyle}>
+          <div style={sectionTitleStyle}>Activos para reparto</div>
 
-              const currentMinutes = currentDeliveryMinutes(order.delivery_started_at);
+          {activeOrders.length === 0 ? (
+            <div style={emptyBoxStyle}>No hay pedidos activos para reparto</div>
+          ) : (
+            <div style={gridStyle}>
+              {activeOrders.map((order) => {
+                const deliveryMinutes = minutesBetween(
+                  order.delivery_started_at,
+                  order.delivered_at
+                );
 
-              return (
-                <div key={order.id} style={cardStyle}>
-                  <div style={cardTopStyle}>
-                    <div>
-                      <div style={customerNameStyle}>
-                        {order.customer_name || "Sin nombre"}
+                const currentMinutes = currentDeliveryMinutes(order.delivery_started_at);
+
+                return (
+                  <div key={order.id} style={cardStyle}>
+                    <div style={cardTopStyle}>
+                      <div>
+                        <div style={customerNameStyle}>
+                          {order.customer_name || "Sin nombre"}
+                        </div>
+
+                        <div
+                          style={{
+                            ...statusBadgeStyle,
+                            ...deliveryBadgeStyle(order.delivery_status),
+                          }}
+                        >
+                          {order.delivery_status || "pendiente"}
+                        </div>
                       </div>
 
-                      <div
+                      <div style={productionDoneBadgeStyle}>
+                        {order.status || "sin estado"}
+                      </div>
+                    </div>
+
+                    <div style={infoBoxStyle}>
+                      <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Dirección:</span>
+                        <span style={infoValueStyle}>
+                          {order.delivery_address || "Sin dirección capturada"}
+                        </span>
+                      </div>
+
+                      <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Repartidor:</span>
+                        <span style={infoValueStyle}>
+                          {order.delivery_driver || "Sin asignar"}
+                        </span>
+                      </div>
+
+                      <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Creado:</span>
+                        <span style={infoValueStyle}>
+                          {order.created_at
+                            ? new Date(order.created_at).toLocaleString()
+                            : "Sin fecha"}
+                        </span>
+                      </div>
+
+                      {order.delivery_started_at ? (
+                        <div style={infoRowStyle}>
+                          <span style={infoLabelStyle}>Salida:</span>
+                          <span style={infoValueStyle}>
+                            {new Date(order.delivery_started_at).toLocaleString()}
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div style={addressButtonsWrapStyle}>
+                      <button
+                        onClick={() => openMaps(order.delivery_address)}
+                        style={routeButtonStyle}
+                      >
+                        Abrir ruta
+                      </button>
+
+                      <button
+                        onClick={() => copyAddress(order.delivery_address)}
+                        style={copyButtonStyle}
+                      >
+                        Copiar dirección
+                      </button>
+                    </div>
+
+                    {order.notes ? (
+                      <div style={notesBoxStyle}>
+                        <b>Notas:</b> {order.notes}
+                      </div>
+                    ) : null}
+
+                    <div style={timesBoxStyle}>
+                      <div style={timeCardStyle}>
+                        <div style={timeLabelStyle}>Tiempo en camino</div>
+                        <div style={timeValueStyle}>
+                          {order.delivery_status === "en_camino"
+                            ? `${currentMinutes ?? 0} min`
+                            : deliveryMinutes !== null
+                            ? `${deliveryMinutes} min`
+                            : "--"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={buttonsWrapStyle}>
+                      <button
+                        onClick={() => markEnCamino(order)}
+                        disabled={
+                          savingId === order.id ||
+                          order.delivery_status === "en_camino"
+                        }
                         style={{
-                          ...statusBadgeStyle,
-                          ...deliveryBadgeStyle(order.delivery_status),
+                          ...warningButtonStyle,
+                          opacity:
+                            savingId === order.id ||
+                            order.delivery_status === "en_camino"
+                              ? 0.6
+                              : 1,
                         }}
                       >
-                        {order.delivery_status || "pendiente"}
+                        En camino
+                      </button>
+
+                      <button
+                        onClick={() => markEntregado(order)}
+                        disabled={savingId === order.id}
+                        style={{
+                          ...successButtonStyle,
+                          opacity: savingId === order.id ? 0.6 : 1,
+                        }}
+                      >
+                        Pedido entregado
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div style={sectionWrapStyle}>
+          <div style={sectionTitleStyle}>Entregados hoy</div>
+
+          {deliveredTodayOrders.length === 0 ? (
+            <div style={emptyBoxStyle}>Todavía no hay entregas registradas hoy</div>
+          ) : (
+            <div style={gridStyle}>
+              {deliveredTodayOrders.map((order) => {
+                const deliveryMinutes = minutesBetween(
+                  order.delivery_started_at,
+                  order.delivered_at
+                );
+
+                return (
+                  <div key={order.id} style={cardStyle}>
+                    <div style={cardTopStyle}>
+                      <div>
+                        <div style={customerNameStyle}>
+                          {order.customer_name || "Sin nombre"}
+                        </div>
+
+                        <div
+                          style={{
+                            ...statusBadgeStyle,
+                            ...deliveryBadgeStyle(order.delivery_status),
+                          }}
+                        >
+                          {order.delivery_status || "entregado"}
+                        </div>
+                      </div>
+
+                      <div style={productionDoneBadgeStyle}>
+                        {order.delivery_driver || "Sin repartidor"}
                       </div>
                     </div>
 
-                    <div style={productionDoneBadgeStyle}>
-                      {order.status || "sin estado"}
-                    </div>
-                  </div>
+                    <div style={infoBoxStyle}>
+                      <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Dirección:</span>
+                        <span style={infoValueStyle}>
+                          {order.delivery_address || "Sin dirección capturada"}
+                        </span>
+                      </div>
 
-                  <div style={infoBoxStyle}>
-                    <div style={infoRowStyle}>
-                      <span style={infoLabelStyle}>Dirección:</span>
-                      <span style={infoValueStyle}>
-                        {order.delivery_address || "Sin dirección capturada"}
-                      </span>
-                    </div>
-
-                    <div style={infoRowStyle}>
-                      <span style={infoLabelStyle}>Repartidor:</span>
-                      <span style={infoValueStyle}>
-                        {order.delivery_driver || "Sin asignar"}
-                      </span>
-                    </div>
-
-                    <div style={infoRowStyle}>
-                      <span style={infoLabelStyle}>Creado:</span>
-                      <span style={infoValueStyle}>
-                        {order.created_at
-                          ? new Date(order.created_at).toLocaleString()
-                          : "Sin fecha"}
-                      </span>
-                    </div>
-
-                    {order.delivery_started_at ? (
                       <div style={infoRowStyle}>
                         <span style={infoLabelStyle}>Salida:</span>
                         <span style={infoValueStyle}>
-                          {new Date(order.delivery_started_at).toLocaleString()}
+                          {order.delivery_started_at
+                            ? new Date(order.delivery_started_at).toLocaleString()
+                            : "Sin registro"}
                         </span>
+                      </div>
+
+                      <div style={infoRowStyle}>
+                        <span style={infoLabelStyle}>Entregado:</span>
+                        <span style={infoValueStyle}>
+                          {order.delivered_at
+                            ? new Date(order.delivered_at).toLocaleString()
+                            : "Sin registro"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={addressButtonsWrapStyle}>
+                      <button
+                        onClick={() => openMaps(order.delivery_address)}
+                        style={routeButtonStyle}
+                      >
+                        Abrir ruta
+                      </button>
+
+                      <button
+                        onClick={() => copyAddress(order.delivery_address)}
+                        style={copyButtonStyle}
+                      >
+                        Copiar dirección
+                      </button>
+                    </div>
+
+                    <div style={timesBoxStyle}>
+                      <div style={timeCardStyle}>
+                        <div style={timeLabelStyle}>Tiempo total</div>
+                        <div style={timeValueStyle}>
+                          {deliveryMinutes !== null ? `${deliveryMinutes} min` : "--"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {order.notes ? (
+                      <div style={notesBoxStyle}>
+                        <b>Notas:</b> {order.notes}
                       </div>
                     ) : null}
                   </div>
-
-                  {order.notes ? (
-                    <div style={notesBoxStyle}>
-                      <b>Notas:</b> {order.notes}
-                    </div>
-                  ) : null}
-
-                  <div style={timesBoxStyle}>
-                    <div style={timeCardStyle}>
-                      <div style={timeLabelStyle}>Tiempo en camino</div>
-                      <div style={timeValueStyle}>
-                        {order.delivery_status === "en_camino"
-                          ? `${currentMinutes ?? 0} min`
-                          : deliveryMinutes !== null
-                          ? `${deliveryMinutes} min`
-                          : "--"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={buttonsWrapStyle}>
-                    <button
-                      onClick={() => markEnCamino(order)}
-                      disabled={
-                        savingId === order.id ||
-                        order.delivery_status === "en_camino"
-                      }
-                      style={{
-                        ...warningButtonStyle,
-                        opacity:
-                          savingId === order.id ||
-                          order.delivery_status === "en_camino"
-                            ? 0.6
-                            : 1,
-                      }}
-                    >
-                      En camino
-                    </button>
-
-                    <button
-                      onClick={() => markEntregado(order)}
-                      disabled={savingId === order.id}
-                      style={{
-                        ...successButtonStyle,
-                        opacity: savingId === order.id ? 0.6 : 1,
-                      }}
-                    >
-                      Pedido entregado
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -502,6 +695,17 @@ const driverBarStyle: React.CSSProperties = {
   marginBottom: 20,
 };
 
+const sectionWrapStyle: React.CSSProperties = {
+  marginBottom: 24,
+};
+
+const sectionTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 22,
+  marginBottom: 14,
+};
+
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: 14,
@@ -596,6 +800,35 @@ const infoLabelStyle: React.CSSProperties = {
 const infoValueStyle: React.CSSProperties = {
   color: COLORS.text,
   wordBreak: "break-word",
+};
+
+const addressButtonsWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginBottom: 12,
+};
+
+const routeButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "none",
+  background: "rgba(53,92,125,0.12)",
+  color: COLORS.info,
+  fontWeight: 700,
+  cursor: "pointer",
+};
+
+const copyButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
 const notesBoxStyle: React.CSSProperties = {
