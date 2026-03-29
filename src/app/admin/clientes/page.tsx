@@ -15,6 +15,22 @@ type Customer = {
   created_at?: string | null;
 };
 
+const COLORS = {
+  bg: "#f7f1e8",
+  bgSoft: "#fbf8f3",
+  card: "rgba(255,255,255,0.82)",
+  cardStrong: "rgba(255,255,255,0.92)",
+  border: "rgba(92, 27, 17, 0.10)",
+  text: "#3b1c16",
+  muted: "#7a5a52",
+  primary: "#7b2218",
+  primaryDark: "#5a190f",
+  success: "#1f7a4d",
+  warning: "#a66a10",
+  danger: "#b42318",
+  shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
+};
+
 export default function AdminClientesPage() {
   const supabase = getSupabaseClient();
 
@@ -22,16 +38,14 @@ export default function AdminClientesPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCustomers();
   }, []);
 
   async function loadCustomers() {
-    const { data } = await supabase
-      .from("customers")
-      .select("*")
-      .order("name");
+    const { data } = await supabase.from("customers").select("*").order("name");
 
     setCustomers((data as Customer[]) || []);
     setLoading(false);
@@ -52,106 +66,407 @@ export default function AdminClientesPage() {
     }
 
     setCustomers((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, customer_type: type } : c
-      )
+      prev.map((c) => (c.id === id ? { ...c, customer_type: type } : c))
     );
 
     setUpdatingId(null);
   }
 
-  async function deleteCustomer(id: string) {
-    if (!confirm("¿Eliminar cliente?")) return;
+  async function deleteCustomer(id: string, name: string) {
+    if (!confirm(`¿Eliminar cliente "${name}"?`)) return;
 
-    const { error } = await supabase
-      .from("customers")
-      .delete()
-      .eq("id", id);
+    setDeletingId(id);
+
+    const { error } = await supabase.from("customers").delete().eq("id", id);
 
     if (error) {
       alert("No se puede eliminar (tiene pedidos)");
+      setDeletingId(null);
       return;
     }
 
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    setDeletingId(null);
   }
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
+
+    if (!q) return customers;
+
     return customers.filter((c) =>
-      `${c.name} ${c.phone} ${c.email} ${c.business_name}`
+      `${c.name ?? ""} ${c.phone ?? ""} ${c.email ?? ""} ${c.business_name ?? ""} ${c.address ?? ""}`
         .toLowerCase()
         .includes(q)
     );
   }, [customers, search]);
 
-  if (loading) return <div style={{ padding: 20 }}>Cargando...</div>;
+  if (loading) {
+    return (
+      <div style={loadingPageStyle}>
+        <div style={loadingCardStyle}>Cargando clientes...</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Clientes</h1>
+    <div style={pageStyle}>
+      <div style={glowTopLeft} />
+      <div style={glowTopRight} />
 
-      <input
-        placeholder="Buscar cliente"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{
-          width: "100%",
-          padding: 12,
-          marginBottom: 20,
-          borderRadius: 10,
-          border: "1px solid #ccc",
-        }}
-      />
-
-      <div style={{ display: "grid", gap: 12 }}>
-        {filtered.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              border: "1px solid #ddd",
-              padding: 16,
-              borderRadius: 12,
-            }}
-          >
-            <b>{c.name}</b>
-
-            <div>{c.phone}</div>
-            <div>{c.email}</div>
-
-            {/* 🔥 SELECTOR */}
-            <div style={{ marginTop: 10 }}>
-              <select
-                value={c.customer_type || "menudeo"}
-                onChange={(e) => updateType(c.id, e.target.value)}
-                disabled={updatingId === c.id}
-                style={{
-                  padding: 8,
-                  borderRadius: 8,
-                  border: "1px solid #ccc",
-                }}
-              >
-                <option value="menudeo">Menudeo</option>
-                <option value="mayoreo">Mayoreo</option>
-              </select>
-            </div>
-
-            <button
-              onClick={() => deleteCustomer(c.id)}
-              style={{
-                marginTop: 10,
-                background: "red",
-                color: "white",
-                border: "none",
-                padding: "8px 12px",
-                borderRadius: 8,
-              }}
-            >
-              Eliminar
-            </button>
+      <div style={shellStyle}>
+        <div style={topBarStyle}>
+          <div>
+            <h1 style={{ margin: 0, color: COLORS.text }}>Clientes</h1>
+            <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
+              Administración de cartera de clientes
+            </p>
           </div>
-        ))}
+
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/" style={secondaryButtonStyle}>
+              Inicio
+            </Link>
+            <Link href="/pedidos" style={secondaryButtonStyle}>
+              Pedidos
+            </Link>
+            <Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>
+              Nuevo pedido
+            </Link>
+            <Link href="/admin/dashboard" style={secondaryButtonStyle}>
+              Dashboard
+            </Link>
+          </div>
+        </div>
+
+        <div style={summaryGridStyle}>
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Clientes totales</div>
+            <div style={summaryValueStyle}>{customers.length}</div>
+          </div>
+
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Resultados visibles</div>
+            <div style={summaryValueStyle}>{filtered.length}</div>
+          </div>
+        </div>
+
+        <div style={searchCardStyle}>
+          <input
+            placeholder="Buscar cliente por nombre, teléfono, correo o negocio"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={inputStyle}
+          />
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={emptyBoxStyle}>No hay clientes para mostrar</div>
+        ) : (
+          <div style={gridStyle}>
+            {filtered.map((c) => (
+              <div key={c.id} style={cardStyle}>
+                <div style={cardTopStyle}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={customerNameStyle}>{c.name}</div>
+
+                    {c.business_name ? (
+                      <div style={metaTextStyle}>Negocio: {c.business_name}</div>
+                    ) : null}
+
+                    <div style={typeBadgeStyle}>
+                      {c.customer_type || "menudeo"}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={infoBoxStyle}>
+                  <div style={infoRowStyle}>
+                    <span style={labelStyle}>Teléfono</span>
+                    <span style={valueStyle}>{c.phone || "Sin teléfono"}</span>
+                  </div>
+
+                  <div style={infoRowStyle}>
+                    <span style={labelStyle}>Correo</span>
+                    <span style={valueStyle}>{c.email || "Sin correo"}</span>
+                  </div>
+
+                  <div style={infoRowStyle}>
+                    <span style={labelStyle}>Dirección</span>
+                    <span style={valueStyle}>{c.address || "Sin dirección"}</span>
+                  </div>
+                </div>
+
+                <div style={actionsWrapStyle}>
+                  <div style={fieldBlockStyle}>
+                    <div style={fieldLabelStyle}>Tipo de cliente</div>
+                    <select
+                      value={c.customer_type || "menudeo"}
+                      onChange={(e) => updateType(c.id, e.target.value)}
+                      disabled={updatingId === c.id}
+                      style={selectStyle}
+                    >
+                      <option value="menudeo">Menudeo</option>
+                      <option value="mayoreo">Mayoreo</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={() => deleteCustomer(c.id, c.name)}
+                    disabled={deletingId === c.id}
+                    style={{
+                      ...dangerButtonStyle,
+                      opacity: deletingId === c.id ? 0.65 : 1,
+                    }}
+                  >
+                    {deletingId === c.id ? "Eliminando..." : "Eliminar cliente"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+const loadingPageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`,
+  fontFamily: "Arial, sans-serif",
+};
+
+const loadingCardStyle: React.CSSProperties = {
+  padding: "18px 22px",
+  borderRadius: 18,
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  boxShadow: COLORS.shadow,
+  color: COLORS.text,
+};
+
+const pageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`,
+  padding: 16,
+  position: "relative",
+  overflow: "hidden",
+  fontFamily: "Arial, sans-serif",
+};
+
+const glowTopLeft: React.CSSProperties = {
+  position: "absolute",
+  top: -120,
+  left: -100,
+  width: 300,
+  height: 300,
+  borderRadius: "50%",
+  background: "rgba(123, 34, 24, 0.08)",
+  filter: "blur(45px)",
+};
+
+const glowTopRight: React.CSSProperties = {
+  position: "absolute",
+  top: -80,
+  right: -60,
+  width: 280,
+  height: 280,
+  borderRadius: "50%",
+  background: "rgba(217, 201, 163, 0.35)",
+  filter: "blur(45px)",
+};
+
+const shellStyle: React.CSSProperties = {
+  maxWidth: 1400,
+  margin: "0 auto",
+  position: "relative",
+  zIndex: 2,
+};
+
+const topBarStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 16,
+  flexWrap: "wrap",
+  marginBottom: 20,
+};
+
+const summaryGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 16,
+  marginBottom: 16,
+};
+
+const summaryCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 22,
+  padding: 18,
+  boxShadow: COLORS.shadow,
+};
+
+const summaryLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 14,
+  marginBottom: 8,
+};
+
+const summaryValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontSize: 30,
+  fontWeight: 800,
+  lineHeight: 1.1,
+};
+
+const searchCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 22,
+  padding: 16,
+  boxShadow: COLORS.shadow,
+  marginBottom: 18,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: 14,
+  borderRadius: 16,
+  border: `1px solid ${COLORS.border}`,
+  boxSizing: "border-box",
+  outline: "none",
+  background: "rgba(255,255,255,0.82)",
+  color: COLORS.text,
+  fontSize: 15,
+};
+
+const gridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 16,
+};
+
+const cardStyle: React.CSSProperties = {
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 24,
+  padding: 18,
+  boxShadow: COLORS.shadow,
+};
+
+const cardTopStyle: React.CSSProperties = {
+  marginBottom: 14,
+};
+
+const customerNameStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 24,
+  lineHeight: 1.2,
+  marginBottom: 8,
+};
+
+const metaTextStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 14,
+  marginBottom: 8,
+};
+
+const typeBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(123, 34, 24, 0.10)",
+  color: COLORS.primary,
+  textTransform: "capitalize",
+};
+
+const infoBoxStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 18,
+  padding: 14,
+};
+
+const infoRowStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "90px 1fr",
+  gap: 10,
+  padding: "8px 0",
+  borderBottom: `1px solid ${COLORS.border}`,
+};
+
+const labelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontWeight: 700,
+};
+
+const valueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  wordBreak: "break-word",
+};
+
+const actionsWrapStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  marginTop: 14,
+};
+
+const fieldBlockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+};
+
+const fieldLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+const selectStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  fontWeight: 700,
+  outline: "none",
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "none",
+  background: "rgba(180,35,24,0.10)",
+  color: COLORS.danger,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const emptyBoxStyle: React.CSSProperties = {
+  padding: 18,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px dashed ${COLORS.border}`,
+  color: COLORS.muted,
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "rgba(255,255,255,0.75)",
+  color: COLORS.text,
+  textDecoration: "none",
+  fontWeight: 700,
+};
