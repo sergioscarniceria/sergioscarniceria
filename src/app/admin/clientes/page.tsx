@@ -34,6 +34,10 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+function money(value?: number | null) {
+  return Number(value || 0).toFixed(2);
+}
+
 export default function AdminClientesPage() {
   const supabase = getSupabaseClient();
 
@@ -48,7 +52,19 @@ export default function AdminClientesPage() {
   }, []);
 
   async function loadCustomers() {
-    const { data } = await supabase.from("customers").select("*").order("name");
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.log(error);
+      alert("No se pudieron cargar los clientes");
+      setLoading(false);
+      return;
+    }
 
     setCustomers((data as Customer[]) || []);
     setLoading(false);
@@ -73,7 +89,8 @@ export default function AdminClientesPage() {
       .eq("id", id);
 
     if (error) {
-      alert("Error al actualizar");
+      console.log(error);
+      alert("Error al actualizar tipo de cliente");
       setUpdatingId(null);
       return;
     }
@@ -99,13 +116,13 @@ export default function AdminClientesPage() {
 
     if (error) {
       console.log(error);
-      alert("Error al guardar crédito");
+      alert("Error al guardar la configuración de crédito");
       setUpdatingId(null);
       return;
     }
 
     setUpdatingId(null);
-    alert("Crédito actualizado");
+    alert("Crédito actualizado correctamente");
   }
 
   async function deleteCustomer(id: string, name: string) {
@@ -116,7 +133,8 @@ export default function AdminClientesPage() {
     const { error } = await supabase.from("customers").delete().eq("id", id);
 
     if (error) {
-      alert("No se puede eliminar (tiene pedidos)");
+      console.log(error);
+      alert("No se puede eliminar este cliente porque probablemente tiene pedidos o movimientos relacionados");
       setDeletingId(null);
       return;
     }
@@ -137,6 +155,10 @@ export default function AdminClientesPage() {
     );
   }, [customers, search]);
 
+  const creditEnabledCount = useMemo(() => {
+    return customers.filter((c) => Boolean(c.credit_enabled)).length;
+  }, [customers]);
+
   if (loading) {
     return (
       <div style={loadingPageStyle}>
@@ -155,7 +177,7 @@ export default function AdminClientesPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Clientes</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Administración de cartera de clientes
+              Administración de cartera, mayoreo y crédito
             </p>
           </div>
 
@@ -168,6 +190,9 @@ export default function AdminClientesPage() {
             </Link>
             <Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>
               Nuevo pedido
+            </Link>
+            <Link href="/admin/cxc" style={secondaryButtonStyle}>
+              CxC
             </Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>
               Dashboard
@@ -185,11 +210,16 @@ export default function AdminClientesPage() {
             <div style={summaryLabelStyle}>Resultados visibles</div>
             <div style={summaryValueStyle}>{filtered.length}</div>
           </div>
+
+          <div style={summaryCardStyle}>
+            <div style={summaryLabelStyle}>Clientes con crédito</div>
+            <div style={summaryValueStyle}>{creditEnabledCount}</div>
+          </div>
         </div>
 
         <div style={searchCardStyle}>
           <input
-            placeholder="Buscar cliente por nombre, teléfono, correo o negocio"
+            placeholder="Buscar cliente por nombre, teléfono, correo, negocio o dirección"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             style={inputStyle}
@@ -239,6 +269,29 @@ export default function AdminClientesPage() {
                     <span style={labelStyle}>Dirección</span>
                     <span style={valueStyle}>{c.address || "Sin dirección"}</span>
                   </div>
+                </div>
+
+                <div style={quickLinksWrapStyle}>
+                  <Link
+                    href={`/admin/cxc/nueva-nota?customer_id=${c.id}`}
+                    style={miniLinkButtonStyle}
+                  >
+                    Nueva nota
+                  </Link>
+
+                  <Link
+                    href={`/admin/cxc/nuevo-pago?customer_id=${c.id}`}
+                    style={miniLinkButtonStyle}
+                  >
+                    Nuevo pago
+                  </Link>
+
+                  <Link
+                    href={`/admin/cxc/estado-cuenta?customer_id=${c.id}`}
+                    style={miniPrimaryLinkButtonStyle}
+                  >
+                    Estado de cuenta
+                  </Link>
                 </div>
 
                 <div style={actionsWrapStyle}>
@@ -308,6 +361,23 @@ export default function AdminClientesPage() {
                           style={textInputStyle}
                           placeholder="0"
                         />
+                      </div>
+                    </div>
+
+                    <div style={creditPreviewBoxStyle}>
+                      <div style={creditPreviewRowStyle}>
+                        <span>Crédito</span>
+                        <b>{c.credit_enabled ? "Activo" : "Inactivo"}</b>
+                      </div>
+
+                      <div style={creditPreviewRowStyle}>
+                        <span>Límite</span>
+                        <b>${money(c.credit_limit)}</b>
+                      </div>
+
+                      <div style={creditPreviewRowStyle}>
+                        <span>Días</span>
+                        <b>{Number(c.credit_days || 0)}</b>
                       </div>
                     </div>
 
@@ -459,7 +529,7 @@ const inputStyle: React.CSSProperties = {
 
 const gridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
   gap: 16,
 };
 
@@ -551,6 +621,38 @@ const valueStyle: React.CSSProperties = {
   wordBreak: "break-word",
 };
 
+const quickLinksWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 14,
+};
+
+const miniLinkButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+const miniPrimaryLinkButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 14,
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+};
+
 const actionsWrapStyle: React.CSSProperties = {
   display: "grid",
   gap: 12,
@@ -621,6 +723,23 @@ const textInputStyle: React.CSSProperties = {
   outline: "none",
   boxSizing: "border-box",
   fontSize: 14,
+};
+
+const creditPreviewBoxStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8,
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.8)",
+  border: `1px solid ${COLORS.border}`,
+};
+
+const creditPreviewRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  color: COLORS.text,
 };
 
 const saveCreditButtonStyle: React.CSSProperties = {
