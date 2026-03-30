@@ -190,6 +190,23 @@ export default function NuevaNotaCxcPage() {
     );
   }
 
+  async function getCustomerBalance(customerId: string) {
+    const { data, error } = await supabase
+      .from("cxc_notes")
+      .select("balance_due")
+      .eq("customer_id", customerId)
+      .gt("balance_due", 0);
+
+    if (error) {
+      console.log(error);
+      return 0;
+    }
+
+    return ((data as { balance_due: number }[]) || []).reduce((acc, note) => {
+      return acc + Number(note.balance_due || 0);
+    }, 0);
+  }
+
   const searchedCustomers = useMemo(() => {
     const q = customerSearch.toLowerCase().trim();
     if (!q) return [];
@@ -278,10 +295,28 @@ export default function NuevaNotaCxcPage() {
 
     const finalNoteNumber = noteNumber.trim() || makeNoteNumber();
 
-    const finalDiscount =
-      discountType === "percent"
-        ? Math.min(discount, subtotal)
-        : Math.min(discount, subtotal);
+    const finalDiscount = Math.min(discount, subtotal);
+
+    if (selectedCustomer.credit_enabled) {
+      const currentBalance = await getCustomerBalance(selectedCustomer.id);
+      const creditLimit = Number(selectedCustomer.credit_limit || 0);
+
+      if (creditLimit > 0) {
+        const projected = currentBalance + total;
+
+        if (projected > creditLimit) {
+          alert(
+            `⚠️ Límite de crédito excedido\n\n` +
+              `Límite: $${creditLimit.toFixed(2)}\n` +
+              `Debe actualmente: $${currentBalance.toFixed(2)}\n` +
+              `Nuevo total: $${total.toFixed(2)}\n\n` +
+              `Se pasaría a: $${projected.toFixed(2)}`
+          );
+          setSaving(false);
+          return;
+        }
+      }
+    }
 
     const { data: insertedNote, error: noteError } = await supabase
       .from("cxc_notes")
@@ -781,6 +816,9 @@ export default function NuevaNotaCxcPage() {
                     </div>
                     <div style={metaTextStyle}>
                       Vence: <b>{dueDate}</b>
+                    </div>
+                    <div style={metaTextStyle}>
+                      Límite: <b>${money(Number(selectedCustomer.credit_limit || 0))}</b>
                     </div>
                   </div>
                 </div>
