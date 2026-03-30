@@ -13,6 +13,9 @@ type Customer = {
   customer_type?: string | null;
   address?: string | null;
   created_at?: string | null;
+  credit_enabled?: boolean | null;
+  credit_limit?: number | null;
+  credit_days?: number | null;
 };
 
 const COLORS = {
@@ -51,6 +54,16 @@ export default function AdminClientesPage() {
     setLoading(false);
   }
 
+  function updateLocalCustomer(
+    id: string,
+    field: keyof Customer,
+    value: string | number | boolean | null
+  ) {
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
+    );
+  }
+
   async function updateType(id: string, type: string) {
     setUpdatingId(id);
 
@@ -70,6 +83,29 @@ export default function AdminClientesPage() {
     );
 
     setUpdatingId(null);
+  }
+
+  async function saveCreditConfig(customer: Customer) {
+    setUpdatingId(customer.id);
+
+    const { error } = await supabase
+      .from("customers")
+      .update({
+        credit_enabled: !!customer.credit_enabled,
+        credit_limit: Number(customer.credit_limit || 0),
+        credit_days: Number(customer.credit_days || 0),
+      })
+      .eq("id", customer.id);
+
+    if (error) {
+      console.log(error);
+      alert("Error al guardar crédito");
+      setUpdatingId(null);
+      return;
+    }
+
+    setUpdatingId(null);
+    alert("Crédito actualizado");
   }
 
   async function deleteCustomer(id: string, name: string) {
@@ -174,8 +210,16 @@ export default function AdminClientesPage() {
                       <div style={metaTextStyle}>Negocio: {c.business_name}</div>
                     ) : null}
 
-                    <div style={typeBadgeStyle}>
-                      {c.customer_type || "menudeo"}
+                    <div style={badgesRowStyle}>
+                      <div style={typeBadgeStyle}>
+                        {c.customer_type || "menudeo"}
+                      </div>
+
+                      {c.credit_enabled ? (
+                        <div style={creditEnabledBadgeStyle}>Crédito activo</div>
+                      ) : (
+                        <div style={creditDisabledBadgeStyle}>Sin crédito</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -209,6 +253,74 @@ export default function AdminClientesPage() {
                       <option value="menudeo">Menudeo</option>
                       <option value="mayoreo">Mayoreo</option>
                     </select>
+                  </div>
+
+                  <div style={creditBoxStyle}>
+                    <div style={creditHeaderStyle}>
+                      <div style={fieldLabelStyle}>Configuración de crédito</div>
+
+                      <label style={switchLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={!!c.credit_enabled}
+                          onChange={(e) =>
+                            updateLocalCustomer(c.id, "credit_enabled", e.target.checked)
+                          }
+                        />
+                        <span>Activar crédito</span>
+                      </label>
+                    </div>
+
+                    <div style={creditGridStyle}>
+                      <div style={fieldBlockStyle}>
+                        <div style={fieldLabelStyle}>Límite de crédito</div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={c.credit_limit ?? 0}
+                          onChange={(e) =>
+                            updateLocalCustomer(
+                              c.id,
+                              "credit_limit",
+                              Number(e.target.value || 0)
+                            )
+                          }
+                          style={textInputStyle}
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      <div style={fieldBlockStyle}>
+                        <div style={fieldLabelStyle}>Días de crédito</div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={c.credit_days ?? 0}
+                          onChange={(e) =>
+                            updateLocalCustomer(
+                              c.id,
+                              "credit_days",
+                              Number(e.target.value || 0)
+                            )
+                          }
+                          style={textInputStyle}
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => saveCreditConfig(c)}
+                      disabled={updatingId === c.id}
+                      style={{
+                        ...saveCreditButtonStyle,
+                        opacity: updatingId === c.id ? 0.65 : 1,
+                      }}
+                    >
+                      {updatingId === c.id ? "Guardando..." : "Guardar crédito"}
+                    </button>
                   </div>
 
                   <button
@@ -377,6 +489,12 @@ const metaTextStyle: React.CSSProperties = {
   marginBottom: 8,
 };
 
+const badgesRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
 const typeBadgeStyle: React.CSSProperties = {
   display: "inline-block",
   padding: "6px 10px",
@@ -386,6 +504,26 @@ const typeBadgeStyle: React.CSSProperties = {
   background: "rgba(123, 34, 24, 0.10)",
   color: COLORS.primary,
   textTransform: "capitalize",
+};
+
+const creditEnabledBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(31, 122, 77, 0.10)",
+  color: COLORS.success,
+};
+
+const creditDisabledBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(166, 106, 16, 0.12)",
+  color: COLORS.warning,
 };
 
 const infoBoxStyle: React.CSSProperties = {
@@ -439,6 +577,61 @@ const selectStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 700,
   outline: "none",
+};
+
+const creditBoxStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+  padding: 14,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+};
+
+const creditHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+};
+
+const switchLabelStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  color: COLORS.text,
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+const creditGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+};
+
+const textInputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  outline: "none",
+  boxSizing: "border-box",
+  fontSize: 14,
+};
+
+const saveCreditButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "none",
+  background: "rgba(31,122,77,0.12)",
+  color: COLORS.success,
+  cursor: "pointer",
+  fontWeight: 700,
 };
 
 const dangerButtonStyle: React.CSSProperties = {
