@@ -400,7 +400,7 @@ export default function CobranzaPage() {
 
                   <div style={summaryRowStyle}>
                     <span>Total</span>
-                    <b>${money(manualTotal())}</b>
+                    <b>${money(manualTotal)}</b>
                   </div>
                 </div>
 
