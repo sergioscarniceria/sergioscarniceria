@@ -1,15 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type TabMode = "ticket" | "manual";
+type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
+
+type OrderItem = {
+  id?: string;
+  product: string;
+  kilos: number;
+  price: number;
+};
+
+type Ticket = {
+  id: string;
+  customer_id?: string | null;
+  customer_name?: string | null;
+  status?: string | null;
+  source?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  payment_status?: string | null;
+  payment_method?: string | null;
+  paid_at?: string | null;
+  canceled_at?: string | null;
+  order_items?: OrderItem[];
+};
+
+type Customer = {
+  id: string;
+  name: string;
+  credit_enabled?: boolean | null;
+  credit_days?: number | null;
+};
+
+type ManualLine = {
+  id: string;
+  product: string;
+  kilos: string;
+  price: string;
+};
 
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
   card: "rgba(255,255,255,0.92)",
-  cardStrong: "rgba(255,255,255,0.96)",
   border: "rgba(92, 27, 17, 0.10)",
   text: "#3b1c16",
   muted: "#7a5a52",
@@ -22,71 +59,278 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-type DemoTicket = {
-  id: string;
-  customer_name: string;
-  total: number;
-  status: string;
-};
+function money(value?: number | null) {
+  return Number(value || 0).toFixed(2);
+}
 
-type ManualLine = {
-  id: string;
-  product: string;
-  kilos: string;
-  price: string;
-};
+function todayDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysToDate(dateString: string, days: number) {
+  const base = new Date(`${dateString}T12:00:00`);
+  if (isNaN(base.getTime())) return dateString;
+  base.setDate(base.getDate() + days);
+  const y = base.getFullYear();
+  const m = `${base.getMonth() + 1}`.padStart(2, "0");
+  const d = `${base.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function makeLineId() {
   return `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function money(value: number) {
-  return value.toFixed(2);
-}
-
 export default function CobranzaPage() {
+  const supabase = getSupabaseClient();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<TabMode>("ticket");
 
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [ticketSearch, setTicketSearch] = useState("");
-  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
   const [customerName, setCustomerName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [manualLines, setManualLines] = useState<ManualLine[]>([]);
 
-  const demoTickets: DemoTicket[] = [
-    { id: "TK-1001", customer_name: "Mostrador", total: 385.5, status: "pendiente" },
-    { id: "TK-1002", customer_name: "Jaime Ríos", total: 1240, status: "pendiente" },
-    { id: "TK-1003", customer_name: "Restaurante El Fogón", total: 890.75, status: "pendiente" },
-  ];
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    setLoading(true);
+
+    const { data: ticketsData, error: ticketsError } = await supabase
+      .from("orders")
+      .select(
+        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+      )
+      .order("created_at", { ascending: false })
+      .limit(40);
+
+    const { data: customersData, error: customersError } = await supabase
+      .from("customers")
+      .select("id, name, credit_enabled, credit_days")
+      .order("name", { ascending: true });
+
+    if (ticketsError || customersError) {
+      console.log(ticketsError || customersError);
+      alert("No se pudo cargar cobranza");
+      setLoading(false);
+      return;
+    }
+
+    const pending = ((ticketsData as Ticket[]) || []).filter((ticket) => {
+      return ticket.payment_status !== "pagado" && ticket.payment_status !== "cancelado";
+    });
+
+    setTickets(pending);
+    setCustomers((customersData as Customer[]) || []);
+    setLoading(false);
+  }
+
+  function ticketTotal(ticket: Ticket | null) {
+    if (!ticket) return 0;
+    return (ticket.order_items || []).reduce((acc, item) => {
+      return acc + Number(item.kilos || 0) * Number(item.price || 0);
+    }, 0);
+  }
 
   const filteredTickets = useMemo(() => {
     const q = ticketSearch.toLowerCase().trim();
-    if (!q) return demoTickets;
-    return demoTickets.filter((ticket) =>
-      `${ticket.id} ${ticket.customer_name}`.toLowerCase().includes(q)
+    if (!q) return tickets;
+    return tickets.filter((ticket) =>
+      `${ticket.id} ${ticket.customer_name || ""}`.toLowerCase().includes(q)
     );
-  }, [ticketSearch]);
+  }, [tickets, ticketSearch]);
 
-  const selectedTicket = useMemo(() => {
-    return demoTickets.find((t) => t.id === selectedTicketId) || null;
-  }, [selectedTicketId]);
+  async function openTicket(id: string) {
+    const { data, error } = await supabase
+      .from("orders")
+      .select(
+        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+      )
+      .eq("id", id)
+      .single();
 
-  const manualTotal = useMemo(() => {
-    return manualLines.reduce((acc, line) => {
-      return acc + Number(line.kilos || 0) * Number(line.price || 0);
-    }, 0);
-  }, [manualLines]);
+    if (error || !data) {
+      console.log(error);
+      alert("No se pudo abrir el ticket");
+      return;
+    }
+
+    setSelectedTicket(data as Ticket);
+  }
+
+  async function markTicketPaid(method: Exclude<PaymentMethod, "credito">) {
+    if (!selectedTicket) return;
+
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "pagado",
+        payment_method: method,
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", selectedTicket.id);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo registrar el pago");
+      setSaving(false);
+      return;
+    }
+
+    alert("Pago registrado");
+    setSelectedTicket(null);
+    await loadData();
+    setSaving(false);
+  }
+
+  async function cancelTicket() {
+    if (!selectedTicket) return;
+    if (!confirm("¿Cancelar ticket?")) return;
+
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "cancelado",
+        canceled_at: new Date().toISOString(),
+      })
+      .eq("id", selectedTicket.id);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo cancelar");
+      setSaving(false);
+      return;
+    }
+
+    alert("Ticket cancelado");
+    setSelectedTicket(null);
+    await loadData();
+    setSaving(false);
+  }
+
+  async function sendTicketToCredit() {
+    if (!selectedTicket) return;
+
+    if (!selectedTicket.customer_id) {
+      alert("Este ticket no tiene cliente ligado");
+      return;
+    }
+
+    const customer = customers.find((c) => c.id === selectedTicket.customer_id);
+
+    if (!customer) {
+      alert("No encontramos el cliente del ticket");
+      return;
+    }
+
+    if (!customer.credit_enabled) {
+      alert("Ese cliente no tiene crédito activo");
+      return;
+    }
+
+    setSaving(true);
+
+    const noteDate = todayDateString();
+    const dueDate = addDaysToDate(
+      noteDate,
+      Number(customer.credit_days || 0) > 0 ? Number(customer.credit_days) : 7
+    );
+    const total = ticketTotal(selectedTicket);
+
+    const { data: noteData, error: noteError } = await supabase
+      .from("cxc_notes")
+      .insert([
+        {
+          customer_id: customer.id,
+          customer_name: customer.name,
+          note_number: `TK-${selectedTicket.id}`,
+          note_date: noteDate,
+          due_date: dueDate,
+          source_type: "ticket",
+          subtotal: Number(total.toFixed(2)),
+          discount_amount: 0,
+          total_amount: Number(total.toFixed(2)),
+          balance_due: Number(total.toFixed(2)),
+          status: "abierta",
+          notes: selectedTicket.notes || null,
+        },
+      ])
+      .select("*")
+      .single();
+
+    if (noteError || !noteData) {
+      console.log(noteError);
+      alert("No se pudo generar la nota de crédito");
+      setSaving(false);
+      return;
+    }
+
+    const noteItems = (selectedTicket.order_items || []).map((item) => ({
+      cxc_note_id: noteData.id,
+      product: item.product,
+      quantity: Number(Number(item.kilos || 0).toFixed(3)),
+      unit: "kg",
+      price: Number(Number(item.price || 0).toFixed(2)),
+      line_total: Number(
+        (Number(item.kilos || 0) * Number(item.price || 0)).toFixed(2)
+      ),
+    }));
+
+    if (noteItems.length > 0) {
+      const { error: noteItemsError } = await supabase
+        .from("cxc_note_items")
+        .insert(noteItems);
+
+      if (noteItemsError) {
+        console.log(noteItemsError);
+        alert("La nota se creó, pero fallaron los renglones");
+        setSaving(false);
+        return;
+      }
+    }
+
+    const { error: orderError } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "credito_autorizado",
+        payment_method: "credito",
+        paid_at: new Date().toISOString(),
+      })
+      .eq("id", selectedTicket.id);
+
+    if (orderError) {
+      console.log(orderError);
+      alert("La nota se creó, pero no se actualizó el ticket");
+      setSaving(false);
+      return;
+    }
+
+    alert("Ticket enviado a crédito");
+    setSelectedTicket(null);
+    await loadData();
+    setSaving(false);
+  }
 
   function addManualLine() {
     setManualLines((prev) => [
       ...prev,
-      {
-        id: makeLineId(),
-        product: "",
-        kilos: "1",
-        price: "0",
-      },
+      { id: makeLineId(), product: "", kilos: "1", price: "0" },
     ]);
   }
 
@@ -110,8 +354,18 @@ export default function CobranzaPage() {
     setManualLines([]);
   }
 
-  function simulateAction(message: string) {
-    alert(message);
+  const manualTotal = useMemo(() => {
+    return manualLines.reduce((acc, line) => {
+      return acc + Number(line.kilos || 0) * Number(line.price || 0);
+    }, 0);
+  }, [manualLines]);
+
+  if (loading) {
+    return (
+      <div style={loadingPageStyle}>
+        <div style={loadingCardStyle}>Cargando cobranza...</div>
+      </div>
+    );
   }
 
   return (
@@ -124,7 +378,7 @@ export default function CobranzaPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Cobranza</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Base estable del módulo de caja y respaldo manual
+              Tickets reales conectados a Supabase
             </p>
           </div>
 
@@ -168,7 +422,7 @@ export default function CobranzaPage() {
                   <div>
                     <h2 style={panelTitleStyle}>Buscar ticket</h2>
                     <p style={panelSubtitleStyle}>
-                      Aquí después conectaremos lector, QR o folio manual
+                      Ya conectado a órdenes reales
                     </p>
                   </div>
                 </div>
@@ -184,25 +438,29 @@ export default function CobranzaPage() {
                   <div style={miniTitleStyle}>Pendientes recientes</div>
 
                   <div style={listWrapStyle}>
-                    {filteredTickets.map((ticket) => (
-                      <button
-                        key={ticket.id}
-                        onClick={() => setSelectedTicketId(ticket.id)}
-                        style={searchResultCardStyle}
-                      >
-                        <div style={{ textAlign: "left", minWidth: 0 }}>
-                          <div style={searchTitleStyle}>{ticket.id}</div>
-                          <div style={searchMetaStyle}>
-                            Cliente: {ticket.customer_name}
+                    {filteredTickets.length === 0 ? (
+                      <div style={emptyBoxStyle}>No hay tickets pendientes</div>
+                    ) : (
+                      filteredTickets.map((ticket) => (
+                        <button
+                          key={ticket.id}
+                          onClick={() => openTicket(ticket.id)}
+                          style={searchResultCardStyle}
+                        >
+                          <div style={{ textAlign: "left", minWidth: 0 }}>
+                            <div style={searchTitleStyle}>{ticket.id}</div>
+                            <div style={searchMetaStyle}>
+                              Cliente: {ticket.customer_name || "Mostrador"}
+                            </div>
+                            <div style={searchMetaStyle}>
+                              Total: ${money(ticketTotal(ticket))}
+                            </div>
                           </div>
-                          <div style={searchMetaStyle}>
-                            Total: ${money(ticket.total)}
-                          </div>
-                        </div>
 
-                        <div style={badgeStyle}>Abrir</div>
-                      </button>
-                    ))}
+                          <div style={badgeStyle}>Abrir</div>
+                        </button>
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -213,67 +471,89 @@ export default function CobranzaPage() {
                 <div style={panelHeaderStyle}>
                   <div>
                     <h2 style={panelTitleStyle}>Detalle del ticket</h2>
-                    <p style={panelSubtitleStyle}>
-                      Por ahora es una base visual estable
-                    </p>
+                    <p style={panelSubtitleStyle}>Cobro real del ticket</p>
                   </div>
                 </div>
 
                 {!selectedTicket ? (
-                  <div style={emptyBoxStyle}>
-                    Selecciona un ticket para verlo aquí
-                  </div>
+                  <div style={emptyBoxStyle}>Selecciona un ticket para verlo aquí</div>
                 ) : (
                   <>
                     <div style={ticketHeaderStyle}>
                       <div>
                         <div style={ticketTitleStyle}>{selectedTicket.id}</div>
                         <div style={ticketMetaStyle}>
-                          Cliente: <b>{selectedTicket.customer_name}</b>
+                          Cliente: <b>{selectedTicket.customer_name || "Mostrador"}</b>
                         </div>
                         <div style={ticketMetaStyle}>
-                          Estado: <b>{selectedTicket.status}</b>
+                          Estado: <b>{selectedTicket.payment_status || "pendiente"}</b>
                         </div>
                       </div>
 
                       <div style={ticketTotalStyle}>
-                        ${money(selectedTicket.total)}
+                        ${money(ticketTotal(selectedTicket))}
                       </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      {(selectedTicket.order_items || []).length === 0 ? (
+                        <div style={emptyBoxStyle}>Este ticket no tiene artículos</div>
+                      ) : (
+                        (selectedTicket.order_items || []).map((item, index) => (
+                          <div key={index} style={itemRowStyle}>
+                            <div>
+                              <div style={itemNameStyle}>{item.product}</div>
+                              <div style={itemMetaStyle}>
+                                {item.kilos} kg · ${money(item.price)}
+                              </div>
+                            </div>
+
+                            <div style={itemTotalStyle}>
+                              ${money(Number(item.kilos || 0) * Number(item.price || 0))}
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
 
                     <div style={actionsGridStyle}>
                       <button
-                        onClick={() => simulateAction("Aquí irá cobrar en efectivo")}
+                        onClick={() => markTicketPaid("efectivo")}
                         style={successButtonStyle}
+                        disabled={saving}
                       >
                         Cobrar efectivo
                       </button>
 
                       <button
-                        onClick={() => simulateAction("Aquí irá cobrar con tarjeta")}
+                        onClick={() => markTicketPaid("tarjeta")}
                         style={infoButtonStyle}
+                        disabled={saving}
                       >
                         Cobrar tarjeta
                       </button>
 
                       <button
-                        onClick={() => simulateAction("Aquí irá cobrar por transferencia")}
+                        onClick={() => markTicketPaid("transferencia")}
                         style={secondaryActionButtonStyle}
+                        disabled={saving}
                       >
                         Transferencia
                       </button>
 
                       <button
-                        onClick={() => simulateAction("Aquí irá mandar a crédito")}
+                        onClick={sendTicketToCredit}
                         style={warningButtonStyle}
+                        disabled={saving}
                       >
                         Mandar a crédito
                       </button>
                     </div>
 
                     <button
-                      onClick={() => simulateAction("Aquí irá cancelar ticket")}
+                      onClick={cancelTicket}
                       style={dangerButtonStyle}
+                      disabled={saving}
                     >
                       Cancelar ticket
                     </button>
@@ -288,17 +568,15 @@ export default function CobranzaPage() {
               <div style={panelStyle}>
                 <div style={panelHeaderStyle}>
                   <div>
-                    <h2 style={panelTitleStyle}>Encabezado de venta manual</h2>
-                    <p style={panelSubtitleStyle}>
-                      Respaldo para caja cuando falle ticket o lector
-                    </p>
+                    <h2 style={panelTitleStyle}>Venta manual</h2>
+                    <p style={panelSubtitleStyle}>Respaldo temporal de caja</p>
                   </div>
                 </div>
 
                 <div style={fieldBlockStyle}>
                   <div style={fieldLabelStyle}>Cliente</div>
                   <input
-                    placeholder="Nombre del cliente o público general"
+                    placeholder="Nombre del cliente"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
                     style={inputStyle}
@@ -308,22 +586,11 @@ export default function CobranzaPage() {
                 <div style={fieldBlockStyle}>
                   <div style={fieldLabelStyle}>Notas</div>
                   <textarea
-                    placeholder="Observaciones de caja"
+                    placeholder="Observaciones"
                     value={manualNotes}
                     onChange={(e) => setManualNotes(e.target.value)}
                     style={textareaStyle}
                   />
-                </div>
-              </div>
-
-              <div style={panelStyle}>
-                <div style={panelHeaderStyle}>
-                  <div>
-                    <h2 style={panelTitleStyle}>Renglones</h2>
-                    <p style={panelSubtitleStyle}>
-                      Después conectaremos catálogo y captura por estación
-                    </p>
-                  </div>
                 </div>
 
                 <button onClick={addManualLine} style={primaryActionButtonStyle}>
@@ -380,10 +647,8 @@ export default function CobranzaPage() {
               <div style={panelStyle}>
                 <div style={panelHeaderStyle}>
                   <div>
-                    <h2 style={panelTitleStyle}>Resumen de venta manual</h2>
-                    <p style={panelSubtitleStyle}>
-                      Esta es la base estable del fallback de caja
-                    </p>
+                    <h2 style={panelTitleStyle}>Resumen venta manual</h2>
+                    <p style={panelSubtitleStyle}>Solo visual por ahora</p>
                   </div>
                 </div>
 
@@ -404,40 +669,7 @@ export default function CobranzaPage() {
                   </div>
                 </div>
 
-                <div style={actionsGridStyle}>
-                  <button
-                    onClick={() => simulateAction("Aquí irá registrar venta en efectivo")}
-                    style={successButtonStyle}
-                  >
-                    Cobrar efectivo
-                  </button>
-
-                  <button
-                    onClick={() => simulateAction("Aquí irá registrar venta con tarjeta")}
-                    style={infoButtonStyle}
-                  >
-                    Cobrar tarjeta
-                  </button>
-
-                  <button
-                    onClick={() => simulateAction("Aquí irá registrar transferencia")}
-                    style={secondaryActionButtonStyle}
-                  >
-                    Transferencia
-                  </button>
-
-                  <button
-                    onClick={() => simulateAction("Aquí irá mandar la venta manual a crédito")}
-                    style={warningButtonStyle}
-                  >
-                    Crédito
-                  </button>
-                </div>
-
-                <button
-                  onClick={clearManualSale}
-                  style={dangerButtonStyle}
-                >
+                <button onClick={clearManualSale} style={dangerButtonStyle}>
                   Limpiar venta manual
                 </button>
               </div>
@@ -448,6 +680,23 @@ export default function CobranzaPage() {
     </div>
   );
 }
+
+const loadingPageStyle: React.CSSProperties = {
+  minHeight: "100vh",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`,
+  fontFamily: "Arial, sans-serif",
+};
+
+const loadingCardStyle: React.CSSProperties = {
+  padding: 20,
+  borderRadius: 18,
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  boxShadow: COLORS.shadow,
+};
 
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
@@ -563,6 +812,7 @@ const panelSubtitleStyle: React.CSSProperties = {
 const fieldBlockStyle: React.CSSProperties = {
   display: "grid",
   gap: 8,
+  marginBottom: 14,
 };
 
 const fieldLabelStyle: React.CSSProperties = {
@@ -727,6 +977,36 @@ const ticketTotalStyle: React.CSSProperties = {
   whiteSpace: "nowrap",
 };
 
+const itemRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+  padding: 14,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 16,
+  marginBottom: 10,
+};
+
+const itemNameStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 700,
+  fontSize: 16,
+};
+
+const itemMetaStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+  marginTop: 4,
+};
+
+const itemTotalStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  whiteSpace: "nowrap",
+};
+
 const summaryCardStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
@@ -801,15 +1081,6 @@ const dangerMiniButtonStyle: React.CSSProperties = {
   color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 800,
-};
-
-const selectedBoxStyle: React.CSSProperties = {
-  marginTop: 14,
-  padding: 14,
-  borderRadius: 16,
-  background: "rgba(123,34,24,0.08)",
-  border: `1px solid ${COLORS.border}`,
-  color: COLORS.text,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
