@@ -349,10 +349,81 @@ export default function CobranzaPage() {
   }
 
   function clearManualSale() {
-    setCustomerName("");
-    setManualNotes("");
-    setManualLines([]);
+  setCustomerName("");
+  setManualNotes("");
+  setManualLines([]);
+}
+
+async function saveManualSale(method: Exclude<PaymentMethod, "credito">) {
+  if (manualLines.length === 0) {
+    alert("Agrega al menos un renglón");
+    return;
   }
+
+  const validLines = manualLines.every((line) => {
+    return (
+      line.product.trim() &&
+      Number(line.kilos || 0) > 0 &&
+      Number(line.price || 0) >= 0
+    );
+  });
+
+  if (!validLines) {
+    alert("Revisa producto, kilos y precio en todos los renglones");
+    return;
+  }
+
+  setSaving(true);
+
+  const cleanCustomerName = customerName.trim() || "PUBLICO GENERAL";
+
+  const { data: orderData, error: orderError } = await supabase
+    .from("orders")
+    .insert([
+      {
+        customer_name: cleanCustomerName,
+        status: "terminado",
+        source: "caja_manual",
+        notes: manualNotes.trim() || null,
+        payment_status: "pagado",
+        payment_method: method,
+        paid_at: new Date().toISOString(),
+      },
+    ])
+    .select()
+    .single();
+
+  if (orderError || !orderData) {
+    console.log(orderError);
+    alert("No se pudo guardar la venta manual");
+    setSaving(false);
+    return;
+  }
+
+  const itemsPayload = manualLines.map((line) => ({
+    order_id: orderData.id,
+    product: line.product.trim(),
+    kilos: Number(Number(line.kilos || 0).toFixed(3)),
+    price: Number(Number(line.price || 0).toFixed(2)),
+  }));
+
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(itemsPayload);
+
+  if (itemsError) {
+    console.log(itemsError);
+    alert("La venta se guardó, pero fallaron los renglones");
+    setSaving(false);
+    return;
+  }
+
+  alert("Venta manual registrada");
+
+  clearManualSale();
+  await loadData();
+  setSaving(false);
+}
 
   const manualTotal = useMemo(() => {
     return manualLines.reduce((acc, line) => {
@@ -668,6 +739,39 @@ export default function CobranzaPage() {
                     <b>${money(manualTotal)}</b>
                   </div>
                 </div>
+                <div style={actionsGridStyle}>
+  <button
+    onClick={() => saveManualSale("efectivo")}
+    style={successButtonStyle}
+    disabled={saving}
+  >
+    Cobrar efectivo
+  </button>
+
+  <button
+    onClick={() => saveManualSale("tarjeta")}
+    style={infoButtonStyle}
+    disabled={saving}
+  >
+    Cobrar tarjeta
+  </button>
+
+  <button
+    onClick={() => saveManualSale("transferencia")}
+    style={secondaryActionButtonStyle}
+    disabled={saving}
+  >
+    Transferencia
+  </button>
+
+  <button
+    onClick={() => alert("El crédito manual lo conectamos en el siguiente paso")}
+    style={warningButtonStyle}
+    disabled={saving}
+  >
+    Crédito
+  </button>
+</div>
 
                 <button onClick={clearManualSale} style={dangerButtonStyle}>
                   Limpiar venta manual
