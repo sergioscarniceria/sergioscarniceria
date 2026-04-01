@@ -191,6 +191,24 @@ export default function CobranzaPage() {
       return;
     }
 
+    const { error: cashError } = await supabase
+  .from("cash_movements")
+  .insert([
+    {
+      type: "venta",
+      source: "cobranza",
+      amount: Number(ticketTotal(selectedTicket).toFixed(2)),
+      payment_method: method,
+      reference_id: selectedTicket.id,
+    },
+  ]);
+
+if (cashError) {
+  console.log(cashError);
+  alert("Se marcó como pagado, pero falló el movimiento de caja");
+  setSaving(false);
+  return;
+}
     alert("Pago registrado");
     setSelectedTicket(null);
     await loadData();
@@ -418,6 +436,24 @@ async function saveManualSale(method: Exclude<PaymentMethod, "credito">) {
     return;
   }
 
+  const { error: cashError } = await supabase
+  .from("cash_movements")
+  .insert([
+    {
+      type: "venta",
+      source: "cobranza",
+      amount: Number(manualTotal.toFixed(2)),
+      payment_method: method,
+      reference_id: orderData.id,
+    },
+  ]);
+
+if (cashError) {
+  console.log(cashError);
+  alert("La venta se guardó, pero falló el movimiento de caja");
+  setSaving(false);
+  return;
+}
   alert("Venta manual registrada");
 
   clearManualSale();
