@@ -14,6 +14,16 @@ type Movement = {
   reference_id?: string | null;
 };
 
+type CashClosure = {
+  id: string;
+  closure_date: string;
+  expected_cash: number | null;
+  counted_cash: number | null;
+  difference: number | null;
+  notes?: string | null;
+  created_at?: string | null;
+};
+
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
@@ -69,16 +79,25 @@ export default function CajaPage() {
 
   const [movements, setMovements] = useState<Movement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [dateFrom, setDateFrom] = useState(todayDateString());
   const [dateTo, setDateTo] = useState(todayDateString());
 
+  const [countedCash, setCountedCash] = useState("");
+  const [closureNotes, setClosureNotes] = useState("");
+  const [todayClosure, setTodayClosure] = useState<CashClosure | null>(null);
+
   useEffect(() => {
-    loadMovements();
+    loadData();
   }, [dateFrom, dateTo]);
 
-  async function loadMovements() {
+  async function loadData() {
     setLoading(true);
+    await Promise.all([loadMovements(), loadTodayClosure()]);
+    setLoading(false);
+  }
 
+  async function loadMovements() {
     const start = `${dateFrom}T00:00:00`;
     const end = `${dateTo}T23:59:59`;
 
@@ -92,12 +111,35 @@ export default function CajaPage() {
     if (error) {
       console.log(error);
       alert("No se pudo cargar el corte");
-      setLoading(false);
       return;
     }
 
     setMovements((data as Movement[]) || []);
-    setLoading(false);
+  }
+
+  async function loadTodayClosure() {
+    const today = todayDateString();
+
+    const { data, error } = await supabase
+      .from("cash_closures")
+      .select("*")
+      .eq("closure_date", today)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    const closure = (data as CashClosure | null) || null;
+    setTodayClosure(closure);
+
+    if (closure) {
+      setCountedCash(String(Number(closure.counted_cash || 0)));
+      setClosureNotes(closure.notes || "");
+    }
   }
 
   const stats = useMemo(() => {
@@ -128,17 +170,13 @@ export default function CajaPage() {
       .filter((m) => m.payment_method === "transferencia")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const totalVentas =
-      ventasEfectivo + ventasTarjeta + ventasTransferencia;
-
-    const totalCxc =
-      cxcEfectivo + cxcTarjeta + cxcTransferencia;
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia;
+    const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia;
 
     const totalEfectivoEsperado = ventasEfectivo + cxcEfectivo;
     const totalTarjeta = ventasTarjeta + cxcTarjeta;
     const totalTransferencia = ventasTransferencia + cxcTransferencia;
-    const totalGeneral =
-      totalEfectivoEsperado + totalTarjeta + totalTransferencia;
+    const totalGeneral = totalEfectivoEsperado + totalTarjeta + totalTransferencia;
 
     return {
       ventasEfectivo,
@@ -156,6 +194,58 @@ export default function CajaPage() {
       totalMovements: movements.length,
     };
   }, [movements]);
+
+  const difference = useMemo(() => {
+    return Number((Number(countedCash || 0) - Number(stats.totalEfectivoEsperado || 0)).toFixed(2));
+  }, [countedCash, stats.totalEfectivoEsperado]);
+
+  async function saveClosure() {
+    const counted = Number(countedCash || 0);
+
+    if (countedCash === "" || isNaN(counted) || counted < 0) {
+      alert("Captura un efectivo contado válido");
+      return;
+    }
+
+    setSaving(true);
+
+    const payload = {
+      closure_date: todayDateString(),
+      expected_cash: Number(stats.totalEfectivoEsperado.toFixed(2)),
+      counted_cash: Number(counted.toFixed(2)),
+      difference: Number(difference.toFixed(2)),
+      notes: closureNotes.trim() || null,
+    };
+
+    if (todayClosure?.id) {
+      const { error } = await supabase
+        .from("cash_closures")
+        .update(payload)
+        .eq("id", todayClosure.id);
+
+      if (error) {
+        console.log(error);
+        alert("No se pudo actualizar el cierre");
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { error } = await supabase
+        .from("cash_closures")
+        .insert([payload]);
+
+      if (error) {
+        console.log(error);
+        alert("No se pudo guardar el cierre");
+        setSaving(false);
+        return;
+      }
+    }
+
+    alert("Cierre de caja guardado");
+    await loadTodayClosure();
+    setSaving(false);
+  }
 
   if (loading) {
     return (
@@ -175,7 +265,7 @@ export default function CajaPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Caja</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Corte diario y efectivo esperado de cajeras
+              Corte diario, efectivo esperado y cierre de caja
             </p>
           </div>
 
@@ -310,6 +400,103 @@ export default function CajaPage() {
                 <div style={miniValueStrongStyle}>${money(stats.totalCxc)}</div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div style={closureGridStyle}>
+          <div style={closureCardStyle}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <h2 style={panelTitleStyle}>Cierre de caja</h2>
+                <p style={panelSubtitleStyle}>
+                  Captura lo contado físicamente y compara contra sistema
+                </p>
+              </div>
+            </div>
+
+            <div style={closureSummaryBoxStyle}>
+              <div style={summaryRowStyle}>
+                <span>Efectivo esperado</span>
+                <b>${money(stats.totalEfectivoEsperado)}</b>
+              </div>
+
+              <div style={summaryRowStyle}>
+                <span>Efectivo contado</span>
+                <b>${money(Number(countedCash || 0))}</b>
+              </div>
+
+              <div style={summaryRowStyle}>
+                <span>Diferencia</span>
+                <b
+                  style={{
+                    color:
+                      difference === 0
+                        ? COLORS.success
+                        : difference > 0
+                        ? COLORS.info
+                        : COLORS.danger,
+                  }}
+                >
+                  ${money(difference)}
+                </b>
+              </div>
+            </div>
+
+            <div style={formGridStyle}>
+              <div>
+                <div style={fieldLabelStyle}>Efectivo contado</div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={countedCash}
+                  onChange={(e) => setCountedCash(e.target.value)}
+                  style={inputStyle}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div style={fieldLabelStyle}>Notas del cierre</div>
+            <textarea
+              value={closureNotes}
+              onChange={(e) => setClosureNotes(e.target.value)}
+              style={textareaStyle}
+              placeholder="Observaciones, faltantes, sobrantes, incidencias..."
+            />
+
+            <div style={buttonRowStyle}>
+              <button onClick={saveClosure} disabled={saving} style={primaryButtonStyle}>
+                {saving
+                  ? "Guardando..."
+                  : todayClosure
+                  ? "Actualizar cierre"
+                  : "Guardar cierre"}
+              </button>
+            </div>
+
+            {todayClosure ? (
+              <div style={savedClosureBoxStyle}>
+                <div style={savedClosureTitleStyle}>Último cierre guardado hoy</div>
+                <div style={movementMetaStyle}>
+                  Fecha: <b>{todayClosure.closure_date}</b>
+                </div>
+                <div style={movementMetaStyle}>
+                  Esperado: <b>${money(todayClosure.expected_cash)}</b>
+                </div>
+                <div style={movementMetaStyle}>
+                  Contado: <b>${money(todayClosure.counted_cash)}</b>
+                </div>
+                <div style={movementMetaStyle}>
+                  Diferencia: <b>${money(todayClosure.difference)}</b>
+                </div>
+                {todayClosure.created_at ? (
+                  <div style={movementMetaStyle}>
+                    Guardado: <b>{formatDateTime(todayClosure.created_at)}</b>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -485,6 +672,20 @@ const inputStyle: React.CSSProperties = {
   fontSize: 15,
 };
 
+const textareaStyle: React.CSSProperties = {
+  width: "100%",
+  minHeight: 110,
+  padding: 14,
+  borderRadius: 16,
+  border: `1px solid ${COLORS.border}`,
+  boxSizing: "border-box",
+  outline: "none",
+  background: "rgba(255,255,255,0.82)",
+  color: COLORS.text,
+  fontSize: 15,
+  resize: "vertical",
+};
+
 const heroGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
@@ -626,6 +827,67 @@ const miniValueStrongStyle: React.CSSProperties = {
   fontWeight: 800,
 };
 
+const closureGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: 20,
+  marginBottom: 20,
+};
+
+const closureCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 24,
+  padding: 18,
+  boxShadow: COLORS.shadow,
+};
+
+const closureSummaryBoxStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 18,
+  padding: 14,
+  display: "grid",
+  gap: 10,
+  marginBottom: 14,
+};
+
+const summaryRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 12,
+  color: COLORS.text,
+};
+
+const formGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 14,
+};
+
+const buttonRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 10,
+  flexWrap: "wrap",
+  marginTop: 14,
+};
+
+const savedClosureBoxStyle: React.CSSProperties = {
+  marginTop: 16,
+  padding: 14,
+  borderRadius: 18,
+  background: "rgba(31,122,77,0.10)",
+  border: `1px solid ${COLORS.border}`,
+};
+
+const savedClosureTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 18,
+  marginBottom: 10,
+};
+
 const movementsListStyle: React.CSSProperties = {
   display: "grid",
   gap: 12,
@@ -702,4 +964,17 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
+};
+
+const primaryButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+  cursor: "pointer",
 };
