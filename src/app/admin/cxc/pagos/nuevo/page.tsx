@@ -215,6 +215,24 @@ export default function NuevoPagoCxcPage() {
     setSaving(false);
     return;
   }
+  const { error: cashMovementError } = await supabase
+  .from("cash_movements")
+  .insert([
+    {
+      type: "cxc_pago",
+      source: "cxc",
+      amount: Number(paymentAmount.toFixed(2)),
+      payment_method: paymentMethod,
+      reference_id: paymentData.id,
+    },
+  ]);
+
+if (cashMovementError) {
+  console.log(cashMovementError);
+  alert("El pago se guardó, pero falló el movimiento de caja");
+  setSaving(false);
+  return;
+}
 
   let remaining = paymentAmount;
 
