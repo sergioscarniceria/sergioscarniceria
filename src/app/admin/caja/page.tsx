@@ -98,8 +98,8 @@ export default function CajaPage() {
   }
 
   async function loadMovements() {
-    const start = `${dateFrom}T00:00:00`;
-    const end = `${dateTo}T23:59:59`;
+   const start = new Date(`${dateFrom}T00:00:00`).toISOString();
+    const end = new Date(`${dateTo}T23:59:59`).toISOString();
 
     const { data, error } = await supabase
       .from("cash_movements")
