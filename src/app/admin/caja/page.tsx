@@ -101,35 +101,58 @@ export default function CajaPage() {
   }
 
   const stats = useMemo(() => {
-    const efectivo = movements
+    const ventas = movements.filter((m) => m.type === "venta");
+    const cxc = movements.filter((m) => m.type === "cxc_pago");
+
+    const ventasEfectivo = ventas
       .filter((m) => m.payment_method === "efectivo")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const tarjeta = movements
+    const ventasTarjeta = ventas
       .filter((m) => m.payment_method === "tarjeta")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const transferencia = movements
+    const ventasTransferencia = ventas
       .filter((m) => m.payment_method === "transferencia")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const ventas = movements
-      .filter((m) => m.type === "venta")
+    const cxcEfectivo = cxc
+      .filter((m) => m.payment_method === "efectivo")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const cobrosCxc = movements
-      .filter((m) => m.type === "cxc_pago")
+    const cxcTarjeta = cxc
+      .filter((m) => m.payment_method === "tarjeta")
       .reduce((acc, m) => acc + Number(m.amount || 0), 0);
 
-    const total = efectivo + tarjeta + transferencia;
+    const cxcTransferencia = cxc
+      .filter((m) => m.payment_method === "transferencia")
+      .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+
+    const totalVentas =
+      ventasEfectivo + ventasTarjeta + ventasTransferencia;
+
+    const totalCxc =
+      cxcEfectivo + cxcTarjeta + cxcTransferencia;
+
+    const totalEfectivoEsperado = ventasEfectivo + cxcEfectivo;
+    const totalTarjeta = ventasTarjeta + cxcTarjeta;
+    const totalTransferencia = ventasTransferencia + cxcTransferencia;
+    const totalGeneral =
+      totalEfectivoEsperado + totalTarjeta + totalTransferencia;
 
     return {
-      efectivo,
-      tarjeta,
-      transferencia,
-      ventas,
-      cobrosCxc,
-      total,
+      ventasEfectivo,
+      ventasTarjeta,
+      ventasTransferencia,
+      cxcEfectivo,
+      cxcTarjeta,
+      cxcTransferencia,
+      totalVentas,
+      totalCxc,
+      totalEfectivoEsperado,
+      totalTarjeta,
+      totalTransferencia,
+      totalGeneral,
       totalMovements: movements.length,
     };
   }, [movements]);
@@ -152,7 +175,7 @@ export default function CajaPage() {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Caja</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Corte diario y movimientos registrados
+              Corte diario y efectivo esperado de cajeras
             </p>
           </div>
 
@@ -196,43 +219,97 @@ export default function CajaPage() {
           </div>
         </div>
 
-        <div style={summaryGridStyle}>
-          <div style={summaryCardStyle}>
-            <div style={summaryLabelStyle}>💵 Efectivo</div>
-            <div style={summaryValueStyle}>${money(stats.efectivo)}</div>
-            <div style={summaryMetaStyle}>Dinero físico esperado</div>
+        <div style={heroGridStyle}>
+          <div style={heroCardStrongStyle}>
+            <div style={heroLabelStrongStyle}>💵 Efectivo esperado en caja</div>
+            <div style={heroValueStrongStyle}>${money(stats.totalEfectivoEsperado)}</div>
+            <div style={heroMetaStrongStyle}>
+              Esto es lo que deben entregar físicamente
+            </div>
           </div>
 
-          <div style={summaryCardStyle}>
-            <div style={summaryLabelStyle}>💳 Tarjeta</div>
-            <div style={summaryValueStyle}>${money(stats.tarjeta)}</div>
-            <div style={summaryMetaStyle}>Cobros con terminal</div>
+          <div style={heroCardStyle}>
+            <div style={heroLabelStyle}>💳 Total tarjeta</div>
+            <div style={heroValueStyle}>${money(stats.totalTarjeta)}</div>
+            <div style={heroMetaStyle}>Ventas + cobros CxC</div>
           </div>
 
-          <div style={summaryCardStyle}>
-            <div style={summaryLabelStyle}>🔄 Transferencia</div>
-            <div style={summaryValueStyle}>${money(stats.transferencia)}</div>
-            <div style={summaryMetaStyle}>Pagos por transferencia</div>
+          <div style={heroCardStyle}>
+            <div style={heroLabelStyle}>🔄 Total transferencia</div>
+            <div style={heroValueStyle}>${money(stats.totalTransferencia)}</div>
+            <div style={heroMetaStyle}>Ventas + cobros CxC</div>
           </div>
 
-          <div style={summaryCardStyleStrong}>
-            <div style={summaryLabelStyle}>💰 Total del corte</div>
-            <div style={summaryValueStrongStyle}>${money(stats.total)}</div>
-            <div style={summaryMetaStrongStyle}>
+          <div style={heroCardStyle}>
+            <div style={heroLabelStyle}>💰 Total general</div>
+            <div style={heroValueStyle}>${money(stats.totalGeneral)}</div>
+            <div style={heroMetaStyle}>
               {stats.totalMovements} movimiento{stats.totalMovements === 1 ? "" : "s"}
             </div>
           </div>
         </div>
 
-        <div style={secondarySummaryGridStyle}>
-          <div style={miniCardStyle}>
-            <div style={miniLabelStyle}>Ventas registradas</div>
-            <div style={miniValueStyle}>${money(stats.ventas)}</div>
+        <div style={sectionGridStyle}>
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <h2 style={panelTitleStyle}>Ventas</h2>
+                <p style={panelSubtitleStyle}>Ingresos por venta normal del día</p>
+              </div>
+            </div>
+
+            <div style={breakdownGridStyle}>
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Efectivo</div>
+                <div style={miniValueStyle}>${money(stats.ventasEfectivo)}</div>
+              </div>
+
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Tarjeta</div>
+                <div style={miniValueStyle}>${money(stats.ventasTarjeta)}</div>
+              </div>
+
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Transferencia</div>
+                <div style={miniValueStyle}>${money(stats.ventasTransferencia)}</div>
+              </div>
+
+              <div style={miniCardStyleStrong}>
+                <div style={miniLabelStrongStyle}>Total ventas</div>
+                <div style={miniValueStrongStyle}>${money(stats.totalVentas)}</div>
+              </div>
+            </div>
           </div>
 
-          <div style={miniCardStyle}>
-            <div style={miniLabelStyle}>Cobros CxC</div>
-            <div style={miniValueStyle}>${money(stats.cobrosCxc)}</div>
+          <div style={panelStyle}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <h2 style={panelTitleStyle}>Cobros CxC</h2>
+                <p style={panelSubtitleStyle}>Pagos de clientes con adeudo</p>
+              </div>
+            </div>
+
+            <div style={breakdownGridStyle}>
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Efectivo</div>
+                <div style={miniValueStyle}>${money(stats.cxcEfectivo)}</div>
+              </div>
+
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Tarjeta</div>
+                <div style={miniValueStyle}>${money(stats.cxcTarjeta)}</div>
+              </div>
+
+              <div style={miniCardStyle}>
+                <div style={miniLabelStyle}>Transferencia</div>
+                <div style={miniValueStyle}>${money(stats.cxcTransferencia)}</div>
+              </div>
+
+              <div style={miniCardStyleStrong}>
+                <div style={miniLabelStrongStyle}>Total CxC</div>
+                <div style={miniValueStrongStyle}>${money(stats.totalCxc)}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -241,7 +318,7 @@ export default function CajaPage() {
             <div>
               <h2 style={panelTitleStyle}>Movimientos del rango</h2>
               <p style={panelSubtitleStyle}>
-                Aquí ves todo lo que entró a caja en las fechas seleccionadas
+                Aquí ves ventas y cobros CxC registrados en caja
               </p>
             </div>
           </div>
@@ -284,9 +361,15 @@ export default function CajaPage() {
                     <span style={pillStyle}>
                       Tipo: <b>{normalizeMovementType(movement.type)}</b>
                     </span>
+
                     <span style={pillStyle}>
                       Origen: <b>{movement.source || "Sin origen"}</b>
                     </span>
+
+                    <span style={pillStyle}>
+                      Método: <b>{normalizeMethod(movement.payment_method)}</b>
+                    </span>
+
                     {movement.reference_id ? (
                       <span style={pillStyle}>
                         Ref: <b>{movement.reference_id.slice(0, 8)}</b>
@@ -402,14 +485,14 @@ const inputStyle: React.CSSProperties = {
   fontSize: 15,
 };
 
-const summaryGridStyle: React.CSSProperties = {
+const heroGridStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 16,
-  marginBottom: 16,
+  marginBottom: 20,
 };
 
-const summaryCardStyle: React.CSSProperties = {
+const heroCardStyle: React.CSSProperties = {
   background: COLORS.cardStrong,
   border: `1px solid ${COLORS.border}`,
   borderRadius: 22,
@@ -417,71 +500,57 @@ const summaryCardStyle: React.CSSProperties = {
   boxShadow: COLORS.shadow,
 };
 
-const summaryCardStyleStrong: React.CSSProperties = {
-  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+const heroCardStrongStyle: React.CSSProperties = {
+  background: `linear-gradient(180deg, ${COLORS.success} 0%, #16603d 100%)`,
   border: "none",
   borderRadius: 22,
   padding: 18,
-  boxShadow: "0 12px 26px rgba(123, 34, 24, 0.24)",
+  boxShadow: "0 12px 26px rgba(31, 122, 77, 0.24)",
 };
 
-const summaryLabelStyle: React.CSSProperties = {
+const heroLabelStyle: React.CSSProperties = {
   color: COLORS.muted,
   fontSize: 14,
   marginBottom: 8,
 };
 
-const summaryValueStyle: React.CSSProperties = {
+const heroLabelStrongStyle: React.CSSProperties = {
+  color: "rgba(255,255,255,0.88)",
+  fontSize: 14,
+  marginBottom: 8,
+};
+
+const heroValueStyle: React.CSSProperties = {
   color: COLORS.text,
   fontSize: 32,
   fontWeight: 800,
   lineHeight: 1.1,
 };
 
-const summaryValueStrongStyle: React.CSSProperties = {
+const heroValueStrongStyle: React.CSSProperties = {
   color: "white",
   fontSize: 34,
   fontWeight: 800,
   lineHeight: 1.1,
 };
 
-const summaryMetaStyle: React.CSSProperties = {
+const heroMetaStyle: React.CSSProperties = {
   color: COLORS.muted,
   fontSize: 13,
   marginTop: 8,
 };
 
-const summaryMetaStrongStyle: React.CSSProperties = {
-  color: "rgba(255,255,255,0.85)",
+const heroMetaStrongStyle: React.CSSProperties = {
+  color: "rgba(255,255,255,0.88)",
   fontSize: 13,
   marginTop: 8,
 };
 
-const secondarySummaryGridStyle: React.CSSProperties = {
+const sectionGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: 16,
+  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+  gap: 20,
   marginBottom: 20,
-};
-
-const miniCardStyle: React.CSSProperties = {
-  background: COLORS.card,
-  border: `1px solid ${COLORS.border}`,
-  borderRadius: 20,
-  padding: 16,
-  boxShadow: COLORS.shadow,
-};
-
-const miniLabelStyle: React.CSSProperties = {
-  color: COLORS.muted,
-  fontSize: 14,
-  marginBottom: 8,
-};
-
-const miniValueStyle: React.CSSProperties = {
-  color: COLORS.text,
-  fontSize: 26,
-  fontWeight: 800,
 };
 
 const panelStyle: React.CSSProperties = {
@@ -510,6 +579,51 @@ const panelSubtitleStyle: React.CSSProperties = {
   margin: "6px 0 0 0",
   color: COLORS.muted,
   fontSize: 14,
+};
+
+const breakdownGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 12,
+};
+
+const miniCardStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 18,
+  padding: 14,
+};
+
+const miniCardStyleStrong: React.CSSProperties = {
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  border: "none",
+  borderRadius: 18,
+  padding: 14,
+  boxShadow: "0 10px 20px rgba(123, 34, 24, 0.18)",
+};
+
+const miniLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+  marginBottom: 6,
+};
+
+const miniLabelStrongStyle: React.CSSProperties = {
+  color: "rgba(255,255,255,0.85)",
+  fontSize: 13,
+  marginBottom: 6,
+};
+
+const miniValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontSize: 24,
+  fontWeight: 800,
+};
+
+const miniValueStrongStyle: React.CSSProperties = {
+  color: "white",
+  fontSize: 24,
+  fontWeight: 800,
 };
 
 const movementsListStyle: React.CSSProperties = {
