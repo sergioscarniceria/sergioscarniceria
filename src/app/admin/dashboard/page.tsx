@@ -326,6 +326,7 @@ export default function AdminDashboardPage() {
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
             <Link href="/admin/clientes" style={secondaryButtonStyle}>Clientes</Link>
             <Link href="/admin/productos" style={secondaryButtonStyle}>Productos</Link>
+            <Link href="/admin/caja" style={secondaryButtonStyle}>Caja</Link>
           </div>
         </div>
 
