@@ -164,29 +164,93 @@ export default function NuevoPagoCxcPage() {
   }, [openNotes]);
 
   async function savePaymentBase() {
-    if (!selectedCustomer) {
-      alert("Selecciona un cliente");
-      return;
-    }
-
-    if (!amount || Number(amount) <= 0) {
-      alert("Captura un monto válido");
-      return;
-    }
-
-    if (openNotes.length === 0) {
-      alert("Ese cliente no tiene notas abiertas");
-      return;
-    }
-
-    setSaving(true);
-
-    alert(
-      "Base lista. En el siguiente paso conectamos la aplicación real del pago a las notas."
-    );
-
-    setSaving(false);
+  if (!selectedCustomer) {
+    alert("Selecciona un cliente");
+    return;
   }
+
+  const paymentAmount = Number(amount || 0);
+
+  if (!paymentAmount || paymentAmount <= 0) {
+    alert("Captura un monto válido");
+    return;
+  }
+
+  if (openNotes.length === 0) {
+    alert("Ese cliente no tiene notas abiertas");
+    return;
+  }
+
+  const totalPendingAmount = openNotes.reduce(
+    (acc, note) => acc + Number(note.balance_due || 0),
+    0
+  );
+
+  if (paymentAmount > totalPendingAmount) {
+    alert("El monto es mayor al saldo pendiente del cliente");
+    return;
+  }
+
+  setSaving(true);
+
+  const { data: paymentData, error: paymentError } = await supabase
+    .from("cxc_payments")
+    .insert([
+      {
+        customer_id: selectedCustomer.id,
+        customer_name: selectedCustomer.name,
+        payment_date: paymentDate,
+        amount: Number(paymentAmount.toFixed(2)),
+        payment_method: paymentMethod,
+        reference: reference.trim() || null,
+        notes: notes.trim() || null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (paymentError || !paymentData) {
+    console.log(paymentError);
+    alert("No se pudo guardar el pago");
+    setSaving(false);
+    return;
+  }
+
+  let remaining = paymentAmount;
+
+  for (const note of openNotes) {
+    if (remaining <= 0) break;
+
+    const currentBalance = Number(note.balance_due || 0);
+    if (currentBalance <= 0) continue;
+
+    const amountApplied = Math.min(remaining, currentBalance);
+    const newBalance = Number((currentBalance - amountApplied).toFixed(2));
+
+    const { error: updateError } = await supabase
+      .from("cxc_notes")
+      .update({
+        balance_due: newBalance,
+        status: newBalance <= 0 ? "pagada" : "abierta",
+      })
+      .eq("id", note.id);
+
+    if (updateError) {
+      console.log(updateError);
+      alert("El pago se guardó, pero falló la aplicación a las notas");
+      setSaving(false);
+      return;
+    }
+
+    remaining = Number((remaining - amountApplied).toFixed(2));
+  }
+
+  alert("Pago registrado y aplicado correctamente");
+
+  clearForm();
+  await loadCustomers();
+  setSaving(false);
+}
 
   if (loading) {
     return (
