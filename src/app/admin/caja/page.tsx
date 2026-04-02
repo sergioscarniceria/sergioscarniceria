@@ -214,7 +214,12 @@ export default function CajaPage() {
       expected_cash: Number(stats.totalEfectivoEsperado.toFixed(2)),
       counted_cash: Number(counted.toFixed(2)),
       difference: Number(difference.toFixed(2)),
-      notes: closureNotes.trim() || null,
+     notes: closureNotes.trim() || null,
+     total_sales: Number(stats.totalVentas.toFixed(2)),
+total_cxc: Number(stats.totalCxc.toFixed(2)),
+total_card: Number(stats.totalTarjeta.toFixed(2)),
+total_transfer: Number(stats.totalTransferencia.toFixed(2)),
+total_general: Number(stats.totalGeneral.toFixed(2)),
     };
 
     if (todayClosure?.id) {
