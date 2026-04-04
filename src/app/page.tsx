@@ -20,26 +20,54 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-const internalModules = [
+const adminModules = [
   {
-    title: "Pedidos",
-    description: "Control general y seguimiento.",
-    href: "/pedidos",
-  },
-  {
-    title: "Producción",
-    description: "Preparación y operación interna.",
-    href: "/produccion",
-  },
-  {
-    title: "Dashboard",
-    description: "Ventas, pedidos y métricas.",
+    title: "Dashboard ventas",
+    description: "Tu negocio en una mirada, sin tanto rodeo.",
     href: "/admin/dashboard",
   },
   {
+    title: "Dashboard asistencia",
+    description: "Quien llega con ganas, se nota desde la entrada.",
+    href: "/admin/dashboard/asistencia",
+  },
+  {
     title: "Admin clientes",
-    description: "Altas y control comercial.",
+    description: "Altas, control y orden comercial.",
     href: "/admin/clientes",
+  },
+];
+
+const operationModules = [
+  {
+    title: "Caja",
+    description: "Donde cada peso cuenta y cada cobro queda claro.",
+    href: "/admin/caja",
+  },
+  {
+    title: "Checador",
+    description: "La puntualidad también se cocina todos los días.",
+    href: "/asistencia/checador",
+  },
+  {
+    title: "CxC",
+    description: "Cobrar bien también es vender mejor.",
+    href: "/admin/cxc",
+  },
+  {
+    title: "Pedidos",
+    description: "Deleita a tu paladar con lo que se merece.",
+    href: "/pedidos",
+  },
+  {
+    title: "Repartidores",
+    description: "En camino, entregado y sin perder detalle.",
+    href: "/repartidores",
+  },
+  {
+    title: "Producción",
+    description: "Pasión por el trabajo bien hecho, corte por corte.",
+    href: "/produccion",
   },
 ];
 
@@ -336,33 +364,120 @@ export default function HomePage() {
         </div>
 
         <div style={internalSectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={{ margin: 0, color: COLORS.text }}>Accesos internos</h2>
-            <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Estas secciones piden contraseña de operación o administración
-            </p>
-          </div>
+  <div style={sectionHeaderStyle}>
+    <h2 style={{ margin: 0, color: COLORS.text }}>Menú de operaciones</h2>
+    <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
+      Todo en un solo lugar para no perder tiempo buscando rutas.
+    </p>
+  </div>
 
-          <div style={gridStyle}>
-            {internalModules.map((module) => (
-              <Link
-                key={module.href}
-                href={module.href}
-                style={{
-                  ...cardStyle,
-                  textDecoration: "none",
-                }}
-              >
-                <div style={internalBadgeStyle}>Interno</div>
-                <div style={cardTitleStyle}>{module.title}</div>
-                <div style={cardTextStyle}>{module.description}</div>
-                <div style={cardFooterStyle}>Abrir módulo →</div>
-              </Link>
-            ))}
-          </div>
-        </div>
+  <div
+    style={{
+      display: "grid",
+      gap: 20,
+    }}
+  >
+    <div>
+      <div
+        style={{
+          marginBottom: 12,
+          display: "inline-block",
+          padding: "8px 12px",
+          borderRadius: 999,
+          fontSize: 12,
+          fontWeight: 800,
+          background: "rgba(123, 34, 24, 0.12)",
+          color: COLORS.primary,
+        }}
+      >
+        Administración
+      </div>
+
+      <div style={gridStyle}>
+        {adminModules.map((module) => (
+          <Link
+            key={module.href}
+            href={module.href}
+            style={{
+              ...cardStyle,
+              textDecoration: "none",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-block",
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 12,
+                background: "rgba(123, 34, 24, 0.10)",
+                color: COLORS.primary,
+              }}
+            >
+              Admin
+            </div>
+
+            <div style={cardTitleStyle}>{module.title}</div>
+            <div style={cardTextStyle}>{module.description}</div>
+            <div style={cardFooterStyle}>Abrir módulo →</div>
+          </Link>
+        ))}
       </div>
     </div>
+
+    <div>
+      <div
+        style={{
+          marginBottom: 12,
+          display: "inline-block",
+          padding: "8px 12px",
+          borderRadius: 999,
+          fontSize: 12,
+          fontWeight: 800,
+          background: "rgba(53, 92, 125, 0.12)",
+          color: COLORS.info,
+        }}
+      >
+        Operación
+      </div>
+
+      <div style={gridStyle}>
+        {operationModules.map((module) => (
+          <Link
+            key={module.href}
+            href={module.href}
+            style={{
+              ...cardStyle,
+              textDecoration: "none",
+            }}
+          >
+            <div
+              style={{
+                display: "inline-block",
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                marginBottom: 12,
+                background: "rgba(53, 92, 125, 0.12)",
+                color: COLORS.info,
+              }}
+            >
+              Operación
+            </div>
+
+            <div style={cardTitleStyle}>{module.title}</div>
+            <div style={cardTextStyle}>{module.description}</div>
+            <div style={cardFooterStyle}>Abrir módulo →</div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  </div>
+</div>
+        </div>
+      </div>
   );
 }
 
