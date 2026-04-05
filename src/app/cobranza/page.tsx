@@ -154,9 +154,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   if (!qRaw) return tickets;
 
   const q = qRaw.toLowerCase();
-
-  // 🔥 limpiar posible QR tipo "TK-123"
-  const normalizedId = q.replace("tk-", "").trim();
+  const normalizedId = q.replace(/^tk-/i, "").trim();
 
   return tickets.filter((ticket) => {
     const id = String(ticket.id).toLowerCase();
@@ -748,15 +746,20 @@ if (cashError) {
   autoFocus
   onKeyDown={(e) => {
     if (e.key === "Enter") {
-      const id = ticketSearch.replace("TK-", "").trim();
-      if (id) {
-        openTicket(id);
+      const raw = ticketSearch.trim().toLowerCase();
+      const normalized = raw.replace(/^tk-/i, "").trim();
+
+      const found = tickets.find((ticket) =>
+        String(ticket.id).toLowerCase() === normalized
+      );
+
+      if (found) {
+        openTicket(found.id);
       }
     }
   }}
   style={inputStyle}
 />
-
                 <div style={{ marginTop: 14 }}>
                   <div style={miniTitleStyle}>Pendientes recientes</div>
 
