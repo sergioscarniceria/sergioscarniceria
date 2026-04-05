@@ -921,7 +921,9 @@ if (cashError) {
                 <div style={summaryCardStyle}>
                   <div style={summaryRowStyle}>
                     <span>Cliente</span>
-                    <b>{customerName || "Público general"}</b>
+                    <b>{customerMode === "existente"
+  ? customers.find((c) => c.id === selectedCustomerId)?.name || "Cliente existente"
+  : "Público general"}</b>
                   </div>
 
                   <div style={summaryRowStyle}>
