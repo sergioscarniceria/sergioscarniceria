@@ -150,12 +150,25 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   }
 
   const filteredTickets = useMemo(() => {
-    const q = ticketSearch.toLowerCase().trim();
-    if (!q) return tickets;
-    return tickets.filter((ticket) =>
-      `${ticket.id} ${ticket.customer_name || ""}`.toLowerCase().includes(q)
+  const qRaw = ticketSearch.trim();
+  if (!qRaw) return tickets;
+
+  const q = qRaw.toLowerCase();
+
+  // 🔥 limpiar posible QR tipo "TK-123"
+  const normalizedId = q.replace("tk-", "").trim();
+
+  return tickets.filter((ticket) => {
+    const id = String(ticket.id).toLowerCase();
+    const name = (ticket.customer_name || "").toLowerCase();
+
+    return (
+      id.includes(q) ||
+      id.includes(normalizedId) ||
+      name.includes(q)
     );
-  }, [tickets, ticketSearch]);
+  });
+}, [tickets, ticketSearch]);
 
   async function openTicket(id: string) {
     const { data, error } = await supabase
