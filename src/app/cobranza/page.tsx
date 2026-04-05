@@ -410,6 +410,150 @@ async function createNewCustomer() {
 
   alert("Cliente creado correctamente");
 }
+async function saveManualCredit() {
+  if (manualLines.length === 0) {
+    alert("Agrega al menos un renglón");
+    return;
+  }
+
+  if (customerMode !== "existente" || !selectedCustomerId) {
+    alert("Para mandar a crédito debes seleccionar un cliente existente");
+    return;
+  }
+
+  const selected = customers.find((c) => c.id === selectedCustomerId);
+
+  if (!selected) {
+    alert("No encontramos el cliente seleccionado");
+    return;
+  }
+
+  if (!selected.credit_enabled) {
+    alert("Ese cliente no tiene crédito activo");
+    return;
+  }
+
+  const validLines = manualLines.every((line) => {
+    return (
+      line.product.trim() &&
+      Number(line.kilos || 0) > 0 &&
+      Number(line.price || 0) >= 0
+    );
+  });
+
+  if (!validLines) {
+    alert("Revisa producto, kilos y precio en todos los renglones");
+    return;
+  }
+
+  setSaving(true);
+
+  const cleanCustomerName = selected.name;
+  const customerId = selected.id;
+
+  const { data: orderData, error: orderError } = await supabase
+    .from("orders")
+    .insert([
+      {
+        customer_id: customerId,
+        customer_name: cleanCustomerName,
+        status: "terminado",
+        source: "caja_manual",
+        notes: manualNotes.trim() || null,
+        payment_status: "credito_autorizado",
+        payment_method: "credito",
+        paid_at: new Date().toISOString(),
+      },
+    ])
+    .select()
+    .single();
+
+  if (orderError || !orderData) {
+    console.log(orderError);
+    alert("No se pudo guardar la venta a crédito");
+    setSaving(false);
+    return;
+  }
+
+  const itemsPayload = manualLines.map((line) => ({
+    order_id: orderData.id,
+    product: line.product.trim(),
+    kilos: Number(Number(line.kilos || 0).toFixed(3)),
+    price: Number(Number(line.price || 0).toFixed(2)),
+  }));
+
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(itemsPayload);
+
+  if (itemsError) {
+    console.log(itemsError);
+    alert("La venta se guardó, pero fallaron los renglones");
+    setSaving(false);
+    return;
+  }
+
+  const noteDate = todayDateString();
+  const dueDate = addDaysToDate(
+    noteDate,
+    Number(selected.credit_days || 0) > 0 ? Number(selected.credit_days) : 7
+  );
+
+  const { data: noteData, error: noteError } = await supabase
+    .from("cxc_notes")
+    .insert([
+      {
+        customer_id: customerId,
+        customer_name: cleanCustomerName,
+        note_number: `VM-${orderData.id}`,
+        note_date: noteDate,
+        due_date: dueDate,
+        source_type: "venta_manual",
+        subtotal: Number(manualTotal.toFixed(2)),
+        discount_amount: 0,
+        total_amount: Number(manualTotal.toFixed(2)),
+        balance_due: Number(manualTotal.toFixed(2)),
+        status: "abierta",
+        notes: manualNotes.trim() || null,
+      },
+    ])
+    .select("*")
+    .single();
+
+  if (noteError || !noteData) {
+    console.log(noteError);
+    alert("La venta se guardó, pero no se pudo crear la nota de crédito");
+    setSaving(false);
+    return;
+  }
+
+  const noteItems = manualLines.map((line) => ({
+    cxc_note_id: noteData.id,
+    product: line.product.trim(),
+    quantity: Number(Number(line.kilos || 0).toFixed(3)),
+    unit: "kg",
+    price: Number(Number(line.price || 0).toFixed(2)),
+    line_total: Number(
+      (Number(line.kilos || 0) * Number(line.price || 0)).toFixed(2)
+    ),
+  }));
+
+  const { error: noteItemsError } = await supabase
+    .from("cxc_note_items")
+    .insert(noteItems);
+
+  if (noteItemsError) {
+    console.log(noteItemsError);
+    alert("La nota se creó, pero fallaron los renglones de CxC");
+    setSaving(false);
+    return;
+  }
+
+  alert("Venta mandada a crédito correctamente");
+  clearManualSale();
+  await loadData();
+  setSaving(false);
+}
 async function saveManualSale(method: Exclude<PaymentMethod, "credito">) {
   if (manualLines.length === 0) {
     alert("Agrega al menos un renglón");
@@ -962,7 +1106,7 @@ if (cashError) {
   </button>
 
   <button
-    onClick={() => alert("El crédito manual lo conectamos en el siguiente paso")}
+    onClick={saveManualCredit}
     style={warningButtonStyle}
     disabled={saving}
   >
