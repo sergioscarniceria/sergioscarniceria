@@ -742,11 +742,20 @@ if (cashError) {
                 </div>
 
                 <input
-                  placeholder="Buscar por folio o cliente"
-                  value={ticketSearch}
-                  onChange={(e) => setTicketSearch(e.target.value)}
-                  style={inputStyle}
-                />
+  placeholder="Buscar por folio o cliente"
+  value={ticketSearch}
+  onChange={(e) => setTicketSearch(e.target.value)}
+  autoFocus
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      const id = ticketSearch.replace("TK-", "").trim();
+      if (id) {
+        openTicket(id);
+      }
+    }
+  }}
+  style={inputStyle}
+/>
 
                 <div style={{ marginTop: 14 }}>
                   <div style={miniTitleStyle}>Pendientes recientes</div>
