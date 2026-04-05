@@ -100,6 +100,11 @@ export default function CobranzaPage() {
   const [customerName, setCustomerName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [manualLines, setManualLines] = useState<ManualLine[]>([]);
+  const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
+const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+const [showNewCustomer, setShowNewCustomer] = useState(false);
+const [newCustomerName, setNewCustomerName] = useState("");
+const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   useEffect(() => {
     loadData();
@@ -367,11 +372,44 @@ if (cashError) {
   }
 
   function clearManualSale() {
+  setCustomerMode("general");
+  setSelectedCustomerId("");
   setCustomerName("");
   setManualNotes("");
   setManualLines([]);
 }
+async function createNewCustomer() {
+  if (!newCustomerName.trim()) {
+    alert("El nombre es obligatorio");
+    return;
+  }
 
+  const { data, error } = await supabase
+    .from("customers")
+    .insert([
+      {
+        name: newCustomerName.trim(),
+        phone: newCustomerPhone.trim() || null,
+      },
+    ])
+    .select()
+    .single();
+
+  if (error || !data) {
+    console.log(error);
+    alert("No se pudo crear el cliente");
+    return;
+  }
+
+  setCustomers((prev) => [...prev, data as Customer]);
+  setSelectedCustomerId(data.id);
+  setCustomerMode("existente");
+  setShowNewCustomer(false);
+  setNewCustomerName("");
+  setNewCustomerPhone("");
+
+  alert("Cliente creado correctamente");
+}
 async function saveManualSale(method: Exclude<PaymentMethod, "credito">) {
   if (manualLines.length === 0) {
     alert("Agrega al menos un renglón");
@@ -393,13 +431,24 @@ async function saveManualSale(method: Exclude<PaymentMethod, "credito">) {
 
   setSaving(true);
 
-  const cleanCustomerName = customerName.trim() || "PUBLICO GENERAL";
+  let cleanCustomerName = "PUBLICO GENERAL";
+let customerId: string | null = null;
+
+if (customerMode === "existente" && selectedCustomerId) {
+  const selected = customers.find(c => c.id === selectedCustomerId);
+
+  if (selected) {
+    cleanCustomerName = selected.name;
+    customerId = selected.id;
+  }
+}
 
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
     .insert([
       {
-        customer_name: cleanCustomerName,
+  customer_id: customerId,
+  customer_name: cleanCustomerName,
         status: "terminado",
         source: "caja_manual",
         notes: manualNotes.trim() || null,
@@ -682,14 +731,123 @@ if (cashError) {
                 </div>
 
                 <div style={fieldBlockStyle}>
-                  <div style={fieldLabelStyle}>Cliente</div>
-                  <input
-                    placeholder="Nombre del cliente"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    style={inputStyle}
-                  />
-                </div>
+  <div style={fieldLabelStyle}>Cliente</div>
+
+  <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+    <button
+      onClick={() => setCustomerMode("general")}
+      style={{
+        ...tabButtonStyle,
+        background: customerMode === "general" ? COLORS.primary : "white",
+        color: customerMode === "general" ? "white" : COLORS.text,
+      }}
+    >
+      Público en general
+    </button>
+
+    <button
+      onClick={() => setCustomerMode("existente")}
+      style={{
+        ...tabButtonStyle,
+        background: customerMode === "existente" ? COLORS.primary : "white",
+        color: customerMode === "existente" ? "white" : COLORS.text,
+      }}
+    >
+      Cliente existente
+    </button>
+  </div>
+{showNewCustomer && (
+  <div
+    style={{
+      position: "fixed",
+      inset: 0,
+      background: "rgba(0,0,0,0.35)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 9999,
+      padding: 16,
+    }}
+  >
+    <div
+      style={{
+        width: "100%",
+        maxWidth: 420,
+        background: "white",
+        borderRadius: 20,
+        padding: 20,
+        boxShadow: COLORS.shadow,
+        border: `1px solid ${COLORS.border}`,
+      }}
+    >
+      <h3 style={{ marginTop: 0, color: COLORS.text }}>Cliente nuevo</h3>
+
+      <div style={fieldBlockStyle}>
+        <div style={fieldLabelStyle}>Nombre</div>
+        <input
+          value={newCustomerName}
+          onChange={(e) => setNewCustomerName(e.target.value)}
+          placeholder="Nombre del cliente"
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={fieldBlockStyle}>
+        <div style={fieldLabelStyle}>Teléfono</div>
+        <input
+          value={newCustomerPhone}
+          onChange={(e) => setNewCustomerPhone(e.target.value)}
+          placeholder="Teléfono"
+          style={inputStyle}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <button
+          onClick={createNewCustomer}
+          style={successButtonStyle}
+        >
+          Guardar cliente
+        </button>
+
+        <button
+          onClick={() => setShowNewCustomer(false)}
+          style={secondaryActionButtonStyle}
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+  {customerMode === "existente" ? (
+    <>
+      <select
+        value={selectedCustomerId}
+        onChange={(e) => setSelectedCustomerId(e.target.value)}
+        style={inputStyle}
+      >
+        <option value="">Seleccionar cliente</option>
+        {customers.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+
+      <button
+        onClick={() => setShowNewCustomer(true)}
+        style={secondaryActionButtonStyle}
+      >
+        + Cliente nuevo
+      </button>
+    </>
+  ) : (
+    <div style={{ color: COLORS.muted }}>
+      Se registrará como público en general
+    </div>
+  )}
+</div>
 
                 <div style={fieldBlockStyle}>
                   <div style={fieldLabelStyle}>Notas</div>
