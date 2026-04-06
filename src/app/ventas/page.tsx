@@ -58,11 +58,10 @@ export default function VentasPage() {
     setLoading(true);
 
     const { data, error } = await supabase
-      .from("products")
-      .select("id, name, price, category, active")
-      .eq("active", true)
-      .order("category", { ascending: true })
-      .order("name", { ascending: true });
+  .from("products")
+  .select("id, name, price, category")
+  .order("category", { ascending: true })
+  .order("name", { ascending: true });
 
     if (error) {
       console.log(error);
