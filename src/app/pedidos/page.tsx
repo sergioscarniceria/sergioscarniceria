@@ -34,6 +34,7 @@ const COLORS = {
   primaryDark: "#5a190f",
   success: "#1f7a4d",
   warning: "#a66a10",
+  danger: "#b42318",
   info: "#355c7d",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
@@ -74,8 +75,9 @@ function isTodayDate(value?: string | null) {
 
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filter, setFilter] = useState("todos");
-  const [search, setSearch] = useState("");
+const [filter, setFilter] = useState("todos");
+const [search, setSearch] = useState("");
+const [changingId, setChangingId] = useState<string | null>(null);
 
   async function loadOrders() {
     const supabase = getSupabaseClient();
@@ -93,6 +95,63 @@ export default function PedidosPage() {
     }
 
     setOrders((data as Order[]) || []);
+  }
+
+    async function deleteOrder(id: string) {
+    const supabase = getSupabaseClient();
+
+    const order = orders.find((o) => o.id === id);
+
+    if (!order) {
+      alert("No se encontró el pedido.");
+      return;
+    }
+
+    if (order.status !== "nuevo") {
+      alert("Solo se pueden eliminar pedidos nuevos.");
+      return;
+    }
+
+    const firstConfirm = window.confirm(
+      `¿Seguro que quieres eliminar el pedido de ${order.customer_name}?`
+    );
+
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "Esta acción no se puede deshacer. ¿Eliminar definitivamente el pedido?"
+    );
+
+    if (!secondConfirm) return;
+
+    setChangingId(id);
+
+    const { error: itemsError } = await supabase
+      .from("order_items")
+      .delete()
+      .eq("order_id", id);
+
+    if (itemsError) {
+      console.log(itemsError);
+      alert("No se pudieron borrar los productos del pedido.");
+      setChangingId(null);
+      return;
+    }
+
+    const { error: orderError } = await supabase
+      .from("orders")
+      .delete()
+      .eq("id", id);
+
+    if (orderError) {
+      console.log(orderError);
+      alert("No se pudo eliminar el pedido.");
+      setChangingId(null);
+      return;
+    }
+
+    setChangingId(null);
+    loadOrders();
   }
 
   useEffect(() => {
@@ -222,6 +281,33 @@ export default function PedidosPage() {
             <b>Notas:</b> {o.notes}
           </div>
         ) : null}
+                <div style={cardActionsStyle}>
+          <button
+            onClick={() => deleteOrder(o.id)}
+            disabled={changingId === o.id || o.status !== "nuevo"}
+            style={{
+              ...dangerButtonStyle,
+              background:
+                o.status === "nuevo"
+                  ? "rgba(180,35,24,0.10)"
+                  : "rgba(122,90,82,0.10)",
+              color: o.status === "nuevo" ? COLORS.danger : COLORS.muted,
+              cursor:
+                changingId === o.id || o.status !== "nuevo"
+                  ? "not-allowed"
+                  : "pointer",
+              opacity:
+                changingId === o.id || o.status !== "nuevo" ? 0.6 : 1,
+            }}
+            title={
+              o.status !== "nuevo"
+                ? "Solo se pueden eliminar pedidos nuevos"
+                : "Eliminar pedido"
+            }
+          >
+            {changingId === o.id ? "Eliminando..." : "Eliminar pedido"}
+          </button>
+        </div>
       </div>
     );
   }
@@ -585,6 +671,19 @@ const notesStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.7)",
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
+};
+const cardActionsStyle: React.CSSProperties = {
+  marginTop: 14,
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "none",
+  fontWeight: 700,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
