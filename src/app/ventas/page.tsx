@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type Item = {
   id: string;
@@ -10,8 +11,11 @@ type Item = {
 };
 
 type Product = {
+  id: string;
   name: string;
   price: number;
+  category: string | null;
+  active?: boolean | null;
 };
 
 const COLORS = {
@@ -28,23 +32,6 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-const CATEGORIES: Record<string, Product[]> = {
-  Res: [
-    { name: "Bistec", price: 180 },
-    { name: "Molida", price: 140 },
-  ],
-  "Carne para asar": [
-    { name: "Arrachera", price: 320 },
-  ],
-  Cerdo: [
-    { name: "Costilla", price: 160 },
-  ],
-  Embutidos: [
-    { name: "Longaniza", price: 120 },
-  ],
-  Complementos: [],
-};
-
 function makeId() {
   return `${Date.now()}-${Math.random()}`;
 }
@@ -54,10 +41,55 @@ function money(value?: number | null) {
 }
 
 export default function VentasPage() {
+  const supabase = getSupabaseClient();
+
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [kilos, setKilos] = useState("");
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  async function loadProducts() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("id, name, price, category, active")
+      .eq("active", true)
+      .order("category", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (error) {
+      console.log(error);
+      alert("No se pudieron cargar los productos");
+      setLoading(false);
+      return;
+    }
+
+    setProducts((data as Product[]) || []);
+    setLoading(false);
+  }
+
+  const groupedCategories = useMemo(() => {
+    const grouped: Record<string, Product[]> = {};
+
+    for (const product of products) {
+      const category = (product.category || "Sin categoría").trim();
+
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+
+      grouped[category].push(product);
+    }
+
+    return grouped;
+  }, [products]);
 
   function addItem() {
     const cleanKilos = Number(kilos);
@@ -73,8 +105,8 @@ export default function VentasPage() {
     }
 
     const product =
-      selectedCategory && CATEGORIES[selectedCategory]
-        ? CATEGORIES[selectedCategory].find((p) => p.name === selectedProduct)
+      selectedCategory && groupedCategories[selectedCategory]
+        ? groupedCategories[selectedCategory].find((p) => p.name === selectedProduct)
         : null;
 
     if (!product) {
@@ -88,7 +120,7 @@ export default function VentasPage() {
         id: makeId(),
         product: product.name,
         kilos: cleanKilos,
-        price: product.price,
+        price: Number(product.price || 0),
       },
     ]);
 
@@ -103,6 +135,20 @@ export default function VentasPage() {
     return items.reduce((acc, item) => acc + item.kilos * item.price, 0);
   }, [items]);
 
+  const categoryNames = useMemo(() => {
+    return Object.keys(groupedCategories);
+  }, [groupedCategories]);
+
+  if (loading) {
+    return (
+      <div style={pageStyle}>
+        <div style={shellStyle}>
+          <div style={panelStyle}>Cargando productos...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={pageStyle}>
       <div style={shellStyle}>
@@ -114,7 +160,6 @@ export default function VentasPage() {
         </div>
 
         <div style={mainGridStyle}>
-          {/* IZQUIERDA */}
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Productos</h2>
             <p style={panelSubtitleStyle}>
@@ -123,18 +168,22 @@ export default function VentasPage() {
 
             {!selectedCategory ? (
               <div style={categoryGridStyle}>
-                {Object.keys(CATEGORIES).map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => {
-                      setSelectedCategory(cat);
-                      setSelectedProduct("");
-                    }}
-                    style={categoryButtonStyle}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                {categoryNames.length === 0 ? (
+                  <div style={emptyBoxStyle}>No hay categorías disponibles</div>
+                ) : (
+                  categoryNames.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        setSelectedCategory(cat);
+                        setSelectedProduct("");
+                      }}
+                      style={categoryButtonStyle}
+                    >
+                      {cat}
+                    </button>
+                  ))
+                )}
               </div>
             ) : (
               <>
@@ -153,15 +202,13 @@ export default function VentasPage() {
                 </div>
 
                 <div style={productListStyle}>
-                  {CATEGORIES[selectedCategory].length === 0 ? (
-                    <div style={emptyBoxStyle}>No hay productos en esta categoría</div>
-                  ) : (
-                    CATEGORIES[selectedCategory].map((p) => {
+                  {groupedCategories[selectedCategory]?.length ? (
+                    groupedCategories[selectedCategory].map((p) => {
                       const isSelected = selectedProduct === p.name;
 
                       return (
                         <button
-                          key={p.name}
+                          key={p.id}
                           onClick={() => setSelectedProduct(p.name)}
                           style={{
                             ...productButtonStyle,
@@ -176,13 +223,14 @@ export default function VentasPage() {
                         </button>
                       );
                     })
+                  ) : (
+                    <div style={emptyBoxStyle}>No hay productos en esta categoría</div>
                   )}
                 </div>
               </>
             )}
           </div>
 
-          {/* CENTRO */}
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Orden</h2>
             <p style={panelSubtitleStyle}>Vas armando el pedido en tiempo real</p>
@@ -240,7 +288,6 @@ export default function VentasPage() {
             </div>
           </div>
 
-          {/* DERECHA */}
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Total</h2>
             <p style={panelSubtitleStyle}>Resumen rápido del pedido</p>
