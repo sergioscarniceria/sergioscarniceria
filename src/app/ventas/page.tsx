@@ -14,8 +14,6 @@ type Product = {
   id: string;
   name: string;
   price: number;
-  category: string | null;
-  active?: boolean | null;
 };
 
 const COLORS = {
@@ -47,7 +45,6 @@ export default function VentasPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [kilos, setKilos] = useState("");
 
   useEffect(() => {
@@ -58,10 +55,9 @@ export default function VentasPage() {
     setLoading(true);
 
     const { data, error } = await supabase
-  .from("products")
-  .select("id, name, price, category")
-  .order("category", { ascending: true })
-  .order("name", { ascending: true });
+      .from("products")
+      .select("id, name, price")
+      .order("name", { ascending: true });
 
     if (error) {
       console.log(error);
@@ -73,22 +69,6 @@ export default function VentasPage() {
     setProducts((data as Product[]) || []);
     setLoading(false);
   }
-
-  const groupedCategories = useMemo(() => {
-    const grouped: Record<string, Product[]> = {};
-
-    for (const product of products) {
-      const category = (product.category || "Sin categoría").trim();
-
-      if (!grouped[category]) {
-        grouped[category] = [];
-      }
-
-      grouped[category].push(product);
-    }
-
-    return grouped;
-  }, [products]);
 
   function addItem() {
     const cleanKilos = Number(kilos);
@@ -103,10 +83,7 @@ export default function VentasPage() {
       return;
     }
 
-    const product =
-      selectedCategory && groupedCategories[selectedCategory]
-        ? groupedCategories[selectedCategory].find((p) => p.name === selectedProduct)
-        : null;
+    const product = products.find((p) => p.name === selectedProduct);
 
     if (!product) {
       alert("No encontramos el producto");
@@ -134,10 +111,6 @@ export default function VentasPage() {
     return items.reduce((acc, item) => acc + item.kilos * item.price, 0);
   }, [items]);
 
-  const categoryNames = useMemo(() => {
-    return Object.keys(groupedCategories);
-  }, [groupedCategories]);
-
   if (loading) {
     return (
       <div style={pageStyle}>
@@ -162,72 +135,35 @@ export default function VentasPage() {
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Productos</h2>
             <p style={panelSubtitleStyle}>
-              Elige primero una categoría y después el producto
+              Lista real conectada a Supabase
             </p>
 
-            {!selectedCategory ? (
-              <div style={categoryGridStyle}>
-                {categoryNames.length === 0 ? (
-                  <div style={emptyBoxStyle}>No hay categorías disponibles</div>
-                ) : (
-                  categoryNames.map((cat) => (
+            <div style={productListStyle}>
+              {products.length === 0 ? (
+                <div style={emptyBoxStyle}>No hay productos disponibles</div>
+              ) : (
+                products.map((p) => {
+                  const isSelected = selectedProduct === p.name;
+
+                  return (
                     <button
-                      key={cat}
-                      onClick={() => {
-                        setSelectedCategory(cat);
-                        setSelectedProduct("");
+                      key={p.id}
+                      onClick={() => setSelectedProduct(p.name)}
+                      style={{
+                        ...productButtonStyle,
+                        border: isSelected
+                          ? `2px solid ${COLORS.primary}`
+                          : `1px solid ${COLORS.border}`,
+                        background: isSelected ? "#fff7f5" : "white",
                       }}
-                      style={categoryButtonStyle}
                     >
-                      {cat}
+                      <div style={productNameStyle}>{p.name}</div>
+                      <div style={productPriceStyle}>${money(p.price)}</div>
                     </button>
-                  ))
-                )}
-              </div>
-            ) : (
-              <>
-                <button
-                  onClick={() => {
-                    setSelectedCategory(null);
-                    setSelectedProduct("");
-                  }}
-                  style={backButtonStyle}
-                >
-                  ← Volver a categorías
-                </button>
-
-                <div style={selectedCategoryStyle}>
-                  Categoría: <b>{selectedCategory}</b>
-                </div>
-
-                <div style={productListStyle}>
-                  {groupedCategories[selectedCategory]?.length ? (
-                    groupedCategories[selectedCategory].map((p) => {
-                      const isSelected = selectedProduct === p.name;
-
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => setSelectedProduct(p.name)}
-                          style={{
-                            ...productButtonStyle,
-                            border: isSelected
-                              ? `2px solid ${COLORS.primary}`
-                              : `1px solid ${COLORS.border}`,
-                            background: isSelected ? "#fff7f5" : "white",
-                          }}
-                        >
-                          <div style={productNameStyle}>{p.name}</div>
-                          <div style={productPriceStyle}>${money(p.price)}</div>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div style={emptyBoxStyle}>No hay productos en esta categoría</div>
-                  )}
-                </div>
-              </>
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
 
           <div style={panelStyle}>
@@ -373,41 +309,6 @@ const panelTitleStyle: React.CSSProperties = {
 const panelSubtitleStyle: React.CSSProperties = {
   margin: "6px 0 16px 0",
   color: COLORS.muted,
-  fontSize: 14,
-};
-
-const categoryGridStyle: React.CSSProperties = {
-  display: "grid",
-  gap: 12,
-};
-
-const categoryButtonStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "18px 16px",
-  borderRadius: 18,
-  border: `1px solid ${COLORS.border}`,
-  background: "white",
-  color: COLORS.text,
-  cursor: "pointer",
-  fontWeight: 800,
-  fontSize: 18,
-};
-
-const backButtonStyle: React.CSSProperties = {
-  width: "100%",
-  padding: "14px 16px",
-  borderRadius: 16,
-  border: `1px solid ${COLORS.border}`,
-  background: "white",
-  color: COLORS.text,
-  cursor: "pointer",
-  fontWeight: 700,
-  marginBottom: 12,
-};
-
-const selectedCategoryStyle: React.CSSProperties = {
-  color: COLORS.muted,
-  marginBottom: 12,
   fontSize: 14,
 };
 
