@@ -62,7 +62,13 @@ const COLORS = {
 function money(value?: number | null) {
   return Number(value || 0).toFixed(2);
 }
+function shortId(id: string) {
+  return id.slice(0, 6);
+}
 
+function ticketFolio(id: string) {
+  return `TK-${shortId(id)}`;
+}
 function todayDateString() {
   const d = new Date();
   const y = d.getFullYear();
@@ -154,7 +160,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   if (!qRaw) return tickets;
 
   const q = qRaw.toLowerCase();
-  const normalizedId = q.replace(/^tk-/i, "").trim();
+  const normalizedId = q.replace(/^tk-/i, "").slice(0, 6).trim();
 
   return tickets.filter((ticket) => {
     const id = String(ticket.id).toLowerCase();
@@ -747,7 +753,7 @@ if (cashError) {
   onKeyDown={(e) => {
     if (e.key === "Enter") {
       const raw = ticketSearch.trim().toLowerCase();
-      const normalized = raw.replace(/^tk-/i, "").trim();
+      const normalized = raw.replace(/^tk-/i, "").slice(0, 6).trim();
 
       const found = tickets.find((ticket) =>
         String(ticket.id).toLowerCase() === normalized
@@ -774,7 +780,7 @@ if (cashError) {
                           style={searchResultCardStyle}
                         >
                           <div style={{ textAlign: "left", minWidth: 0 }}>
-                            <div style={searchTitleStyle}>{ticket.id}</div>
+                            <div style={searchTitleStyle}>{ticketFolio(ticket.id)}</div>
                             <div style={searchMetaStyle}>
                               Cliente: {ticket.customer_name || "Mostrador"}
                             </div>
@@ -807,7 +813,7 @@ if (cashError) {
                   <>
                     <div style={ticketHeaderStyle}>
                       <div>
-                        <div style={ticketTitleStyle}>{selectedTicket.id}</div>
+                        <div style={ticketTitleStyle}>{ticketFolio(selectedTicket.id)}</div>
                         <div style={ticketMetaStyle}>
                           Cliente: <b>{selectedTicket.customer_name || "Mostrador"}</b>
                         </div>
