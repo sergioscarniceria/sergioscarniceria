@@ -25,7 +25,9 @@ type Product = {
 type CartItem = {
   name: string;
   price: number;
+  sale_type: "kg" | "pieza";
   kilos: number;
+  quantity: number;
 };
 
 const COLORS = {
@@ -205,14 +207,40 @@ export default function NuevoPedidoPage() {
     setNewCustomerAddress("");
   }
 
-  function addProduct(product: Product, mode: "kg" | "half" | "money") {
+      function addProduct(product: Product, mode: "kg" | "half" | "money" | "piece") {
     if (!selectedCustomer) {
       alert("Primero selecciona un cliente");
       return;
     }
 
-    let kilos = 1;
     const price = getPrice(product);
+
+    if (mode === "piece") {
+      const quantityText = prompt(`¿Cuántas piezas de ${product.name}?`);
+      if (!quantityText) return;
+
+      const quantity = Number(quantityText);
+
+      if (!quantity || quantity <= 0) {
+        alert("Escribe una cantidad válida de piezas");
+        return;
+      }
+
+      setCart((prev) => [
+        ...prev,
+        {
+          name: product.name,
+          price,
+          sale_type: "pieza",
+          kilos: 0,
+          quantity,
+        },
+      ]);
+
+      return;
+    }
+
+    let kilos = 1;
 
     if (mode === "half") kilos = 0.5;
 
@@ -231,7 +259,9 @@ export default function NuevoPedidoPage() {
       {
         name: product.name,
         price,
+        sale_type: "kg",
         kilos,
+        quantity: 0,
       },
     ]);
   }
@@ -240,10 +270,11 @@ export default function NuevoPedidoPage() {
     setCart((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateCartItemKilos(index: number, delta: number) {
+    function updateCartItemKilos(index: number, delta: number) {
     setCart((prev) =>
       prev.flatMap((item, i) => {
         if (i !== index) return [item];
+        if (item.sale_type !== "kg") return [item];
 
         const nextKilos = Number((item.kilos + delta).toFixed(3));
         if (nextKilos <= 0) return [];
@@ -252,7 +283,19 @@ export default function NuevoPedidoPage() {
       })
     );
   }
+  function updateCartItemQuantity(index: number, delta: number) {
+    setCart((prev) =>
+      prev.flatMap((item, i) => {
+        if (i !== index) return [item];
+        if (item.sale_type !== "pieza") return [item];
 
+        const nextQuantity = item.quantity + delta;
+        if (nextQuantity <= 0) return [];
+
+        return [{ ...item, quantity: nextQuantity }];
+      })
+    );
+  }
   function clearOrder() {
     const confirmed = window.confirm("¿Quieres limpiar todo el pedido actual?");
     if (!confirmed) return;
@@ -261,14 +304,24 @@ export default function NuevoPedidoPage() {
     setNotes("");
   }
 
-  function cartTotal() {
+    function cartTotal() {
     return cart.reduce((acc, item) => {
+      if (item.sale_type === "pieza") return acc;
       return acc + Number(item.price || 0) * Number(item.kilos || 0);
     }, 0);
   }
 
-  function totalKilos() {
-    return cart.reduce((acc, item) => acc + Number(item.kilos || 0), 0);
+   function totalKilos() {
+    return cart.reduce((acc, item) => {
+      if (item.sale_type !== "kg") return acc;
+      return acc + Number(item.kilos || 0);
+    }, 0);
+  }
+    function totalPieces() {
+    return cart.reduce((acc, item) => {
+      if (item.sale_type !== "pieza") return acc;
+      return acc + Number(item.quantity || 0);
+    }, 0);
   }
 
   async function createPhoneOrder() {
@@ -343,11 +396,15 @@ export default function NuevoPedidoPage() {
       return;
     }
 
-    const items = cart.map((item) => ({
+        const items = cart.map((item) => ({
       order_id: order.id,
       product: item.name,
-      kilos: item.kilos,
+      kilos: item.sale_type === "kg" ? item.kilos : 0,
       price: item.price,
+      sale_type: item.sale_type,
+      quantity: item.sale_type === "pieza" ? item.quantity : null,
+      prepared_kilos: null,
+      is_ready: false,
     }));
 
     const { error: itemsError } = await supabase.from("order_items").insert(items);
@@ -655,12 +712,15 @@ export default function NuevoPedidoPage() {
                             </div>
                           </div>
 
-                          <div style={productButtonsWrapStyle}>
+                                                    <div style={productButtonsWrapStyle}>
                             <button onClick={() => addProduct(product, "kg")} style={miniLightButtonStyle}>
                               +1 kg
                             </button>
                             <button onClick={() => addProduct(product, "half")} style={miniLightButtonStyle}>
                               +0.5
+                            </button>
+                            <button onClick={() => addProduct(product, "piece")} style={miniLightButtonStyle}>
+                              Pzas
                             </button>
                             <button onClick={() => addProduct(product, "money")} style={miniDarkButtonStyle}>
                               $
@@ -697,12 +757,15 @@ export default function NuevoPedidoPage() {
                           ) : null}
                         </div>
 
-                        <div style={productButtonsWrapStyle}>
+                                                <div style={productButtonsWrapStyle}>
                           <button onClick={() => addProduct(product, "kg")} style={miniLightButtonStyle}>
                             +1 kg
                           </button>
                           <button onClick={() => addProduct(product, "half")} style={miniLightButtonStyle}>
                             +0.5
+                          </button>
+                          <button onClick={() => addProduct(product, "piece")} style={miniLightButtonStyle}>
+                            Pzas
                           </button>
                           <button onClick={() => addProduct(product, "money")} style={miniDarkButtonStyle}>
                             $
@@ -755,7 +818,7 @@ export default function NuevoPedidoPage() {
                 </div>
               )}
 
-              <div style={summaryStatsWrapStyle}>
+                          <div style={summaryStatsWrapStyle}>
                 <div style={summaryStatCardStyle}>
                   <div style={summaryStatLabelStyle}>Artículos</div>
                   <div style={summaryStatValueStyle}>{cart.length}</div>
@@ -764,6 +827,11 @@ export default function NuevoPedidoPage() {
                 <div style={summaryStatCardStyle}>
                   <div style={summaryStatLabelStyle}>Kilos totales</div>
                   <div style={summaryStatValueStyle}>{totalKilos().toFixed(2)}</div>
+                </div>
+
+                <div style={summaryStatCardStyle}>
+                  <div style={summaryStatLabelStyle}>Piezas totales</div>
+                  <div style={summaryStatValueStyle}>{totalPieces()}</div>
                 </div>
               </div>
 
@@ -787,40 +855,68 @@ export default function NuevoPedidoPage() {
                 </div>
               ) : (
                 <>
-                  <div style={{ marginTop: 12 }}>
+                                    <div style={{ marginTop: 12 }}>
                     {cart.map((item, index) => (
                       <div key={index} style={cartRowStyle}>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text }}>{item.name}</div>
-                          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
-                            {item.kilos} kg · ${item.price.toFixed(2)}/kg
-                          </div>
+
+                          {item.sale_type === "kg" ? (
+                            <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+                              {item.kilos} kg · ${item.price.toFixed(2)}/kg
+                            </div>
+                          ) : (
+                            <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+                              {item.quantity} pieza{item.quantity === 1 ? "" : "s"} · se pesa en producción
+                            </div>
+                          )}
 
                           <div style={cartActionsRowStyle}>
-                            <button
-                              onClick={() => updateCartItemKilos(index, 1)}
-                              style={cartMiniButtonStyle}
-                            >
-                              +1 kg
-                            </button>
-                            <button
-                              onClick={() => updateCartItemKilos(index, 0.5)}
-                              style={cartMiniButtonStyle}
-                            >
-                              +0.5
-                            </button>
-                            <button
-                              onClick={() => updateCartItemKilos(index, -0.5)}
-                              style={cartMiniButtonStyle}
-                            >
-                              -0.5
-                            </button>
+                            {item.sale_type === "kg" ? (
+                              <>
+                                <button
+                                  onClick={() => updateCartItemKilos(index, 1)}
+                                  style={cartMiniButtonStyle}
+                                >
+                                  +1 kg
+                                </button>
+                                <button
+                                  onClick={() => updateCartItemKilos(index, 0.5)}
+                                  style={cartMiniButtonStyle}
+                                >
+                                  +0.5
+                                </button>
+                                <button
+                                  onClick={() => updateCartItemKilos(index, -0.5)}
+                                  style={cartMiniButtonStyle}
+                                >
+                                  -0.5
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => updateCartItemQuantity(index, 1)}
+                                  style={cartMiniButtonStyle}
+                                >
+                                  +1 pza
+                                </button>
+                                <button
+                                  onClick={() => updateCartItemQuantity(index, -1)}
+                                  style={cartMiniButtonStyle}
+                                >
+                                  -1 pza
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
 
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                            ${(item.kilos * item.price).toFixed(2)}
+                            {item.sale_type === "kg"
+                              ? `$${(item.kilos * item.price).toFixed(2)}`
+                              : "Se pesa después"}
                           </div>
 
                           <button
@@ -834,8 +930,8 @@ export default function NuevoPedidoPage() {
                     ))}
                   </div>
 
-                  <div style={totalBoxStyle}>
-                    <span>Total</span>
+                                    <div style={totalBoxStyle}>
+                    <span>Total estimado</span>
                     <span>${cartTotal().toFixed(2)}</span>
                   </div>
 
@@ -1352,7 +1448,7 @@ const totalBoxStyle: React.CSSProperties = {
 
 const summaryStatsWrapStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
   gap: 10,
   marginTop: 12,
 };
