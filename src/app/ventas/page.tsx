@@ -39,16 +39,27 @@ function money(value?: number | null) {
   return Number(value || 0).toFixed(2);
 }
 
+function shortId(id: string) {
+  return id.slice(0, 6);
+}
+
+function ticketFolio(id: string) {
+  return `TK-${shortId(id)}`;
+}
+
 export default function VentasPage() {
   const supabase = getSupabaseClient();
 
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [kilos, setKilos] = useState("");
+  const [lastSavedFolio, setLastSavedFolio] = useState("");
 
   useEffect(() => {
     loadProducts();
@@ -132,8 +143,8 @@ export default function VentasPage() {
       {
         id: makeId(),
         product: product.name,
-        kilos: cleanKilos,
-        price: Number(product.price || 0),
+        kilos: Number(cleanKilos.toFixed(3)),
+        price: Number(Number(product.price || 0).toFixed(2)),
       },
     ]);
 
@@ -142,6 +153,66 @@ export default function VentasPage() {
 
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
+  }
+
+  async function saveTicket() {
+    if (items.length === 0) {
+      alert("Todavía no agregas productos");
+      return;
+    }
+
+    setSaving(true);
+
+    const { data: orderData, error: orderError } = await supabase
+      .from("orders")
+      .insert([
+        {
+          customer_name: "MOSTRADOR",
+          status: "pendiente",
+          source: "mostrador",
+          payment_status: "pendiente",
+          notes: null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (orderError || !orderData) {
+      console.log(orderError);
+      alert("No se pudo guardar la orden");
+      setSaving(false);
+      return;
+    }
+
+    const itemsPayload = items.map((item) => ({
+      order_id: orderData.id,
+      product: item.product,
+      kilos: Number(Number(item.kilos || 0).toFixed(3)),
+      price: Number(Number(item.price || 0).toFixed(2)),
+    }));
+
+    const { error: itemsError } = await supabase
+      .from("order_items")
+      .insert(itemsPayload);
+
+    if (itemsError) {
+      console.log(itemsError);
+      alert("La orden se guardó, pero fallaron los renglones");
+      setSaving(false);
+      return;
+    }
+
+    const folio = ticketFolio(orderData.id);
+
+    setLastSavedFolio(folio);
+    setItems([]);
+    setSelectedProduct("");
+    setSelectedCategory(null);
+    setSearch("");
+    setKilos("");
+    setSaving(false);
+
+    alert(`Ticket guardado correctamente: ${folio}`);
   }
 
   const total = useMemo(() => {
@@ -363,13 +434,22 @@ export default function VentasPage() {
                 <span>Producto activo</span>
                 <b>{selectedProduct || "-"}</b>
               </div>
+
+              <div style={summaryRowStyle}>
+                <span>Último folio</span>
+                <b>{lastSavedFolio || "-"}</b>
+              </div>
             </div>
 
             <button
-              style={printButtonStyle}
-              onClick={() => alert("Aquí después conectamos el ticket real")}
+              style={{
+                ...printButtonStyle,
+                opacity: saving ? 0.7 : 1,
+              }}
+              disabled={saving}
+              onClick={saveTicket}
             >
-              Imprimir ticket
+              {saving ? "Guardando..." : "Imprimir ticket"}
             </button>
           </div>
         </div>
