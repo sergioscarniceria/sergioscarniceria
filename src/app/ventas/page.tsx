@@ -14,6 +14,7 @@ type Product = {
   id: string;
   name: string;
   price: number;
+  category: string | null;
 };
 
 const COLORS = {
@@ -45,6 +46,8 @@ export default function VentasPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [kilos, setKilos] = useState("");
 
   useEffect(() => {
@@ -56,7 +59,8 @@ export default function VentasPage() {
 
     const { data, error } = await supabase
       .from("products")
-      .select("id, name, price")
+      .select("id, name, price, category")
+      .order("category", { ascending: true })
       .order("name", { ascending: true });
 
     if (error) {
@@ -69,6 +73,39 @@ export default function VentasPage() {
     setProducts((data as Product[]) || []);
     setLoading(false);
   }
+
+  const groupedCategories = useMemo(() => {
+    const grouped: Record<string, Product[]> = {};
+
+    for (const product of products) {
+      const category = (product.category || "Complementos").trim();
+
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+
+      grouped[category].push(product);
+    }
+
+    return grouped;
+  }, [products]);
+
+  const categoryNames = useMemo(() => {
+    return Object.keys(groupedCategories);
+  }, [groupedCategories]);
+
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    if (!q) {
+      if (!selectedCategory) return [];
+      return groupedCategories[selectedCategory] || [];
+    }
+
+    return products.filter((product) =>
+      product.name.toLowerCase().includes(q)
+    );
+  }, [search, selectedCategory, groupedCategories, products]);
 
   function addItem() {
     const cleanKilos = Number(kilos);
@@ -135,35 +172,119 @@ export default function VentasPage() {
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Productos</h2>
             <p style={panelSubtitleStyle}>
-              Lista real conectada a Supabase
+              Categorías + buscador para encontrar rápido
             </p>
 
-            <div style={productListStyle}>
-              {products.length === 0 ? (
-                <div style={emptyBoxStyle}>No hay productos disponibles</div>
-              ) : (
-                products.map((p) => {
-                  const isSelected = selectedProduct === p.name;
+            <input
+              placeholder="Buscar producto"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ ...inputStyle, marginBottom: 14 }}
+            />
 
-                  return (
+            {!search.trim() ? (
+              <>
+                {!selectedCategory ? (
+                  <div style={categoryGridStyle}>
+                    {categoryNames.length === 0 ? (
+                      <div style={emptyBoxStyle}>No hay categorías disponibles</div>
+                    ) : (
+                      categoryNames.map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => {
+                            setSelectedCategory(cat);
+                            setSelectedProduct("");
+                          }}
+                          style={categoryButtonStyle}
+                        >
+                          {cat}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : (
+                  <>
                     <button
-                      key={p.id}
-                      onClick={() => setSelectedProduct(p.name)}
-                      style={{
-                        ...productButtonStyle,
-                        border: isSelected
-                          ? `2px solid ${COLORS.primary}`
-                          : `1px solid ${COLORS.border}`,
-                        background: isSelected ? "#fff7f5" : "white",
+                      onClick={() => {
+                        setSelectedCategory(null);
+                        setSelectedProduct("");
                       }}
+                      style={backButtonStyle}
                     >
-                      <div style={productNameStyle}>{p.name}</div>
-                      <div style={productPriceStyle}>${money(p.price)}</div>
+                      ← Volver a categorías
                     </button>
-                  );
-                })
-              )}
-            </div>
+
+                    <div style={selectedCategoryStyle}>
+                      Categoría: <b>{selectedCategory}</b>
+                    </div>
+
+                    <div style={productListStyle}>
+                      {(groupedCategories[selectedCategory] || []).length === 0 ? (
+                        <div style={emptyBoxStyle}>No hay productos en esta categoría</div>
+                      ) : (
+                        (groupedCategories[selectedCategory] || []).map((p) => {
+                          const isSelected = selectedProduct === p.name;
+
+                          return (
+                            <button
+                              key={p.id}
+                              onClick={() => setSelectedProduct(p.name)}
+                              style={{
+                                ...productButtonStyle,
+                                border: isSelected
+                                  ? `2px solid ${COLORS.primary}`
+                                  : `1px solid ${COLORS.border}`,
+                                background: isSelected ? "#fff7f5" : "white",
+                              }}
+                            >
+                              <div style={productNameStyle}>{p.name}</div>
+                              <div style={productMetaStyle}>
+                                {p.category || "Complementos"}
+                              </div>
+                              <div style={productPriceStyle}>${money(p.price)}</div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div style={productListStyle}>
+                {filteredProducts.length === 0 ? (
+                  <div style={emptyBoxStyle}>No encontramos ese producto</div>
+                ) : (
+                  filteredProducts.map((p) => {
+                    const isSelected = selectedProduct === p.name;
+
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedCategory(p.category || "Complementos");
+                          setSelectedProduct(p.name);
+                        }}
+                        style={{
+                          ...productButtonStyle,
+                          border: isSelected
+                            ? `2px solid ${COLORS.primary}`
+                            : `1px solid ${COLORS.border}`,
+                          background: isSelected ? "#fff7f5" : "white",
+                        }}
+                      >
+                        <div style={productNameStyle}>{p.name}</div>
+                        <div style={productMetaStyle}>
+                          {p.category || "Complementos"}
+                        </div>
+                        <div style={productPriceStyle}>${money(p.price)}</div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
 
           <div style={panelStyle}>
@@ -312,6 +433,41 @@ const panelSubtitleStyle: React.CSSProperties = {
   fontSize: 14,
 };
 
+const categoryGridStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 12,
+};
+
+const categoryButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "18px 16px",
+  borderRadius: 18,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 18,
+};
+
+const backButtonStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "14px 16px",
+  borderRadius: 16,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  cursor: "pointer",
+  fontWeight: 700,
+  marginBottom: 12,
+};
+
+const selectedCategoryStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  marginBottom: 12,
+  fontSize: 14,
+};
+
 const productListStyle: React.CSSProperties = {
   display: "grid",
   gap: 10,
@@ -329,6 +485,12 @@ const productNameStyle: React.CSSProperties = {
   fontWeight: 800,
   color: COLORS.text,
   fontSize: 18,
+};
+
+const productMetaStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  marginTop: 4,
+  fontSize: 13,
 };
 
 const productPriceStyle: React.CSSProperties = {
