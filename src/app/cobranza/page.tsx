@@ -164,11 +164,14 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   return tickets.filter((ticket) => {
     const id = String(ticket.id).toLowerCase();
+    const short = id.slice(0, 6);
+    const folio = `tk-${short}`;
     const name = (ticket.customer_name || "").toLowerCase();
 
     return (
       id.includes(q) ||
-      id.includes(normalizedId) ||
+      short.includes(normalizedId) ||
+      folio.includes(q) ||
       name.includes(q)
     );
   });
@@ -748,16 +751,36 @@ if (cashError) {
                 <input
   placeholder="Buscar por folio o cliente"
   value={ticketSearch}
-  onChange={(e) => setTicketSearch(e.target.value)}
+  onChange={(e) => {
+    const value = e.target.value;
+    setTicketSearch(value);
+
+    const raw = value.trim().toLowerCase();
+    const normalized = raw.replace(/^tk-/i, "").slice(0, 6).trim();
+
+    if (!normalized) return;
+
+    const found = tickets.find((ticket) => {
+      const id = String(ticket.id).toLowerCase();
+      const short = id.slice(0, 6);
+      return id === raw || short === normalized;
+    });
+
+    if (found) {
+      openTicket(found.id);
+    }
+  }}
   autoFocus
   onKeyDown={(e) => {
     if (e.key === "Enter") {
       const raw = ticketSearch.trim().toLowerCase();
       const normalized = raw.replace(/^tk-/i, "").slice(0, 6).trim();
 
-      const found = tickets.find((ticket) =>
-        String(ticket.id).toLowerCase() === normalized
-      );
+      const found = tickets.find((ticket) => {
+        const id = String(ticket.id).toLowerCase();
+        const short = id.slice(0, 6);
+        return id === raw || short === normalized;
+      });
 
       if (found) {
         openTicket(found.id);
