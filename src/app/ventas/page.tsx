@@ -30,6 +30,10 @@ type Ticket = {
     price: number;
   }[];
 };
+type Customer = {
+  id: string;
+  name: string;
+};
 
 const COLORS = {
   bg: "#f7f1e8",
@@ -119,6 +123,7 @@ export default function VentasPage() {
   const [saving, setSaving] = useState(false);
 
  const [products, setProducts] = useState<Product[]>([]);
+const [customers, setCustomers] = useState<Customer[]>([]);
 const [tickets, setTickets] = useState<Ticket[]>([]);
 const [items, setItems] = useState<Item[]>([]);
 const [selectedProduct, setSelectedProduct] = useState<string>("");
@@ -127,8 +132,12 @@ const [search, setSearch] = useState("");
 const [kilos, setKilos] = useState("");
 const [lastSavedFolio, setLastSavedFolio] = useState("");
 
+const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
+const [selectedCustomerId, setSelectedCustomerId] = useState("");
+
   useEffect(() => {
   loadProducts();
+  loadCustomers();
   loadTickets();
 
   const interval = setInterval(() => {
@@ -184,6 +193,20 @@ const [lastSavedFolio, setLastSavedFolio] = useState("");
   }
 
   setTickets((data as Ticket[]) || []);
+}
+
+async function loadCustomers() {
+  const { data, error } = await supabase
+    .from("customers")
+    .select("id, name")
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.log(error);
+    return;
+  }
+
+  setCustomers((data as Customer[]) || []);
 }
 
   const groupedCategories = useMemo(() => {
@@ -264,17 +287,30 @@ const [lastSavedFolio, setLastSavedFolio] = useState("");
 
     setSaving(true);
 
-    const { data: orderData, error: orderError } = await supabase
-      .from("orders")
-      .insert([
-        {
-          customer_name: "MOSTRADOR",
-          status: "pendiente",
-          source: "mostrador",
-          payment_status: "pendiente",
-          notes: null,
-        },
-      ])
+let customerName = "MOSTRADOR";
+let customerId: string | null = null;
+
+if (customerMode === "existente" && selectedCustomerId) {
+  const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
+
+  if (selectedCustomer) {
+    customerName = selectedCustomer.name;
+    customerId = selectedCustomer.id;
+  }
+}
+
+const { data: orderData, error: orderError } = await supabase
+  .from("orders")
+  .insert([
+    {
+      customer_id: customerId,
+      customer_name: customerName,
+      status: "pendiente",
+      source: "mostrador",
+      payment_status: "pendiente",
+      notes: null,
+    },
+  ])
       .select()
       .single();
 
@@ -305,12 +341,14 @@ const [lastSavedFolio, setLastSavedFolio] = useState("");
 
     const folio = ticketFolio(orderData.id);
 
-    setLastSavedFolio(folio);
+   setLastSavedFolio(folio);
 setItems([]);
 setSelectedProduct("");
 setSelectedCategory(null);
 setSearch("");
 setKilos("");
+setCustomerMode("general");
+setSelectedCustomerId("");
 setSaving(false);
 
 await loadTickets();
@@ -482,6 +520,61 @@ const paidTickets = useMemo(() => {
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Orden</h2>
             <p style={panelSubtitleStyle}>Vas armando el pedido en tiempo real</p>
+            <div style={fieldBlockStyle}>
+  <label style={fieldLabelStyle}>Cliente</label>
+
+  <div style={customerModeWrapStyle}>
+    <button
+      onClick={() => {
+        setCustomerMode("general");
+        setSelectedCustomerId("");
+      }}
+      style={{
+        ...customerModeButtonStyle,
+        background: customerMode === "general" ? COLORS.primary : "white",
+        color: customerMode === "general" ? "white" : COLORS.text,
+        border:
+          customerMode === "general"
+            ? "none"
+            : `1px solid ${COLORS.border}`,
+      }}
+    >
+      Público general
+    </button>
+
+    <button
+      onClick={() => setCustomerMode("existente")}
+      style={{
+        ...customerModeButtonStyle,
+        background: customerMode === "existente" ? COLORS.primary : "white",
+        color: customerMode === "existente" ? "white" : COLORS.text,
+        border:
+          customerMode === "existente"
+            ? "none"
+            : `1px solid ${COLORS.border}`,
+      }}
+    >
+      Cliente existente
+    </button>
+  </div>
+
+  {customerMode === "existente" ? (
+    <select
+      value={selectedCustomerId}
+      onChange={(e) => setSelectedCustomerId(e.target.value)}
+      style={inputStyle}
+    >
+      <option value="">Seleccionar cliente</option>
+      {customers.map((customer) => (
+        <option key={customer.id} value={customer.id}>
+          {customer.name}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <div style={customerHintStyle}>Se guardará como MOSTRADOR</div>
+  )}
+</div>
 
             <div style={selectedProductCardStyle}>
               <div style={selectedProductLabelStyle}>Producto seleccionado</div>
@@ -546,21 +639,30 @@ const paidTickets = useMemo(() => {
             </div>
 
             <div style={summaryMiniStyle}>
-              <div style={summaryRowStyle}>
-                <span>Renglones</span>
-                <b>{items.length}</b>
-              </div>
+  <div style={summaryRowStyle}>
+    <span>Cliente</span>
+    <b>
+      {customerMode === "existente"
+        ? customers.find((c) => c.id === selectedCustomerId)?.name || "Cliente existente"
+        : "MOSTRADOR"}
+    </b>
+  </div>
 
-              <div style={summaryRowStyle}>
-                <span>Producto activo</span>
-                <b>{selectedProduct || "-"}</b>
-              </div>
+  <div style={summaryRowStyle}>
+    <span>Renglones</span>
+    <b>{items.length}</b>
+  </div>
 
-              <div style={summaryRowStyle}>
-                <span>Último folio</span>
-                <b>{lastSavedFolio || "-"}</b>
-              </div>
-            </div>
+  <div style={summaryRowStyle}>
+    <span>Producto activo</span>
+    <b>{selectedProduct || "-"}</b>
+  </div>
+
+  <div style={summaryRowStyle}>
+    <span>Último folio</span>
+    <b>{lastSavedFolio || "-"}</b>
+  </div>
+</div>
 
             <button
               style={{
@@ -993,4 +1095,22 @@ const ticketStatusStyle: React.CSSProperties = {
 const ticketBottomStyle: React.CSSProperties = {
   marginTop: 8,
   color: COLORS.text,
+};
+const customerModeWrapStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+
+const customerModeButtonStyle: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const customerHintStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+  padding: "4px 2px",
 };
