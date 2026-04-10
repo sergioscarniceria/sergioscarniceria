@@ -16,6 +16,20 @@ type Product = {
   price: number;
   category: string | null;
 };
+type Ticket = {
+  id: string;
+  customer_name: string | null;
+  payment_status: string | null;
+  payment_method?: string | null;
+  created_at?: string | null;
+  source?: string | null;
+  order_items?: {
+    id: string;
+    product: string;
+    kilos: number;
+    price: number;
+  }[];
+};
 
 const COLORS = {
   bg: "#f7f1e8",
@@ -27,6 +41,7 @@ const COLORS = {
   primary: "#7b2218",
   primaryDark: "#5a190f",
   success: "#1f7a4d",
+  warning: "#a66a10",
   danger: "#b42318",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
@@ -46,24 +61,82 @@ function shortId(id: string) {
 function ticketFolio(id: string) {
   return `TK-${shortId(id)}`;
 }
+function formatHour(value?: string | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
 
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getTicketTotal(ticket: Ticket) {
+  return (ticket.order_items || []).reduce((acc, item) => {
+    return acc + Number(item.kilos || 0) * Number(item.price || 0);
+  }, 0);
+}
+
+function paymentBadgeStyle(status?: string | null): React.CSSProperties {
+  if (status === "pagado") {
+    return {
+      background: "rgba(31,122,77,0.12)",
+      color: COLORS.success,
+    };
+  }
+
+  if (status === "credito" || status === "credito_autorizado") {
+    return {
+      background: "rgba(166,106,16,0.12)",
+      color: COLORS.warning,
+    };
+  }
+
+  if (status === "cancelado") {
+    return {
+      background: "rgba(180,35,24,0.10)",
+      color: COLORS.danger,
+    };
+  }
+
+  return {
+    background: "rgba(53,92,125,0.12)",
+    color: COLORS.text,
+  };
+}
+
+function paymentStatusLabel(status?: string | null) {
+  if (status === "pagado") return "Pagado, entregar";
+  if (status === "credito" || status === "credito_autorizado") return "Crédito";
+  if (status === "cancelado") return "Cancelado";
+  return "Esperando pago";
+}
 export default function VentasPage() {
   const supabase = getSupabaseClient();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<string>("");
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [kilos, setKilos] = useState("");
-  const [lastSavedFolio, setLastSavedFolio] = useState("");
+ const [products, setProducts] = useState<Product[]>([]);
+const [tickets, setTickets] = useState<Ticket[]>([]);
+const [items, setItems] = useState<Item[]>([]);
+const [selectedProduct, setSelectedProduct] = useState<string>("");
+const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+const [search, setSearch] = useState("");
+const [kilos, setKilos] = useState("");
+const [lastSavedFolio, setLastSavedFolio] = useState("");
 
   useEffect(() => {
-    loadProducts();
-  }, []);
+  loadProducts();
+  loadTickets();
+
+  const interval = setInterval(() => {
+    loadTickets();
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, []);
 
   async function loadProducts() {
     setLoading(true);
@@ -84,6 +157,34 @@ export default function VentasPage() {
     setProducts((data as Product[]) || []);
     setLoading(false);
   }
+  async function loadTickets() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(`
+      id,
+      customer_name,
+      payment_status,
+      payment_method,
+      created_at,
+      source,
+      order_items (
+        id,
+        product,
+        kilos,
+        price
+      )
+    `)
+    .eq("source", "mostrador")
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    console.log(error);
+    return;
+  }
+
+  setTickets((data as Ticket[]) || []);
+}
 
   const groupedCategories = useMemo(() => {
     const grouped: Record<string, Product[]> = {};
@@ -205,19 +306,39 @@ export default function VentasPage() {
     const folio = ticketFolio(orderData.id);
 
     setLastSavedFolio(folio);
-    setItems([]);
-    setSelectedProduct("");
-    setSelectedCategory(null);
-    setSearch("");
-    setKilos("");
-    setSaving(false);
+setItems([]);
+setSelectedProduct("");
+setSelectedCategory(null);
+setSearch("");
+setKilos("");
+setSaving(false);
 
-    alert(`Ticket guardado correctamente: ${folio}`);
+await loadTickets();
+
+alert(`Ticket guardado correctamente: ${folio}`);
   }
 
   const total = useMemo(() => {
     return items.reduce((acc, item) => acc + item.kilos * item.price, 0);
   }, [items]);
+  const pendingTickets = useMemo(() => {
+  return tickets.filter(
+    (ticket) =>
+      ticket.payment_status !== "pagado" &&
+      ticket.payment_status !== "credito" &&
+      ticket.payment_status !== "credito_autorizado" &&
+      ticket.payment_status !== "cancelado"
+  );
+}, [tickets]);
+
+const paidTickets = useMemo(() => {
+  return tickets.filter(
+    (ticket) =>
+      ticket.payment_status === "pagado" ||
+      ticket.payment_status === "credito" ||
+      ticket.payment_status === "credito_autorizado"
+  );
+}, [tickets]);
 
   if (loading) {
     return (
@@ -452,6 +573,86 @@ export default function VentasPage() {
               {saving ? "Guardando..." : "Imprimir ticket"}
             </button>
           </div>
+          <div style={panelStyle}>
+  <h2 style={panelTitleStyle}>Tickets de mostrador</h2>
+  <p style={panelSubtitleStyle}>
+    Aquí mismo revisas si ya puedes entregar
+  </p>
+
+  <div style={ticketsSectionStyle}>
+    <div style={ticketsTitleStyle}>Pendientes de cobro</div>
+
+    {pendingTickets.length === 0 ? (
+      <div style={emptyBoxStyle}>No hay tickets pendientes</div>
+    ) : (
+      <div style={ticketsListStyle}>
+        {pendingTickets.map((ticket) => (
+          <div key={ticket.id} style={ticketCardStyle}>
+            <div style={ticketTopStyle}>
+              <div>
+                <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
+                <div style={ticketMetaStyle}>
+                  {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  ...ticketStatusStyle,
+                  ...paymentBadgeStyle(ticket.payment_status),
+                }}
+              >
+                {paymentStatusLabel(ticket.payment_status)}
+              </div>
+            </div>
+
+            <div style={ticketBottomStyle}>
+              <b>${money(getTicketTotal(ticket))}</b>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+
+  <div style={{ height: 14 }} />
+
+  <div style={ticketsSectionStyle}>
+    <div style={ticketsTitleStyle}>Ya pagados / crédito</div>
+
+    {paidTickets.length === 0 ? (
+      <div style={emptyBoxStyle}>Todavía no hay tickets pagados</div>
+    ) : (
+      <div style={ticketsListStyle}>
+        {paidTickets.map((ticket) => (
+          <div key={ticket.id} style={ticketCardStyle}>
+            <div style={ticketTopStyle}>
+              <div>
+                <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
+                <div style={ticketMetaStyle}>
+                  {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  ...ticketStatusStyle,
+                  ...paymentBadgeStyle(ticket.payment_status),
+                }}
+              >
+                {paymentStatusLabel(ticket.payment_status)}
+              </div>
+            </div>
+
+            <div style={ticketBottomStyle}>
+              <b>${money(getTicketTotal(ticket))}</b>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
         </div>
       </div>
     </div>
@@ -488,7 +689,7 @@ const subtitleStyle: React.CSSProperties = {
 
 const mainGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(320px, 1fr) minmax(360px, 1.1fr) minmax(300px, 0.9fr)",
+  gridTemplateColumns: "minmax(420px, 1.3fr) minmax(360px, 1fr) minmax(320px, 0.95fr)",
   gap: 20,
   alignItems: "start",
 };
@@ -737,4 +938,59 @@ const emptyBoxStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px dashed ${COLORS.border}`,
   color: COLORS.muted,
+};
+const ticketsSectionStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const ticketsTitleStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 16,
+};
+
+const ticketsListStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 10,
+};
+
+const ticketCardStyle: React.CSSProperties = {
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 16,
+  background: COLORS.bgSoft,
+  padding: 12,
+};
+
+const ticketTopStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 10,
+  alignItems: "flex-start",
+};
+
+const ticketFolioStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontWeight: 800,
+  fontSize: 16,
+};
+
+const ticketMetaStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+  marginTop: 4,
+};
+
+const ticketStatusStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 800,
+  textAlign: "center",
+  flexShrink: 0,
+};
+
+const ticketBottomStyle: React.CSSProperties = {
+  marginTop: 8,
+  color: COLORS.text,
 };
