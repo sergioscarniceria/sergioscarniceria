@@ -9,6 +9,10 @@ type OrderItem = {
   product: string;
   kilos: number;
   price: number;
+  sale_type?: "kg" | "pieza" | null;
+  quantity?: number | null;
+  prepared_kilos?: number | null;
+  is_ready?: boolean | null;
 };
 
 type Order = {
@@ -79,10 +83,10 @@ export default function ProduccionPage() {
 
     if (!ordersError) {
       const activeOrders = ((ordersData as Order[]) || []).filter((o) => {
-        const hasItems = (o.order_items || []).length > 0;
-        const isActive = o.status !== "terminado";
-        return hasItems && isActive;
-      });
+  const hasItems = (o.order_items || []).length > 0;
+  const isActive = o.status === "nuevo" || o.status === "proceso";
+  return hasItems && isActive;
+});
 
       setOrders(activeOrders);
     } else {
@@ -140,17 +144,65 @@ export default function ProduccionPage() {
   }
 
   async function deleteOrder(id: string) {
-    const supabase = getSupabaseClient();
-    setChangingId(id);
+  const supabase = getSupabaseClient();
 
-    await supabase.from("orders").delete().eq("id", id);
+  const order = orders.find((o) => o.id === id);
 
-    setChangingId(null);
-    loadData();
+  if (!order) {
+    alert("No se encontró el pedido.");
+    return;
   }
 
-  function total(order: Order) {
+  if (order.status !== "nuevo") {
+    alert("Solo se pueden eliminar pedidos nuevos.");
+    return;
+  }
+
+  const firstConfirm = window.confirm(
+    `¿Seguro que quieres eliminar el pedido de ${order.customer_name}?`
+  );
+
+  if (!firstConfirm) return;
+
+  const secondConfirm = window.confirm(
+    "Esta acción no se puede deshacer. ¿Eliminar definitivamente el pedido?"
+  );
+
+  if (!secondConfirm) return;
+
+  setChangingId(id);
+
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .delete()
+    .eq("order_id", id);
+
+  if (itemsError) {
+    console.log(itemsError);
+    alert("No se pudieron borrar los productos del pedido.");
+    setChangingId(null);
+    return;
+  }
+
+  const { error: orderError } = await supabase
+    .from("orders")
+    .delete()
+    .eq("id", id);
+
+  if (orderError) {
+    console.log(orderError);
+    alert("No se pudo eliminar el pedido.");
+    setChangingId(null);
+    return;
+  }
+
+  setChangingId(null);
+  loadData();
+}
+
+    function total(order: Order) {
     return (order.order_items || []).reduce((acc, item) => {
+      if (item.sale_type === "pieza") return acc;
       return acc + Number(item.kilos || 0) * Number(item.price || 0);
     }, 0);
   }
@@ -347,7 +399,11 @@ function Section({
                   </div>
                 </div>
 
-                <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
+                                <div style={totalBadgeStyle}>
+                  {(o.order_items || []).some((item) => item.sale_type === "pieza")
+                    ? "Por pesar"
+                    : `$${total(o).toFixed(2)}`}
+                </div>
               </div>
 
               {o.delivery_date ? (
@@ -356,14 +412,26 @@ function Section({
                 </div>
               ) : null}
 
-              <div style={itemsBoxStyle}>
+                           <div style={itemsBoxStyle}>
                 {(o.order_items || []).map((item) => (
                   <div key={item.id} style={itemRowStyle}>
                     <div style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
                       {item.product}
                     </div>
-                    <div style={{ color: COLORS.muted, flexShrink: 0 }}>
-                      {item.kilos} kg
+
+                    <div style={{ color: COLORS.muted, flexShrink: 0, textAlign: "right" }}>
+                      {item.sale_type === "pieza" ? (
+                        <>
+                          <div>
+                            {Number(item.quantity || 0)} pieza{Number(item.quantity || 0) === 1 ? "" : "s"}
+                          </div>
+                          <div style={{ fontSize: 12, marginTop: 4 }}>
+                            Se pesa en producción
+                          </div>
+                        </>
+                      ) : (
+                        <div>{item.kilos} kg</div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -434,16 +502,19 @@ function Section({
                 </button>
 
                 <button
-                  onClick={() => deleteOrder(o.id)}
-                  disabled={changingId === o.id}
-                  style={{
-                    ...actionButtonStyle,
-                    background: "rgba(180,35,24,0.10)",
-                    color: COLORS.danger,
-                  }}
-                >
-                  Borrar
-                </button>
+  onClick={() => deleteOrder(o.id)}
+  disabled={changingId === o.id || o.status !== "nuevo"}
+  style={{
+    ...actionButtonStyle,
+    background: o.status === "nuevo" ? "rgba(180,35,24,0.10)" : "rgba(122,90,82,0.10)",
+    color: o.status === "nuevo" ? COLORS.danger : COLORS.muted,
+    cursor: changingId === o.id || o.status !== "nuevo" ? "not-allowed" : "pointer",
+    opacity: changingId === o.id || o.status !== "nuevo" ? 0.6 : 1,
+  }}
+  title={o.status !== "nuevo" ? "Solo se pueden eliminar pedidos nuevos" : "Eliminar pedido"}
+>
+  Eliminar
+</button>
               </div>
             </div>
           ))}
