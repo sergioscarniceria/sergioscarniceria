@@ -20,6 +20,7 @@ type Order = {
   customer_name: string;
   status: string;
   notes: string;
+  payment_status?: string | null;
   butcher_name?: string | null;
   prepared_by?: string | null;
   created_at?: string;
@@ -294,6 +295,33 @@ export default function ProduccionPage() {
       color: COLORS.success,
     };
   }
+  function paymentBadgeStyle(paymentStatus?: string | null): React.CSSProperties {
+  if (paymentStatus === "pagado") {
+    return {
+      background: "rgba(31,122,77,0.12)",
+      color: COLORS.success,
+    };
+  }
+
+  if (paymentStatus === "credito" || paymentStatus === "credito_autorizado") {
+    return {
+      background: "rgba(166,106,16,0.12)",
+      color: COLORS.warning,
+    };
+  }
+
+  if (paymentStatus === "cancelado") {
+    return {
+      background: "rgba(180,35,24,0.10)",
+      color: COLORS.danger,
+    };
+  }
+
+  return {
+    background: "rgba(53,92,125,0.12)",
+    color: COLORS.info,
+  };
+}
 function isOrderReady(o: Order) {
   return (o.order_items || []).every((item) => {
     if (!item.is_ready) return false;
@@ -412,6 +440,7 @@ function isOrderReady(o: Order) {
           getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
+          paymentBadgeStyle={paymentBadgeStyle}
           isOrderReady={isOrderReady}
         />
 
@@ -434,6 +463,7 @@ function isOrderReady(o: Order) {
           getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
+          paymentBadgeStyle={paymentBadgeStyle}
           isOrderReady={isOrderReady}
         />
       </div>
@@ -458,6 +488,7 @@ function Section({
   getItemDisplayTotal,
   total,
   statusBadgeStyle,
+  paymentBadgeStyle,
   isOrderReady,
 }: {
   title: string;
@@ -476,6 +507,7 @@ function Section({
   getItemDisplayTotal: (item: OrderItem) => number | null;
   total: (order: Order) => number;
   statusBadgeStyle: (status: string) => React.CSSProperties;
+    paymentBadgeStyle: (paymentStatus?: string | null) => React.CSSProperties;
     isOrderReady: (o: Order) => boolean;
 }) {
   return (
@@ -502,6 +534,15 @@ function Section({
                   >
                     {o.status}
                   </div>
+                  <div
+  style={{
+    ...statusPillStyle,
+    ...paymentBadgeStyle(o.payment_status),
+    marginTop: 8,
+  }}
+>
+  pago: {o.payment_status || "pendiente"}
+</div>
                 </div>
 
                                 <div style={totalBadgeStyle}>
