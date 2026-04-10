@@ -413,7 +413,7 @@ const paidTickets = useMemo(() => {
         </div>
 
         <div style={mainGridStyle}>
-          <div style={panelStyle}>
+          <div style={productsPanelStyle}>
             <h2 style={panelTitleStyle}>Productos</h2>
             <p style={panelSubtitleStyle}>
               Categorías + buscador para encontrar rápido
@@ -818,7 +818,7 @@ const subtitleStyle: React.CSSProperties = {
 
 const mainGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(420px, 1.3fr) minmax(360px, 1fr) minmax(320px, 0.95fr)",
+  gridTemplateColumns: "minmax(760px, 1.9fr) minmax(320px, 0.85fr) minmax(320px, 0.85fr)",
   gap: 20,
   alignItems: "start",
 };
@@ -829,6 +829,10 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 24,
   padding: 18,
   boxShadow: COLORS.shadow,
+};
+const productsPanelStyle: React.CSSProperties = {
+  ...panelStyle,
+  minHeight: 780,
 };
 
 const panelTitleStyle: React.CSSProperties = {
@@ -850,14 +854,14 @@ const categoryGridStyle: React.CSSProperties = {
 
 const categoryButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "18px 16px",
-  borderRadius: 18,
+  padding: "24px 18px",
+  borderRadius: 20,
   border: `1px solid ${COLORS.border}`,
   background: "white",
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 800,
-  fontSize: 18,
+  fontSize: 22,
 };
 
 const backButtonStyle: React.CSSProperties = {
@@ -880,21 +884,24 @@ const selectedCategoryStyle: React.CSSProperties = {
 
 const productListStyle: React.CSSProperties = {
   display: "grid",
-  gap: 10,
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: 12,
 };
 
 const productButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "14px 16px",
-  borderRadius: 16,
+  padding: "18px 18px",
+  borderRadius: 18,
   cursor: "pointer",
   textAlign: "left",
+  minHeight: 110,
 };
 
 const productNameStyle: React.CSSProperties = {
   fontWeight: 800,
   color: COLORS.text,
-  fontSize: 18,
+  fontSize: 22,
+  lineHeight: 1.2,
 };
 
 const productMetaStyle: React.CSSProperties = {
@@ -904,9 +911,10 @@ const productMetaStyle: React.CSSProperties = {
 };
 
 const productPriceStyle: React.CSSProperties = {
-  color: COLORS.muted,
-  marginTop: 6,
-  fontSize: 14,
+  color: COLORS.primary,
+  marginTop: 8,
+  fontSize: 18,
+  fontWeight: 800,
 };
 
 const selectedProductCardStyle: React.CSSProperties = {
@@ -943,26 +951,26 @@ const fieldLabelStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: 14,
+  padding: 16,
   borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
   background: "white",
   color: COLORS.text,
-  fontSize: 16,
+  fontSize: 18,
 };
 
 const addButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "14px 16px",
+  padding: "18px 16px",
   borderRadius: 16,
   border: "none",
   background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
   color: "white",
   cursor: "pointer",
   fontWeight: 800,
-  fontSize: 16,
+  fontSize: 18,
 };
 
 const orderListStyle: React.CSSProperties = {
