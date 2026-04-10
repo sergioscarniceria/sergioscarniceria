@@ -294,7 +294,17 @@ export default function ProduccionPage() {
       color: COLORS.success,
     };
   }
+function isOrderReady(o: Order) {
+  return (o.order_items || []).every((item) => {
+    if (!item.is_ready) return false;
 
+    if (item.sale_type === "pieza") {
+      return Number(item.prepared_kilos || 0) > 0;
+    }
+
+    return true;
+  });
+}
   const butcherStats = useMemo(() => {
     const counts: Record<string, number> = {};
 
@@ -402,6 +412,7 @@ export default function ProduccionPage() {
           getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
+          isOrderReady={isOrderReady}
         />
 
         <div style={{ height: 24 }} />
@@ -423,6 +434,7 @@ export default function ProduccionPage() {
           getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
+          isOrderReady={isOrderReady}
         />
       </div>
     </div>
@@ -446,6 +458,7 @@ function Section({
   getItemDisplayTotal,
   total,
   statusBadgeStyle,
+  isOrderReady,
 }: {
   title: string;
   subtitle: string;
@@ -463,6 +476,7 @@ function Section({
   getItemDisplayTotal: (item: OrderItem) => number | null;
   total: (order: Order) => number;
   statusBadgeStyle: (status: string) => React.CSSProperties;
+    isOrderReady: (o: Order) => boolean;
 }) {
   return (
     <div style={sectionCardStyle}>
@@ -654,16 +668,21 @@ function Section({
                 </button>
 
                 <button
-                  onClick={() => updateStatus(o.id, "terminado")}
-                  disabled={changingId === o.id}
-                  style={{
-                    ...actionButtonStyle,
-                    background: "rgba(31,122,77,0.12)",
-                    color: COLORS.success,
-                  }}
-                >
-                  Terminado
-                </button>
+  onClick={() => updateStatus(o.id, "terminado")}
+  disabled={changingId === o.id || !isOrderReady(o)}
+  style={{
+    ...actionButtonStyle,
+    background: isOrderReady(o)
+      ? "rgba(31,122,77,0.12)"
+      : "rgba(122,90,82,0.10)",
+    color: isOrderReady(o) ? COLORS.success : COLORS.muted,
+    cursor: isOrderReady(o) ? "pointer" : "not-allowed",
+    opacity: changingId === o.id || !isOrderReady(o) ? 0.6 : 1,
+  }}
+  title={!isOrderReady(o) ? "Faltan productos por preparar o pesar" : ""}
+>
+  Terminado
+</button>
 
                 <button
   onClick={() => deleteOrder(o.id)}
