@@ -59,9 +59,11 @@ function getTodayDateString() {
 }
 
 export default function ProduccionPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
+   const [orders, setOrders] = useState<Order[]>([]);
   const [butchers, setButchers] = useState<Butcher[]>([]);
   const [changingId, setChangingId] = useState<string | null>(null);
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [preparedKilosDrafts, setPreparedKilosDrafts] = useState<Record<string, string>>({});
 
   async function loadData() {
     const supabase = getSupabaseClient();
@@ -142,7 +144,69 @@ export default function ProduccionPage() {
     setChangingId(null);
     loadData();
   }
+  async function savePreparedKilos(itemId: string) {
+    const supabase = getSupabaseClient();
+    const rawValue = preparedKilosDrafts[itemId];
 
+    if (!rawValue?.trim()) {
+      alert("Escribe los kilos reales.");
+      return;
+    }
+
+    const preparedKilos = Number(rawValue);
+
+    if (!preparedKilos || preparedKilos <= 0) {
+      alert("Escribe un peso válido.");
+      return;
+    }
+
+    setSavingItemId(itemId);
+
+    const { error } = await supabase
+      .from("order_items")
+      .update({ prepared_kilos: preparedKilos })
+      .eq("id", itemId);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudieron guardar los kilos reales.");
+      setSavingItemId(null);
+      return;
+    }
+
+    setSavingItemId(null);
+    loadData();
+  }
+
+  async function toggleItemReady(itemId: string, nextValue: boolean) {
+    const supabase = getSupabaseClient();
+    setSavingItemId(itemId);
+
+    const { error } = await supabase
+      .from("order_items")
+      .update({ is_ready: nextValue })
+      .eq("id", itemId);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo actualizar el estado del producto.");
+      setSavingItemId(null);
+      return;
+    }
+
+    setSavingItemId(null);
+    loadData();
+  }
+
+  function getItemDisplayTotal(item: OrderItem) {
+    if (item.sale_type === "pieza") {
+      const prepared = Number(item.prepared_kilos || 0);
+      if (!prepared) return null;
+      return prepared * Number(item.price || 0);
+    }
+
+    return Number(item.kilos || 0) * Number(item.price || 0);
+  }
   async function deleteOrder(id: string) {
   const supabase = getSupabaseClient();
 
@@ -200,9 +264,12 @@ export default function ProduccionPage() {
   loadData();
 }
 
-    function total(order: Order) {
+      function total(order: Order) {
     return (order.order_items || []).reduce((acc, item) => {
-      if (item.sale_type === "pieza") return acc;
+      if (item.sale_type === "pieza") {
+        return acc + Number(item.prepared_kilos || 0) * Number(item.price || 0);
+      }
+
       return acc + Number(item.kilos || 0) * Number(item.price || 0);
     }, 0);
   }
@@ -318,30 +385,42 @@ export default function ProduccionPage() {
           </div>
         </div>
 
-        <Section
+                <Section
           title="Producción de hoy"
           subtitle="Estos son los pedidos que deben trabajarse hoy"
           orders={todayOrders}
           butchers={butchers}
           changingId={changingId}
+          savingItemId={savingItemId}
+          preparedKilosDrafts={preparedKilosDrafts}
+          setPreparedKilosDrafts={setPreparedKilosDrafts}
           assignButcher={assignButcher}
           updateStatus={updateStatus}
           deleteOrder={deleteOrder}
+          savePreparedKilos={savePreparedKilos}
+          toggleItemReady={toggleItemReady}
+          getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
         />
 
         <div style={{ height: 24 }} />
 
-        <Section
+                <Section
           title="Pedidos próximos"
           subtitle="Pedidos futuros apartados para no revolver la operación del día"
           orders={upcomingOrders}
           butchers={butchers}
           changingId={changingId}
+          savingItemId={savingItemId}
+          preparedKilosDrafts={preparedKilosDrafts}
+          setPreparedKilosDrafts={setPreparedKilosDrafts}
           assignButcher={assignButcher}
           updateStatus={updateStatus}
           deleteOrder={deleteOrder}
+          savePreparedKilos={savePreparedKilos}
+          toggleItemReady={toggleItemReady}
+          getItemDisplayTotal={getItemDisplayTotal}
           total={total}
           statusBadgeStyle={statusBadgeStyle}
         />
@@ -356,9 +435,15 @@ function Section({
   orders,
   butchers,
   changingId,
+  savingItemId,
+  preparedKilosDrafts,
+  setPreparedKilosDrafts,
   assignButcher,
   updateStatus,
   deleteOrder,
+  savePreparedKilos,
+  toggleItemReady,
+  getItemDisplayTotal,
   total,
   statusBadgeStyle,
 }: {
@@ -367,9 +452,15 @@ function Section({
   orders: Order[];
   butchers: Butcher[];
   changingId: string | null;
+  savingItemId: string | null;
+  preparedKilosDrafts: Record<string, string>;
+  setPreparedKilosDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   assignButcher: (orderId: string, butcherName: string) => void;
   updateStatus: (id: string, status: string) => void;
   deleteOrder: (id: string) => void;
+  savePreparedKilos: (itemId: string) => void;
+  toggleItemReady: (itemId: string, nextValue: boolean) => void;
+  getItemDisplayTotal: (item: OrderItem) => number | null;
   total: (order: Order) => number;
   statusBadgeStyle: (status: string) => React.CSSProperties;
 }) {
@@ -412,29 +503,102 @@ function Section({
                 </div>
               ) : null}
 
-                           <div style={itemsBoxStyle}>
-                {(o.order_items || []).map((item) => (
-                  <div key={item.id} style={itemRowStyle}>
-                    <div style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
-                      {item.product}
-                    </div>
+                                        <div style={itemsBoxStyle}>
+                {(o.order_items || []).map((item) => {
+                  const itemTotal = getItemDisplayTotal(item);
 
-                    <div style={{ color: COLORS.muted, flexShrink: 0, textAlign: "right" }}>
+                  return (
+                    <div key={item.id} style={itemCardStyle}>
+                      <div style={itemTopRowStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ color: COLORS.text, fontWeight: 800 }}>
+                            {item.product}
+                          </div>
+
+                          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+                            {item.sale_type === "pieza"
+                              ? `${Number(item.quantity || 0)} pieza${Number(item.quantity || 0) === 1 ? "" : "s"}`
+                              : `${item.kilos} kg`}
+                          </div>
+                        </div>
+
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={itemReadyBadgeStyle(item.is_ready)}>
+                            {item.is_ready ? "✅ Listo" : "Pendiente"}
+                          </div>
+
+                          <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 6 }}>
+                            {itemTotal === null ? "Por pesar" : `$${itemTotal.toFixed(2)}`}
+                          </div>
+                        </div>
+                      </div>
+
                       {item.sale_type === "pieza" ? (
-                        <>
-                          <div>
-                            {Number(item.quantity || 0)} pieza{Number(item.quantity || 0) === 1 ? "" : "s"}
+                        <div style={pieceControlsWrapStyle}>
+                          <div style={preparedRowStyle}>
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0"
+                              placeholder="Kilos reales"
+                              value={
+                                preparedKilosDrafts[item.id] ??
+                                (item.prepared_kilos != null ? String(item.prepared_kilos) : "")
+                              }
+                              onChange={(e) =>
+                                setPreparedKilosDrafts((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              style={preparedInputStyle}
+                            />
+
+                            <button
+                              onClick={() => savePreparedKilos(item.id)}
+                              disabled={savingItemId === item.id}
+                              style={{
+                                ...miniActionButtonStyle,
+                                background: "rgba(53,92,125,0.12)",
+                                color: COLORS.info,
+                                opacity: savingItemId === item.id ? 0.6 : 1,
+                              }}
+                            >
+                              {savingItemId === item.id ? "Guardando..." : "Guardar peso"}
+                            </button>
                           </div>
-                          <div style={{ fontSize: 12, marginTop: 4 }}>
-                            Se pesa en producción
-                          </div>
-                        </>
-                      ) : (
-                        <div>{item.kilos} kg</div>
-                      )}
+
+                          {item.prepared_kilos ? (
+                            <div style={preparedHintStyle}>
+                              Peso real guardado: <b>{item.prepared_kilos} kg</b>
+                            </div>
+                          ) : (
+                            <div style={preparedHintStyle}>
+                              Falta capturar el peso real.
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+
+                      <div style={itemBottomActionsStyle}>
+                        <button
+                          onClick={() => toggleItemReady(item.id, !item.is_ready)}
+                          disabled={savingItemId === item.id}
+                          style={{
+                            ...miniActionButtonStyle,
+                            background: item.is_ready
+                              ? "rgba(180,35,24,0.10)"
+                              : "rgba(31,122,77,0.12)",
+                            color: item.is_ready ? COLORS.danger : COLORS.success,
+                            opacity: savingItemId === item.id ? 0.6 : 1,
+                          }}
+                        >
+                          {item.is_ready ? "Quitar check" : "Marcar listo"}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {o.notes ? (
@@ -693,7 +857,76 @@ const itemRowStyle: React.CSSProperties = {
   padding: "10px 0",
   borderBottom: `1px solid ${COLORS.border}`,
 };
+const itemCardStyle: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 16,
+  background: "rgba(255,255,255,0.7)",
+  border: `1px solid ${COLORS.border}`,
+  marginBottom: 10,
+};
 
+const itemTopRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "flex-start",
+  gap: 12,
+};
+
+const pieceControlsWrapStyle: React.CSSProperties = {
+  marginTop: 12,
+  display: "grid",
+  gap: 8,
+};
+
+const preparedRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const preparedInputStyle: React.CSSProperties = {
+  flex: "1 1 160px",
+  minWidth: 140,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  outline: "none",
+  fontSize: 14,
+};
+
+const miniActionButtonStyle: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const preparedHintStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 13,
+};
+
+const itemBottomActionsStyle: React.CSSProperties = {
+  marginTop: 12,
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+};
+function itemReadyBadgeStyle(isReady?: boolean | null): React.CSSProperties {
+  return {
+    display: "inline-block",
+    padding: "6px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 700,
+    background: isReady ? "rgba(31,122,77,0.12)" : "rgba(166,106,16,0.12)",
+    color: isReady ? COLORS.success : COLORS.warning,
+  };
+}
 const notesBoxStyle: React.CSSProperties = {
   padding: 14,
   borderRadius: 16,
