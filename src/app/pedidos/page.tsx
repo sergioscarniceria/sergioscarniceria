@@ -9,6 +9,10 @@ type OrderItem = {
   product: string;
   kilos: number;
   price: number;
+  sale_type?: "kg" | "pieza" | null;
+  quantity?: number | null;
+  prepared_kilos?: number | null;
+  is_ready?: boolean | null;
 };
 
 type Order = {
@@ -159,10 +163,13 @@ const [changingId, setChangingId] = useState<string | null>(null);
   }, []);
 
   function total(order: Order) {
-    return (order.order_items || []).reduce(
-      (acc, i) => acc + Number(i.kilos || 0) * Number(i.price || 0),
-      0
-    );
+    return (order.order_items || []).reduce((acc, i) => {
+      if (i.sale_type === "pieza") {
+        return acc + Number(i.prepared_kilos || 0) * Number(i.price || 0);
+      }
+
+      return acc + Number(i.kilos || 0) * Number(i.price || 0);
+    }, 0);
   }
 
   function applyBaseFilters(list: Order[]) {
@@ -238,7 +245,13 @@ const [changingId, setChangingId] = useState<string | null>(null);
             </div>
           </div>
 
-          <div style={totalBadgeStyle}>${total(o).toFixed(2)}</div>
+          <div style={totalBadgeStyle}>
+            {(o.order_items || []).some(
+              (i) => i.sale_type === "pieza" && !Number(i.prepared_kilos || 0)
+            )
+              ? "Por pesar"
+              : `$${total(o).toFixed(2)}`}
+          </div>
         </div>
 
         <div style={metaGridStyle}>
@@ -263,14 +276,28 @@ const [changingId, setChangingId] = useState<string | null>(null);
           <div style={metaTextStyle}>Carnicero: {o.butcher_name}</div>
         ) : null}
 
-        <div style={itemsBoxStyle}>
+               <div style={itemsBoxStyle}>
           {(o.order_items || []).map((i) => (
             <div key={i.id} style={itemStyle}>
               <span style={{ color: COLORS.text, fontWeight: 700, minWidth: 0 }}>
                 {i.product}
               </span>
-              <span style={{ color: COLORS.muted, flexShrink: 0 }}>
-                {i.kilos} kg
+
+              <span style={{ color: COLORS.muted, flexShrink: 0, textAlign: "right" }}>
+                {i.sale_type === "pieza" ? (
+                  <>
+                    <div>
+                      {Number(i.quantity || 0)} pieza{Number(i.quantity || 0) === 1 ? "" : "s"}
+                    </div>
+                    <div style={{ fontSize: 12, marginTop: 4 }}>
+                      {i.prepared_kilos
+                        ? `${i.prepared_kilos} kg reales`
+                        : "Pendiente de pesar"}
+                    </div>
+                  </>
+                ) : (
+                  <div>{i.kilos} kg</div>
+                )}
               </span>
             </div>
           ))}
