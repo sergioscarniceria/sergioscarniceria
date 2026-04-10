@@ -19,6 +19,7 @@ type Product = {
 type Ticket = {
   id: string;
   customer_name: string | null;
+  status: string | null;
   payment_status: string | null;
   payment_method?: string | null;
   created_at?: string | null;
@@ -169,9 +170,10 @@ const [selectedCustomerId, setSelectedCustomerId] = useState("");
   async function loadTickets() {
   const { data, error } = await supabase
     .from("orders")
-    .select(`
+   .select(`
       id,
       customer_name,
+      status,
       payment_status,
       payment_method,
       created_at,
@@ -278,7 +280,20 @@ async function loadCustomers() {
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
+async function deliverTicket(id: string) {
+  const { error } = await supabase
+    .from("orders")
+    .update({ status: "entregado" })
+    .eq("id", id);
 
+  if (error) {
+    console.log(error);
+    alert("Error al entregar");
+    return;
+  }
+
+  await loadTickets();
+}
   async function saveTicket() {
     if (items.length === 0) {
       alert("Todavía no agregas productos");
@@ -362,9 +377,7 @@ alert(`Ticket guardado correctamente: ${folio}`);
   const pendingTickets = useMemo(() => {
   return tickets.filter(
     (ticket) =>
-      ticket.payment_status !== "pagado" &&
-      ticket.payment_status !== "credito" &&
-      ticket.payment_status !== "credito_autorizado" &&
+      ticket.status !== "entregado" &&
       ticket.payment_status !== "cancelado"
   );
 }, [tickets]);
@@ -376,6 +389,7 @@ const paidTickets = useMemo(() => {
       ticket.payment_status === "credito" ||
       ticket.payment_status === "credito_autorizado"
   );
+
 }, [tickets]);
 
   if (loading) {
@@ -688,7 +702,7 @@ const paidTickets = useMemo(() => {
       <div style={emptyBoxStyle}>No hay tickets pendientes</div>
     ) : (
       <div style={ticketsListStyle}>
-        {pendingTickets.map((ticket) => (
+                {pendingTickets.map((ticket) => (
           <div key={ticket.id} style={ticketCardStyle}>
             <div style={ticketTopStyle}>
               <div>
@@ -710,6 +724,19 @@ const paidTickets = useMemo(() => {
 
             <div style={ticketBottomStyle}>
               <b>${money(getTicketTotal(ticket))}</b>
+
+              {ticket.payment_status === "pagado" ? (
+                <button
+                  onClick={() => deliverTicket(ticket.id)}
+                  style={deliverButtonStyle}
+                >
+                  Entregar pedido
+                </button>
+              ) : (
+                <div style={pendingBadgeStyle}>
+                  Pendiente de pago
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1095,6 +1122,27 @@ const ticketStatusStyle: React.CSSProperties = {
 const ticketBottomStyle: React.CSSProperties = {
   marginTop: 8,
   color: COLORS.text,
+};
+const deliverButtonStyle: React.CSSProperties = {
+  marginTop: 10,
+  width: "100%",
+  padding: "12px",
+  borderRadius: 12,
+  border: "none",
+  background: "#1f7a4d",
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
+};
+
+const pendingBadgeStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: "10px",
+  borderRadius: 12,
+  background: "rgba(180,35,24,0.10)",
+  color: "#b42318",
+  fontWeight: 700,
+  textAlign: "center",
 };
 const customerModeWrapStyle: React.CSSProperties = {
   display: "flex",
