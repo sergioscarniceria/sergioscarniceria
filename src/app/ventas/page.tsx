@@ -531,255 +531,258 @@ const paidTickets = useMemo(() => {
             )}
           </div>
 
-          <div style={panelStyle}>
-            <h2 style={panelTitleStyle}>Orden</h2>
-            <p style={panelSubtitleStyle}>Vas armando el pedido en tiempo real</p>
-            <div style={fieldBlockStyle}>
-  <label style={fieldLabelStyle}>Cliente</label>
+          <div style={rightColumnStyle}>
+  <div style={panelStyle}>
+    <h2 style={panelTitleStyle}>Orden</h2>
+    <p style={panelSubtitleStyle}>Vas armando el pedido en tiempo real</p>
+    <div style={fieldBlockStyle}>
+      <label style={fieldLabelStyle}>Cliente</label>
 
-  <div style={customerModeWrapStyle}>
-    <button
-      onClick={() => {
-        setCustomerMode("general");
-        setSelectedCustomerId("");
-      }}
-      style={{
-        ...customerModeButtonStyle,
-        background: customerMode === "general" ? COLORS.primary : "white",
-        color: customerMode === "general" ? "white" : COLORS.text,
-        border:
-          customerMode === "general"
-            ? "none"
-            : `1px solid ${COLORS.border}`,
-      }}
-    >
-      Público general
+      <div style={customerModeWrapStyle}>
+        <button
+          onClick={() => {
+            setCustomerMode("general");
+            setSelectedCustomerId("");
+          }}
+          style={{
+            ...customerModeButtonStyle,
+            background: customerMode === "general" ? COLORS.primary : "white",
+            color: customerMode === "general" ? "white" : COLORS.text,
+            border:
+              customerMode === "general"
+                ? "none"
+                : `1px solid ${COLORS.border}`,
+          }}
+        >
+          Público general
+        </button>
+
+        <button
+          onClick={() => setCustomerMode("existente")}
+          style={{
+            ...customerModeButtonStyle,
+            background: customerMode === "existente" ? COLORS.primary : "white",
+            color: customerMode === "existente" ? "white" : COLORS.text,
+            border:
+              customerMode === "existente"
+                ? "none"
+                : `1px solid ${COLORS.border}`,
+          }}
+        >
+          Cliente existente
+        </button>
+      </div>
+
+      {customerMode === "existente" ? (
+        <select
+          value={selectedCustomerId}
+          onChange={(e) => setSelectedCustomerId(e.target.value)}
+          style={inputStyle}
+        >
+          <option value="">Seleccionar cliente</option>
+          {customers.map((customer) => (
+            <option key={customer.id} value={customer.id}>
+              {customer.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div style={customerHintStyle}>Se guardará como MOSTRADOR</div>
+      )}
+    </div>
+
+    <div style={selectedProductCardStyle}>
+      <div style={selectedProductLabelStyle}>Producto seleccionado</div>
+      <div style={selectedProductValueStyle}>
+        {selectedProduct || "Ninguno"}
+      </div>
+    </div>
+
+    <div style={fieldBlockStyle}>
+      <label style={fieldLabelStyle}>Kilos</label>
+      <input
+        placeholder="Ejemplo: 1.250"
+        value={kilos}
+        onChange={(e) => setKilos(e.target.value)}
+        style={inputStyle}
+        inputMode="decimal"
+      />
+    </div>
+
+    <button onClick={addItem} style={addButtonStyle}>
+      + Agregar a la orden
     </button>
 
-    <button
-      onClick={() => setCustomerMode("existente")}
-      style={{
-        ...customerModeButtonStyle,
-        background: customerMode === "existente" ? COLORS.primary : "white",
-        color: customerMode === "existente" ? "white" : COLORS.text,
-        border:
-          customerMode === "existente"
-            ? "none"
-            : `1px solid ${COLORS.border}`,
-      }}
-    >
-      Cliente existente
-    </button>
-  </div>
-
-  {customerMode === "existente" ? (
-    <select
-      value={selectedCustomerId}
-      onChange={(e) => setSelectedCustomerId(e.target.value)}
-      style={inputStyle}
-    >
-      <option value="">Seleccionar cliente</option>
-      {customers.map((customer) => (
-        <option key={customer.id} value={customer.id}>
-          {customer.name}
-        </option>
-      ))}
-    </select>
-  ) : (
-    <div style={customerHintStyle}>Se guardará como MOSTRADOR</div>
-  )}
-</div>
-
-            <div style={selectedProductCardStyle}>
-              <div style={selectedProductLabelStyle}>Producto seleccionado</div>
-              <div style={selectedProductValueStyle}>
-                {selectedProduct || "Ninguno"}
-              </div>
-            </div>
-
-            <div style={fieldBlockStyle}>
-              <label style={fieldLabelStyle}>Kilos</label>
-              <input
-                placeholder="Ejemplo: 1.250"
-                value={kilos}
-                onChange={(e) => setKilos(e.target.value)}
-                style={inputStyle}
-                inputMode="decimal"
-              />
-            </div>
-
-            <button onClick={addItem} style={addButtonStyle}>
-              + Agregar a la orden
-            </button>
-
-            <div style={{ marginTop: 18 }}>
-              {items.length === 0 ? (
-                <div style={emptyBoxStyle}>Todavía no agregas productos</div>
-              ) : (
-                <div style={orderListStyle}>
-                  {items.map((item) => (
-                    <div key={item.id} style={orderItemCardStyle}>
-                      <div style={orderItemTopStyle}>
-                        <div style={orderItemNameStyle}>{item.product}</div>
-                        <div style={orderItemSubtotalStyle}>
-                          ${money(item.kilos * item.price)}
-                        </div>
-                      </div>
-
-                      <div style={orderItemMetaStyle}>
-                        {item.kilos} kg × ${money(item.price)}
-                      </div>
-
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        style={removeButtonStyle}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div style={panelStyle}>
-            <h2 style={panelTitleStyle}>Total</h2>
-            <p style={panelSubtitleStyle}>Resumen rápido del pedido</p>
-
-            <div style={totalCardStyle}>
-              <div style={totalLabelStyle}>Importe total</div>
-              <div style={totalValueStyle}>${money(total)}</div>
-            </div>
-
-            <div style={summaryMiniStyle}>
-  <div style={summaryRowStyle}>
-    <span>Cliente</span>
-    <b>
-      {customerMode === "existente"
-        ? customers.find((c) => c.id === selectedCustomerId)?.name || "Cliente existente"
-        : "MOSTRADOR"}
-    </b>
-  </div>
-
-  <div style={summaryRowStyle}>
-    <span>Renglones</span>
-    <b>{items.length}</b>
-  </div>
-
-  <div style={summaryRowStyle}>
-    <span>Producto activo</span>
-    <b>{selectedProduct || "-"}</b>
-  </div>
-
-  <div style={summaryRowStyle}>
-    <span>Último folio</span>
-    <b>{lastSavedFolio || "-"}</b>
-  </div>
-</div>
-
-            <button
-              style={{
-                ...printButtonStyle,
-                opacity: saving ? 0.7 : 1,
-              }}
-              disabled={saving}
-              onClick={saveTicket}
-            >
-              {saving ? "Guardando..." : "Imprimir ticket"}
-            </button>
-          </div>
-          <div style={panelStyle}>
-  <h2 style={panelTitleStyle}>Tickets de mostrador</h2>
-  <p style={panelSubtitleStyle}>
-    Aquí mismo revisas si ya puedes entregar
-  </p>
-
-  <div style={ticketsSectionStyle}>
-    <div style={ticketsTitleStyle}>Pendientes de cobro</div>
-
-    {pendingTickets.length === 0 ? (
-      <div style={emptyBoxStyle}>No hay tickets pendientes</div>
-    ) : (
-      <div style={ticketsListStyle}>
-                {pendingTickets.map((ticket) => (
-          <div key={ticket.id} style={ticketCardStyle}>
-            <div style={ticketTopStyle}>
-              <div>
-                <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
-                <div style={ticketMetaStyle}>
-                  {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+    <div style={{ marginTop: 18 }}>
+      {items.length === 0 ? (
+        <div style={emptyBoxStyle}>Todavía no agregas productos</div>
+      ) : (
+        <div style={orderListStyle}>
+          {items.map((item) => (
+            <div key={item.id} style={orderItemCardStyle}>
+              <div style={orderItemTopStyle}>
+                <div style={orderItemNameStyle}>{item.product}</div>
+                <div style={orderItemSubtotalStyle}>
+                  ${money(item.kilos * item.price)}
                 </div>
               </div>
 
-              <div
-                style={{
-                  ...ticketStatusStyle,
-                  ...paymentBadgeStyle(ticket.payment_status),
-                }}
+              <div style={orderItemMetaStyle}>
+                {item.kilos} kg × ${money(item.price)}
+              </div>
+
+              <button
+                onClick={() => removeItem(item.id)}
+                style={removeButtonStyle}
               >
-                {paymentStatusLabel(ticket.payment_status)}
-              </div>
+                Eliminar
+              </button>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
 
-            <div style={ticketBottomStyle}>
-              <b>${money(getTicketTotal(ticket))}</b>
+  <div style={panelStyle}>
+    <h2 style={panelTitleStyle}>Total</h2>
+    <p style={panelSubtitleStyle}>Resumen rápido del pedido</p>
 
-              {ticket.payment_status === "pagado" ? (
-                <button
-                  onClick={() => deliverTicket(ticket.id)}
-                  style={deliverButtonStyle}
+    <div style={totalCardStyle}>
+      <div style={totalLabelStyle}>Importe total</div>
+      <div style={totalValueStyle}>${money(total)}</div>
+    </div>
+
+    <div style={summaryMiniStyle}>
+      <div style={summaryRowStyle}>
+        <span>Cliente</span>
+        <b>
+          {customerMode === "existente"
+            ? customers.find((c) => c.id === selectedCustomerId)?.name || "Cliente existente"
+            : "MOSTRADOR"}
+        </b>
+      </div>
+
+      <div style={summaryRowStyle}>
+        <span>Renglones</span>
+        <b>{items.length}</b>
+      </div>
+
+      <div style={summaryRowStyle}>
+        <span>Producto activo</span>
+        <b>{selectedProduct || "-"}</b>
+      </div>
+
+      <div style={summaryRowStyle}>
+        <span>Último folio</span>
+        <b>{lastSavedFolio || "-"}</b>
+      </div>
+    </div>
+
+    <button
+      style={{
+        ...printButtonStyle,
+        opacity: saving ? 0.7 : 1,
+      }}
+      disabled={saving}
+      onClick={saveTicket}
+    >
+      {saving ? "Guardando..." : "Imprimir ticket"}
+    </button>
+  </div>
+
+  <div style={panelStyle}>
+    <h2 style={panelTitleStyle}>Tickets de mostrador</h2>
+    <p style={panelSubtitleStyle}>
+      Aquí mismo revisas si ya puedes entregar
+    </p>
+
+    <div style={ticketsSectionStyle}>
+      <div style={ticketsTitleStyle}>Pendientes de cobro</div>
+
+      {pendingTickets.length === 0 ? (
+        <div style={emptyBoxStyle}>No hay tickets pendientes</div>
+      ) : (
+        <div style={ticketsListStyle}>
+          {pendingTickets.map((ticket) => (
+            <div key={ticket.id} style={ticketCardStyle}>
+              <div style={ticketTopStyle}>
+                <div>
+                  <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
+                  <div style={ticketMetaStyle}>
+                    {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    ...ticketStatusStyle,
+                    ...paymentBadgeStyle(ticket.payment_status),
+                  }}
                 >
-                  Entregar pedido
-                </button>
-              ) : (
-                <div style={pendingBadgeStyle}>
-                  Pendiente de pago
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-
-  <div style={{ height: 14 }} />
-
-  <div style={ticketsSectionStyle}>
-    <div style={ticketsTitleStyle}>Ya pagados / crédito</div>
-
-    {paidTickets.length === 0 ? (
-      <div style={emptyBoxStyle}>Todavía no hay tickets pagados</div>
-    ) : (
-      <div style={ticketsListStyle}>
-        {paidTickets.map((ticket) => (
-          <div key={ticket.id} style={ticketCardStyle}>
-            <div style={ticketTopStyle}>
-              <div>
-                <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
-                <div style={ticketMetaStyle}>
-                  {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+                  {paymentStatusLabel(ticket.payment_status)}
                 </div>
               </div>
 
-              <div
-                style={{
-                  ...ticketStatusStyle,
-                  ...paymentBadgeStyle(ticket.payment_status),
-                }}
-              >
-                {paymentStatusLabel(ticket.payment_status)}
+              <div style={ticketBottomStyle}>
+                <b>${money(getTicketTotal(ticket))}</b>
+
+                {ticket.payment_status === "pagado" ? (
+                  <button
+                    onClick={() => deliverTicket(ticket.id)}
+                    style={deliverButtonStyle}
+                  >
+                    Entregar pedido
+                  </button>
+                ) : (
+                  <div style={pendingBadgeStyle}>
+                    Pendiente de pago
+                  </div>
+                )}
               </div>
             </div>
+          ))}
+        </div>
+      )}
+    </div>
 
-            <div style={ticketBottomStyle}>
-              <b>${money(getTicketTotal(ticket))}</b>
+    <div style={{ height: 14 }} />
+
+    <div style={ticketsSectionStyle}>
+      <div style={ticketsTitleStyle}>Ya pagados / crédito</div>
+
+      {paidTickets.length === 0 ? (
+        <div style={emptyBoxStyle}>Todavía no hay tickets pagados</div>
+      ) : (
+        <div style={ticketsListStyle}>
+          {paidTickets.map((ticket) => (
+            <div key={ticket.id} style={ticketCardStyle}>
+              <div style={ticketTopStyle}>
+                <div>
+                  <div style={ticketFolioStyle}>{ticketFolio(ticket.id)}</div>
+                  <div style={ticketMetaStyle}>
+                    {ticket.customer_name || "MOSTRADOR"} · {formatHour(ticket.created_at)}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    ...ticketStatusStyle,
+                    ...paymentBadgeStyle(ticket.payment_status),
+                  }}
+                >
+                  {paymentStatusLabel(ticket.payment_status)}
+                </div>
+              </div>
+
+              <div style={ticketBottomStyle}>
+                <b>${money(getTicketTotal(ticket))}</b>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-    )}
+          ))}
+        </div>
+      )}
+    </div>
   </div>
 </div>
         </div>
@@ -818,7 +821,7 @@ const subtitleStyle: React.CSSProperties = {
 
 const mainGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "minmax(760px, 1.9fr) minmax(320px, 0.85fr) minmax(320px, 0.85fr)",
+  gridTemplateColumns: "2fr 1fr",
   gap: 20,
   alignItems: "start",
 };
@@ -829,6 +832,10 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 24,
   padding: 18,
   boxShadow: COLORS.shadow,
+};
+const rightColumnStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 20,
 };
 const productsPanelStyle: React.CSSProperties = {
   ...panelStyle,
