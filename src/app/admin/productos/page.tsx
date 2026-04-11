@@ -8,6 +8,7 @@ type Product = {
   id: string;
   name: string;
   price: number | null;
+  category?: string | null;
   is_active?: boolean | null;
   is_excluded_from_discount?: boolean | null;
   created_at?: string | null;
@@ -29,6 +30,13 @@ const COLORS = {
   info: "#355c7d",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
+const CATEGORY_OPTIONS = [
+  "Res",
+  "Carne para asar",
+  "Cerdo",
+  "Embutidos",
+  "Complementos",
+];
 
 export default function AdminProductosPage() {
   const supabase = getSupabaseClient();
@@ -39,10 +47,11 @@ export default function AdminProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
+ const [name, setName] = useState("");
+const [price, setPrice] = useState("");
+const [category, setCategory] = useState("Complementos");
+const [isActive, setIsActive] = useState(true);
+const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
 
   useEffect(() => {
     loadProducts();
@@ -68,26 +77,28 @@ export default function AdminProductosPage() {
   }
 
   function resetForm() {
-    setEditingId(null);
-    setName("");
-    setPrice("");
-    setIsActive(true);
-    setIsExcludedFromDiscount(false);
-    setSaving(false);
-  }
+  setEditingId(null);
+  setName("");
+  setPrice("");
+  setCategory("Complementos");
+  setIsActive(true);
+  setIsExcludedFromDiscount(false);
+  setSaving(false);
+}
 
-  function startEdit(product: Product) {
-    setEditingId(product.id);
-    setName(product.name || "");
-    setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
-    setIsActive(Boolean(product.is_active));
-    setIsExcludedFromDiscount(Boolean(product.is_excluded_from_discount));
+ function startEdit(product: Product) {
+  setEditingId(product.id);
+  setName(product.name || "");
+  setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
+  setCategory(product.category || "Complementos");
+  setIsActive(Boolean(product.is_active));
+  setIsExcludedFromDiscount(Boolean(product.is_excluded_from_discount));
 
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
+}
 
   async function saveProduct() {
     const cleanName = name.trim();
@@ -106,11 +117,12 @@ export default function AdminProductosPage() {
     setSaving(true);
 
     const payload = {
-      name: cleanName,
-      price: Number(cleanPrice.toFixed(2)),
-      is_active: isActive,
-      is_excluded_from_discount: isExcludedFromDiscount,
-    };
+  name: cleanName,
+  price: Number(cleanPrice.toFixed(2)),
+  category: category.trim() || "Complementos",
+  is_active: isActive,
+  is_excluded_from_discount: isExcludedFromDiscount,
+};
 
     if (editingId) {
       const { error } = await supabase
@@ -184,11 +196,12 @@ export default function AdminProductosPage() {
     if (!q) return products;
 
     return products.filter((p) => {
-      return (
-        (p.name || "").toLowerCase().includes(q) ||
-        String(p.price ?? "").toLowerCase().includes(q)
-      );
-    });
+  return (
+    (p.name || "").toLowerCase().includes(q) ||
+    String(p.price ?? "").toLowerCase().includes(q) ||
+    (p.category || "").toLowerCase().includes(q)
+  );
+});
   }, [products, search]);
 
   const summary = useMemo(() => {
@@ -281,6 +294,20 @@ export default function AdminProductosPage() {
                 style={inputStyle}
               />
             </div>
+            <div>
+  <div style={fieldLabelStyle}>Categoría</div>
+  <select
+    value={category}
+    onChange={(e) => setCategory(e.target.value)}
+    style={inputStyle}
+  >
+    {CATEGORY_OPTIONS.map((option) => (
+      <option key={option} value={option}>
+        {option}
+      </option>
+    ))}
+  </select>
+</div>
           </div>
 
           <div style={checksWrapStyle}>
@@ -350,12 +377,15 @@ export default function AdminProductosPage() {
               {filteredProducts.map((product) => (
                 <div key={product.id} style={productCardStyle}>
                   <div style={productHeaderStyle}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={productNameStyle}>{product.name}</div>
-                      <div style={productPriceStyle}>
-                        ${Number(product.price || 0).toFixed(2)}
-                      </div>
-                    </div>
+                   <div style={{ minWidth: 0 }}>
+  <div style={productNameStyle}>{product.name}</div>
+  <div style={productCategoryStyle}>
+    {product.category || "Complementos"}
+  </div>
+  <div style={productPriceStyle}>
+    ${Number(product.price || 0).toFixed(2)}
+  </div>
+</div>
 
                     <div style={badgeColumnStyle}>
                       <span
@@ -650,7 +680,11 @@ const productNameStyle: React.CSSProperties = {
   lineHeight: 1.2,
   marginBottom: 8,
 };
-
+const productCategoryStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 14,
+  marginBottom: 6,
+};
 const productPriceStyle: React.CSSProperties = {
   color: COLORS.primary,
   fontSize: 24,
