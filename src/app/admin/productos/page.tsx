@@ -8,9 +8,10 @@ type Product = {
   id: string;
   name: string;
   price: number | null;
-  category?: string | null;
+  fixed_piece_price?: number | null;
   is_active?: boolean | null;
   is_excluded_from_discount?: boolean | null;
+  category?: string | null;
   created_at?: string | null;
 };
 
@@ -47,9 +48,10 @@ export default function AdminProductosPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
- const [name, setName] = useState("");
+const [name, setName] = useState("");
 const [price, setPrice] = useState("");
 const [category, setCategory] = useState("Complementos");
+const [fixedPiecePrice, setFixedPiecePrice] = useState("");
 const [isActive, setIsActive] = useState(true);
 const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
 
@@ -76,11 +78,12 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
     setLoading(false);
   }
 
-  function resetForm() {
+ function resetForm() {
   setEditingId(null);
   setName("");
   setPrice("");
   setCategory("Complementos");
+  setFixedPiecePrice("");
   setIsActive(true);
   setIsExcludedFromDiscount(false);
   setSaving(false);
@@ -91,6 +94,11 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   setName(product.name || "");
   setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
   setCategory(product.category || "Complementos");
+  setFixedPiecePrice(
+    product.fixed_piece_price !== null && product.fixed_piece_price !== undefined
+      ? String(product.fixed_piece_price)
+      : ""
+  );
   setIsActive(Boolean(product.is_active));
   setIsExcludedFromDiscount(Boolean(product.is_excluded_from_discount));
 
@@ -101,28 +109,42 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
 }
 
   async function saveProduct() {
-    const cleanName = name.trim();
-    const cleanPrice = Number(price);
+  const cleanName = name.trim();
+  const cleanPrice = Number(price);
+  const cleanFixedPiecePrice =
+    fixedPiecePrice.trim() === "" ? null : Number(fixedPiecePrice);
 
-    if (!cleanName) {
-      alert("Escribe el nombre del producto");
-      return;
-    }
+  if (!cleanName) {
+    alert("Escribe el nombre del producto");
+    return;
+  }
 
-    if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 0) {
-      alert("Escribe un precio válido");
-      return;
-    }
+  if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 0) {
+    alert("Escribe un precio válido por kg");
+    return;
+  }
 
-    setSaving(true);
+  if (
+    cleanFixedPiecePrice !== null &&
+    (Number.isNaN(cleanFixedPiecePrice) || cleanFixedPiecePrice < 0)
+  ) {
+    alert("Escribe un precio fijo por pieza válido");
+    return;
+  }
 
-    const payload = {
-  name: cleanName,
-  price: Number(cleanPrice.toFixed(2)),
-  category: category.trim() || "Complementos",
-  is_active: isActive,
-  is_excluded_from_discount: isExcludedFromDiscount,
-};
+  setSaving(true);
+
+  const payload = {
+    name: cleanName,
+    price: Number(cleanPrice.toFixed(2)),
+    category: category.trim() || "Complementos",
+    fixed_piece_price:
+      cleanFixedPiecePrice === null
+        ? null
+        : Number(cleanFixedPiecePrice.toFixed(2)),
+    is_active: isActive,
+    is_excluded_from_discount: isExcludedFromDiscount,
+  };
 
     if (editingId) {
       const { error } = await supabase
@@ -272,43 +294,57 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
           </div>
 
           <div style={formGridStyle}>
-            <div>
-              <div style={fieldLabelStyle}>Nombre</div>
-              <input
-                placeholder="Ejemplo: Rib eye"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
+  <div>
+    <div style={fieldLabelStyle}>Nombre</div>
+    <input
+      placeholder="Ejemplo: Rib eye"
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      style={inputStyle}
+    />
+  </div>
 
-            <div>
-              <div style={fieldLabelStyle}>Precio por kg</div>
-              <input
-                placeholder="Ejemplo: 289"
-                type="number"
-                step="0.01"
-                min="0"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                style={inputStyle}
-              />
-            </div>
-            <div>
-  <div style={fieldLabelStyle}>Categoría</div>
-  <select
-    value={category}
-    onChange={(e) => setCategory(e.target.value)}
-    style={inputStyle}
-  >
-    {CATEGORY_OPTIONS.map((option) => (
-      <option key={option} value={option}>
-        {option}
-      </option>
-    ))}
-  </select>
+  <div>
+    <div style={fieldLabelStyle}>Precio por kg</div>
+    <input
+      placeholder="Ejemplo: 289"
+      type="number"
+      step="0.01"
+      min="0"
+      value={price}
+      onChange={(e) => setPrice(e.target.value)}
+      style={inputStyle}
+    />
+  </div>
+
+  <div>
+    <div style={fieldLabelStyle}>Categoría</div>
+    <select
+      value={category}
+      onChange={(e) => setCategory(e.target.value)}
+      style={inputStyle}
+    >
+      {CATEGORY_OPTIONS.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  </div>
+
+  <div>
+    <div style={fieldLabelStyle}>Precio fijo por pieza</div>
+    <input
+      placeholder="Déjalo vacío si se cobra normal"
+      type="number"
+      step="0.01"
+      min="0"
+      value={fixedPiecePrice}
+      onChange={(e) => setFixedPiecePrice(e.target.value)}
+      style={inputStyle}
+    />
+  </div>
 </div>
-          </div>
 
           <div style={checksWrapStyle}>
             <label style={checkCardStyle}>
@@ -383,8 +419,13 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
     {product.category || "Complementos"}
   </div>
   <div style={productPriceStyle}>
-    ${Number(product.price || 0).toFixed(2)}
+    ${Number(product.price || 0).toFixed(2)} / kg
   </div>
+  {product.fixed_piece_price !== null && product.fixed_piece_price !== undefined ? (
+    <div style={productFixedPiecePriceStyle}>
+      ${Number(product.fixed_piece_price).toFixed(2)} por pieza
+    </div>
+  ) : null}
 </div>
 
                     <div style={badgeColumnStyle}>
@@ -684,6 +725,12 @@ const productCategoryStyle: React.CSSProperties = {
   color: COLORS.muted,
   fontSize: 14,
   marginBottom: 6,
+};
+const productFixedPiecePriceStyle: React.CSSProperties = {
+  color: COLORS.warning,
+  fontSize: 14,
+  fontWeight: 700,
+  marginTop: 6,
 };
 const productPriceStyle: React.CSSProperties = {
   color: COLORS.primary,
