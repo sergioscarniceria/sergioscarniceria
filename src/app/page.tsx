@@ -36,6 +36,11 @@ const adminModules = [
     description: "Altas, control y orden comercial.",
     href: "/admin/clientes",
   },
+  {
+    title: "Admin productos",
+    description: "Ordena tu catálogo, precios y categorías sin moverle al código.",
+    href: "/admin/productos",
+  },
 ];
 
 const operationModules = [
@@ -58,6 +63,11 @@ const operationModules = [
     title: "Pedidos",
     description: "Deleita a tu paladar con lo que se merece.",
     href: "/pedidos",
+  },
+  {
+    title: "Ventas Mostrador",
+    description: "Agrega, pesa y cobra sin soltar el ritmo del mostrador.",
+    href: "/ventas",
   },
   {
     title: "Repartidores",
