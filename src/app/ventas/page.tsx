@@ -8,6 +8,9 @@ type Item = {
   product: string;
   kilos: number;
   price: number;
+  sale_type?: "kg" | "pieza";
+  quantity?: number | null;
+  is_fixed_price_piece?: boolean;
 };
 
 type Product = {
@@ -15,6 +18,7 @@ type Product = {
   name: string;
   price: number;
   category: string | null;
+  fixed_piece_price?: number | null;
 };
 type Ticket = {
   id: string;
@@ -29,6 +33,9 @@ type Ticket = {
     product: string;
     kilos: number;
     price: number;
+    sale_type?: "kg" | "pieza" | null;
+    quantity?: number | null;
+    is_fixed_price_piece?: boolean | null;
   }[];
 };
 type Customer = {
@@ -79,6 +86,10 @@ function formatHour(value?: string | null) {
 
 function getTicketTotal(ticket: Ticket) {
   return (ticket.order_items || []).reduce((acc, item) => {
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      return acc + Number(item.quantity || 0) * Number(item.price || 0);
+    }
+
     return acc + Number(item.kilos || 0) * Number(item.price || 0);
   }, 0);
 }
@@ -153,7 +164,7 @@ const [selectedCustomerId, setSelectedCustomerId] = useState("");
 
     const { data, error } = await supabase
       .from("products")
-      .select("id, name, price, category")
+     .select("id, name, price, category, fixed_piece_price")
       .order("category", { ascending: true })
       .order("name", { ascending: true });
 
@@ -179,11 +190,14 @@ const [selectedCustomerId, setSelectedCustomerId] = useState("");
       created_at,
       source,
       order_items (
-        id,
-        product,
-        kilos,
-        price
-      )
+  id,
+  product,
+  kilos,
+  price,
+  sale_type,
+  quantity,
+  is_fixed_price_piece
+)
     `)
     .eq("source", "mostrador")
     .order("created_at", { ascending: false })
@@ -243,24 +257,35 @@ async function loadCustomers() {
       product.name.toLowerCase().includes(q)
     );
   }, [search, selectedCategory, groupedCategories, products]);
+  const selectedProductData = useMemo(() => {
+  return products.find((p) => p.name === selectedProduct) || null;
+}, [products, selectedProduct]);
+
+const isFixedPieceProduct =
+  selectedProductData?.fixed_piece_price !== null &&
+  selectedProductData?.fixed_piece_price !== undefined;
 
   function addItem() {
-    const cleanKilos = Number(kilos);
+  const product = products.find((p) => p.name === selectedProduct);
 
-    if (!selectedProduct) {
-      alert("Selecciona un producto");
-      return;
-    }
+  if (!selectedProduct) {
+    alert("Selecciona un producto");
+    return;
+  }
 
-    if (!cleanKilos || cleanKilos <= 0) {
-      alert("Captura kilos válidos");
-      return;
-    }
+  if (!product) {
+    alert("No encontramos el producto");
+    return;
+  }
+if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
+  alert("Este producto se vende por pieza, no por kilos");
+  return;
+}
+  if (isFixedPieceProduct) {
+    const cleanQuantity = Number(kilos);
 
-    const product = products.find((p) => p.name === selectedProduct);
-
-    if (!product) {
-      alert("No encontramos el producto");
+    if (!cleanQuantity || cleanQuantity <= 0 || !Number.isInteger(cleanQuantity)) {
+      alert("Captura piezas válidas");
       return;
     }
 
@@ -269,13 +294,40 @@ async function loadCustomers() {
       {
         id: makeId(),
         product: product.name,
-        kilos: Number(cleanKilos.toFixed(3)),
-        price: Number(Number(product.price || 0).toFixed(2)),
+        kilos: 0,
+        price: Number(Number(product.fixed_piece_price || 0).toFixed(2)),
+        sale_type: "pieza",
+        quantity: cleanQuantity,
+        is_fixed_price_piece: true,
       },
     ]);
 
     setKilos("");
+    return;
   }
+
+  const cleanKilos = Number(kilos);
+
+  if (!cleanKilos || cleanKilos <= 0) {
+    alert("Captura kilos válidos");
+    return;
+  }
+
+  setItems((prev) => [
+    ...prev,
+    {
+      id: makeId(),
+      product: product.name,
+      kilos: Number(cleanKilos.toFixed(3)),
+      price: Number(Number(product.price || 0).toFixed(2)),
+      sale_type: "kg",
+      quantity: null,
+      is_fixed_price_piece: false,
+    },
+  ]);
+
+  setKilos("");
+}
 
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
@@ -337,11 +389,14 @@ const { data: orderData, error: orderError } = await supabase
     }
 
     const itemsPayload = items.map((item) => ({
-      order_id: orderData.id,
-      product: item.product,
-      kilos: Number(Number(item.kilos || 0).toFixed(3)),
-      price: Number(Number(item.price || 0).toFixed(2)),
-    }));
+  order_id: orderData.id,
+  product: item.product,
+  kilos: Number(Number(item.kilos || 0).toFixed(3)),
+  price: Number(Number(item.price || 0).toFixed(2)),
+  sale_type: item.sale_type || "kg",
+  quantity: item.sale_type === "pieza" ? Number(item.quantity || 0) : null,
+  is_fixed_price_piece: Boolean(item.is_fixed_price_piece),
+}));
 
     const { error: itemsError } = await supabase
       .from("order_items")
@@ -372,8 +427,14 @@ alert(`Ticket guardado correctamente: ${folio}`);
   }
 
   const total = useMemo(() => {
-    return items.reduce((acc, item) => acc + item.kilos * item.price, 0);
-  }, [items]);
+  return items.reduce((acc, item) => {
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      return acc + Number(item.quantity || 0) * Number(item.price || 0);
+    }
+
+    return acc + Number(item.kilos || 0) * Number(item.price || 0);
+  }, 0);
+}, [items]);
   const pendingTickets = useMemo(() => {
   return tickets.filter(
     (ticket) =>
@@ -593,15 +654,24 @@ const paidTickets = useMemo(() => {
 
     <div style={selectedProductCardStyle}>
       <div style={selectedProductLabelStyle}>Producto seleccionado</div>
-      <div style={selectedProductValueStyle}>
-        {selectedProduct || "Ninguno"}
-      </div>
+     <div style={selectedProductValueStyle}>
+  {selectedProduct || "Ninguno"}
+</div>
+{selectedProductData ? (
+  <div style={productMetaStyle}>
+    {isFixedPieceProduct
+      ? `Precio fijo por pieza: $${money(selectedProductData.fixed_piece_price)}`
+      : `Precio por kg: $${money(selectedProductData.price)}`}
+  </div>
+) : null}
     </div>
 
     <div style={fieldBlockStyle}>
-      <label style={fieldLabelStyle}>Kilos</label>
+      <label style={fieldLabelStyle}>
+  {isFixedPieceProduct ? "Piezas" : "Kilos"}
+</label>
       <input
-        placeholder="Ejemplo: 1.250"
+        placeholder={isFixedPieceProduct ? "Ejemplo: 2" : "Ejemplo: 1.250"}
         value={kilos}
         onChange={(e) => setKilos(e.target.value)}
         style={inputStyle}
@@ -619,17 +689,24 @@ const paidTickets = useMemo(() => {
       ) : (
         <div style={orderListStyle}>
           {items.map((item) => (
-            <div key={item.id} style={orderItemCardStyle}>
-              <div style={orderItemTopStyle}>
-                <div style={orderItemNameStyle}>{item.product}</div>
-                <div style={orderItemSubtotalStyle}>
-                  ${money(item.kilos * item.price)}
-                </div>
-              </div>
+  <div key={item.id} style={orderItemCardStyle}>
+    <div style={orderItemTopStyle}>
+      <div style={orderItemNameStyle}>{item.product}</div>
+      <div style={orderItemSubtotalStyle}>
+        $
+        {money(
+          item.sale_type === "pieza" && item.is_fixed_price_piece
+            ? Number(item.quantity || 0) * Number(item.price || 0)
+            : Number(item.kilos || 0) * Number(item.price || 0)
+        )}
+      </div>
+    </div>
 
-              <div style={orderItemMetaStyle}>
-                {item.kilos} kg × ${money(item.price)}
-              </div>
+    <div style={orderItemMetaStyle}>
+      {item.sale_type === "pieza" && item.is_fixed_price_piece
+        ? `${item.quantity} pieza(s) × $${money(item.price)}`
+        : `${item.kilos} kg × $${money(item.price)}`}
+    </div>
 
               <button
                 onClick={() => removeItem(item.id)}
