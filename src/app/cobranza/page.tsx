@@ -36,6 +36,7 @@ type Customer = {
   name: string;
   credit_enabled?: boolean | null;
   credit_days?: number | null;
+  customer_type?: string | null;
 };
 
 type ManualLine = {
@@ -151,6 +152,11 @@ const [showNewCustomer, setShowNewCustomer] = useState(false);
 const [newCustomerName, setNewCustomerName] = useState("");
 const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
+  // Descuento
+  const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
+  const [discountValue, setDiscountValue] = useState("");
+  const [showPrintTicket, setShowPrintTicket] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -168,7 +174,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
     const { data: customersData, error: customersError } = await supabase
       .from("customers")
-      .select("id, name, credit_enabled, credit_days")
+      .select("id, name, credit_enabled, credit_days, customer_type")
       .order("name", { ascending: true });
 
     if (ticketsError || customersError) {
@@ -194,6 +200,25 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
       const kg = Number(item.prepared_kilos || item.kilos || 0);
       return acc + kg * Number(item.price || 0);
     }, 0);
+  }
+
+  function getCustomerType(ticket: Ticket | null): string | null {
+    if (!ticket?.customer_id) return null;
+    const c = customers.find((cu) => cu.id === ticket.customer_id);
+    return c?.customer_type || null;
+  }
+
+  function calcDiscount(subtotal: number): number {
+    if (discountMode === "none" || !discountValue) return 0;
+    const val = Number(discountValue.replace(",", "."));
+    if (!val || val <= 0) return 0;
+    if (discountMode === "percent") return Math.min(subtotal, subtotal * (val / 100));
+    return Math.min(subtotal, val); // amount mode
+  }
+
+  function ticketFinalTotal(ticket: Ticket | null): number {
+    const sub = ticketTotal(ticket);
+    return Math.max(0, sub - calcDiscount(sub));
   }
 
   const filteredTickets = useMemo(() => {
@@ -240,6 +265,8 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     }
 
     setSelectedTicket(data as Ticket);
+    setDiscountMode("none");
+    setDiscountValue("");
   }
 
   /**
@@ -297,13 +324,28 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
     setSaving(true);
 
+    const subtotal = ticketTotal(selectedTicket);
+    const descuento = calcDiscount(subtotal);
+    const finalTotal = Math.max(0, subtotal - descuento);
+
+    const orderUpdate: any = {
+      payment_status: "pagado",
+      payment_method: method,
+      paid_at: new Date().toISOString(),
+    };
+
+    // Guardar info de descuento en notes si existe
+    if (descuento > 0) {
+      const discountNote = discountMode === "percent"
+        ? `Descuento ${discountValue}% = -$${descuento.toFixed(2)}`
+        : `Descuento -$${descuento.toFixed(2)}`;
+      const existing = selectedTicket.notes || "";
+      orderUpdate.notes = existing ? `${existing} | ${discountNote}` : discountNote;
+    }
+
     const { error } = await supabase
       .from("orders")
-      .update({
-        payment_status: "pagado",
-        payment_method: method,
-        paid_at: new Date().toISOString(),
-      })
+      .update(orderUpdate)
       .eq("id", selectedTicket.id);
 
     if (error) {
@@ -314,27 +356,35 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     }
 
     const { error: cashError } = await supabase
-  .from("cash_movements")
-  .insert([
-    {
-      type: "venta",
-      source: "cobranza",
-      amount: Number(ticketTotal(selectedTicket).toFixed(2)),
-      payment_method: method,
-      reference_id: selectedTicket.id,
-    },
-  ]);
+      .from("cash_movements")
+      .insert([
+        {
+          type: "venta",
+          source: "cobranza",
+          amount: Number(finalTotal.toFixed(2)),
+          payment_method: method,
+          reference_id: selectedTicket.id,
+        },
+      ]);
 
-if (cashError) {
-  console.log(cashError);
-  alert("Se marcó como pagado, pero falló el movimiento de caja");
-  setSaving(false);
-  return;
-}
-    alert("Pago registrado");
-    setSelectedTicket(null);
-    await loadData();
+    if (cashError) {
+      console.log(cashError);
+      alert("Se marcó como pagado, pero falló el movimiento de caja");
+      setSaving(false);
+      return;
+    }
+
+    // Mostrar ticket imprimible
+    setShowPrintTicket(true);
     setSaving(false);
+  }
+
+  function closePrintAndReset() {
+    setShowPrintTicket(false);
+    setSelectedTicket(null);
+    setDiscountMode("none");
+    setDiscountValue("");
+    loadData();
   }
 
   async function cancelTicket() {
@@ -948,7 +998,7 @@ if (cashError) {
                       </div>
 
                       <div style={ticketTotalStyle}>
-                        ${money(ticketTotal(selectedTicket))}
+                        ${money(ticketFinalTotal(selectedTicket))}
                       </div>
                     </div>
 
@@ -973,6 +1023,83 @@ if (cashError) {
                           </div>
                         ))
                       )}
+                    </div>
+
+                    {/* Badge mayoreo */}
+                    {getCustomerType(selectedTicket) === "mayoreo" && (
+                      <div style={mayoreoBadgeStyle}>
+                        Este cliente es <b>mayoreo</b> — descuento del 10% ya aplicado en precios
+                      </div>
+                    )}
+
+                    {/* Sección de descuento */}
+                    <div style={discountSectionStyle}>
+                      <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                        Descuento adicional
+                      </div>
+
+                      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                        <button
+                          onClick={() => { setDiscountMode("none"); setDiscountValue(""); }}
+                          style={{
+                            ...discountTabStyle,
+                            background: discountMode === "none" ? COLORS.primary : "white",
+                            color: discountMode === "none" ? "white" : COLORS.text,
+                          }}
+                        >
+                          Sin descuento
+                        </button>
+                        <button
+                          onClick={() => setDiscountMode("percent")}
+                          style={{
+                            ...discountTabStyle,
+                            background: discountMode === "percent" ? COLORS.primary : "white",
+                            color: discountMode === "percent" ? "white" : COLORS.text,
+                          }}
+                        >
+                          % Porcentaje
+                        </button>
+                        <button
+                          onClick={() => setDiscountMode("amount")}
+                          style={{
+                            ...discountTabStyle,
+                            background: discountMode === "amount" ? COLORS.primary : "white",
+                            color: discountMode === "amount" ? "white" : COLORS.text,
+                          }}
+                        >
+                          $ Cantidad
+                        </button>
+                      </div>
+
+                      {discountMode !== "none" && (
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder={discountMode === "percent" ? "Ej: 10" : "Ej: 50.00"}
+                          value={discountValue}
+                          onChange={(e) => setDiscountValue(e.target.value)}
+                          style={inputStyle}
+                        />
+                      )}
+                    </div>
+
+                    {/* Resumen de cobro */}
+                    <div style={discountSummaryStyle}>
+                      <div style={summaryRowStyle}>
+                        <span>Subtotal</span>
+                        <span>${money(ticketTotal(selectedTicket))}</span>
+                      </div>
+                      {calcDiscount(ticketTotal(selectedTicket)) > 0 && (
+                        <div style={{ ...summaryRowStyle, color: COLORS.success }}>
+                          <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
+                          <span>-${money(calcDiscount(ticketTotal(selectedTicket)))}</span>
+                        </div>
+                      )}
+                      <div style={{ ...summaryRowStyle, fontWeight: 800, fontSize: 18 }}>
+                        <span>Total a cobrar</span>
+                        <span>${money(ticketFinalTotal(selectedTicket))}</span>
+                      </div>
                     </div>
 
                     <div style={actionsGridStyle}>
@@ -1016,6 +1143,119 @@ if (cashError) {
                     >
                       Cancelar ticket
                     </button>
+
+                    {/* Modal ticket imprimible */}
+                    {showPrintTicket && selectedTicket && (
+                      <div style={printOverlayStyle}>
+                        <div style={printModalStyle}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                            <button
+                              onClick={() => {
+                                const el = document.getElementById("printable-ticket");
+                                if (el) {
+                                  const win = window.open("", "_blank", "width=400,height=600");
+                                  if (win) {
+                                    win.document.write(`<html><head><title>Ticket</title><style>
+                                      body { font-family: monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; }
+                                      .center { text-align: center; }
+                                      .right { text-align: right; }
+                                      .bold { font-weight: bold; }
+                                      .line { border-top: 1px dashed #000; margin: 6px 0; }
+                                      .row { display: flex; justify-content: space-between; margin: 2px 0; }
+                                      .mayoreo-badge { background: #f0e6d0; padding: 3px 6px; border-radius: 4px; font-size: 11px; margin: 4px 0; }
+                                      .discount-row { color: #1f7a4d; }
+                                      .total-row { font-size: 16px; font-weight: bold; margin: 8px 0; }
+                                      @media print { button { display: none; } }
+                                    </style></head><body>`);
+                                    win.document.write(el.innerHTML);
+                                    win.document.write("</body></html>");
+                                    win.document.close();
+                                    win.print();
+                                  }
+                                }
+                              }}
+                              style={successButtonStyle}
+                            >
+                              Imprimir ticket
+                            </button>
+                            <button onClick={closePrintAndReset} style={secondaryActionButtonStyle}>
+                              Cerrar
+                            </button>
+                          </div>
+
+                          <div id="printable-ticket" style={{ fontFamily: "monospace", fontSize: 12, maxWidth: 300 }}>
+                            <div style={{ textAlign: "center", marginBottom: 8 }}>
+                              <div style={{ fontWeight: 800, fontSize: 14 }}>SERGIO&apos;S CARNICERÍA</div>
+                              <div style={{ fontSize: 11, color: "#666" }}>sergioscarniceria.com</div>
+                            </div>
+
+                            <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                            <div style={{ marginBottom: 4 }}>
+                              <b>Folio:</b> {ticketFolio(selectedTicket.id)}
+                            </div>
+                            <div style={{ marginBottom: 4 }}>
+                              <b>Cliente:</b> {selectedTicket.customer_name || "Mostrador"}
+                            </div>
+                            <div style={{ marginBottom: 4 }}>
+                              <b>Fecha:</b> {new Date().toLocaleDateString("es-MX")} {new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                            </div>
+
+                            {getCustomerType(selectedTicket) === "mayoreo" && (
+                              <div style={{ background: "#f0e6d0", padding: "3px 6px", borderRadius: 4, fontSize: 11, margin: "4px 0" }}>
+                                Cliente mayoreo — precios con 10% desc.
+                              </div>
+                            )}
+
+                            <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                            {(selectedTicket.order_items || []).map((item, i) => {
+                              const kg = Number(item.prepared_kilos || item.kilos || 0);
+                              const lineTotal = kg * Number(item.price || 0);
+                              return (
+                                <div key={i} style={{ marginBottom: 6 }}>
+                                  <div style={{ fontWeight: 700 }}>{item.product}</div>
+                                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                    <span>
+                                      {kg} kg x ${money(item.price)}
+                                      {item.prepared_kilos && item.prepared_kilos !== item.kilos
+                                        ? ` (ped: ${item.kilos})`
+                                        : ""}
+                                    </span>
+                                    <span>${money(lineTotal)}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                            <div style={{ display: "flex", justifyContent: "space-between", margin: "2px 0" }}>
+                              <span>Subtotal</span>
+                              <span>${money(ticketTotal(selectedTicket))}</span>
+                            </div>
+
+                            {calcDiscount(ticketTotal(selectedTicket)) > 0 && (
+                              <div style={{ display: "flex", justifyContent: "space-between", margin: "2px 0", color: "#1f7a4d" }}>
+                                <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
+                                <span>-${money(calcDiscount(ticketTotal(selectedTicket)))}</span>
+                              </div>
+                            )}
+
+                            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16, margin: "8px 0" }}>
+                              <span>TOTAL</span>
+                              <span>${money(ticketFinalTotal(selectedTicket))}</span>
+                            </div>
+
+                            <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                            <div style={{ textAlign: "center", fontSize: 11, color: "#666" }}>
+                              ¡Gracias por su compra!
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1699,4 +1939,64 @@ const actionsGridStyle: React.CSSProperties = {
   gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
   gap: 12,
   marginTop: 16,
+};
+
+const mayoreoBadgeStyle: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 14,
+  background: "rgba(166,106,16,0.12)",
+  color: COLORS.warning,
+  fontWeight: 600,
+  fontSize: 14,
+  marginTop: 12,
+};
+
+const discountSectionStyle: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+};
+
+const discountTabStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 13,
+};
+
+const discountSummaryStyle: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 18,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  display: "grid",
+  gap: 8,
+};
+
+const printOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.4)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+  padding: 16,
+};
+
+const printModalStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 420,
+  maxHeight: "90vh",
+  overflowY: "auto",
+  background: "white",
+  borderRadius: 20,
+  padding: 20,
+  boxShadow: COLORS.shadow,
+  border: `1px solid ${COLORS.border}`,
 };
