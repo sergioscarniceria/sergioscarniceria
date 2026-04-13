@@ -38,6 +38,7 @@ const EMPLEADOS_CONFIG: Record<string, Config> = {
   esther:   { entrada: "07:00", descanso: ["sabado"] },
   pablo:    { entrada: "07:00", descanso: [] },
   jessy:    { entrada: "07:00", descanso: ["viernes", "sabado"] },
+  jesse:    { entrada: "07:00", descanso: ["viernes", "sabado"] },
   celeste:  { entrada: "07:00", descanso: [] },
   kari:     { entrada: "08:30", descanso: ["domingo"] },
   kariana:  { entrada: "08:30", descanso: ["domingo"] },
