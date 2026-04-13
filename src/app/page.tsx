@@ -41,6 +41,16 @@ const adminModules = [
     description: "Ordena tu catálogo, precios y categorías sin moverle al código.",
     href: "/admin/productos",
   },
+  {
+    title: "Proveedores / CxP",
+    description: "Compras, deudas, pagos y rendimientos de tus proveedores.",
+    href: "/admin/proveedores",
+  },
+  {
+    title: "Gestión de PINs",
+    description: "Contraseñas de acceso por rol.",
+    href: "/admin/pins",
+  },
 ];
 
 const operationModules = [
