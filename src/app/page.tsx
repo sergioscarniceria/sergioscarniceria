@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const COLORS = {
   bg: "#f7f1e8",
@@ -179,14 +179,44 @@ const socialLinks = [
 
 export default function HomePage() {
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);
+  const [showEmployeeMenu, setShowEmployeeMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <div style={pageStyle}>
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 
+      {/* Sticky navigation */}
+      <nav style={{
+        ...stickyNavStyle,
+        background: scrolled ? "rgba(255,255,255,0.95)" : "transparent",
+        boxShadow: scrolled ? COLORS.shadow : "none",
+        borderBottom: scrolled ? `1px solid ${COLORS.border}` : "none",
+      }}>
+        <div style={navInnerStyle}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+            <img src="/logo.png" alt="Sergio's" style={{ width: 40, height: "auto" }} />
+            <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 16 }}>Sergio&apos;s Carnicería</span>
+          </Link>
+          <div style={navLinksStyle}>
+            <a href="#inicio" style={navLinkStyle}>Inicio</a>
+            <a href="#recetario" style={navLinkStyle}>Recetario</a>
+            <a href="#ubicacion" style={navLinkStyle}>Ubicación</a>
+            <a href="#contacto" style={navLinkStyle}>Contacto</a>
+            <Link href="/cliente" style={navCtaStyle}>Hacer pedido</Link>
+          </div>
+        </div>
+      </nav>
+
       <div style={shellStyle}>
-        <div style={heroCardStyle}>
+        <div id="inicio" style={heroCardStyle}>
           <img
             src="/logo.png"
             alt="Sergios Carnicería"
@@ -199,7 +229,7 @@ export default function HomePage() {
             }}
           />
 
-          <h1 style={titleStyle}>Sergios Carnicería</h1>
+          <h1 style={titleStyle}>Sergio&apos;s Carnicería</h1>
           <p style={subtitleStyle}>
             El sabor de una gran comida empieza con una gran carne. Aquí puedes
             inspirarte, descubrir nuevas ideas para cocinar, pedir tus productos
@@ -256,7 +286,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div style={recipeSectionStyle}>
+        <div id="recetario" style={recipeSectionStyle}>
           <div style={sectionHeaderStyle}>
             <h2 style={{ margin: 0, color: COLORS.text }}>Recetario</h2>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
@@ -318,7 +348,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div style={socialSectionStyle}>
+        <div id="contacto" style={socialSectionStyle}>
           <div style={sectionHeaderStyle}>
             <h2 style={{ margin: 0, color: COLORS.text }}>Redes y contacto</h2>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
@@ -373,119 +403,91 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div style={internalSectionStyle}>
-  <div style={sectionHeaderStyle}>
-    <h2 style={{ margin: 0, color: COLORS.text }}>Menú de operaciones</h2>
-    <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-      Todo en un solo lugar para no perder tiempo buscando rutas.
-    </p>
-  </div>
+        {/* Ubicación y horario */}
+        <div id="ubicacion" style={locationSectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={{ margin: 0, color: COLORS.text }}>Ubicación y horario</h2>
+            <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
+              Visítanos en nuestra sucursal
+            </p>
+          </div>
 
-  <div
-    style={{
-      display: "grid",
-      gap: 20,
-    }}
-  >
-    <div>
-      <div
-        style={{
-          marginBottom: 12,
-          display: "inline-block",
-          padding: "8px 12px",
-          borderRadius: 999,
-          fontSize: 12,
-          fontWeight: 800,
-          background: "rgba(123, 34, 24, 0.12)",
-          color: COLORS.primary,
-        }}
-      >
-        Administración
-      </div>
+          <div style={locationGridStyle}>
+            <div style={locationInfoCardStyle}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18, marginBottom: 6 }}>Dirección</div>
+                <div style={{ color: COLORS.muted, lineHeight: 1.6 }}>
+                  H. Colegio Militar No. 122<br />
+                  Ezequiel Montes, Querétaro
+                </div>
+              </div>
 
-      <div style={gridStyle}>
-        {adminModules.map((module) => (
-          <Link
-            key={module.href}
-            href={module.href}
-            style={{
-              ...cardStyle,
-              textDecoration: "none",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-block",
-                padding: "6px 10px",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 700,
-                marginBottom: 12,
-                background: "rgba(123, 34, 24, 0.10)",
-                color: COLORS.primary,
-              }}
-            >
-              Admin
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18, marginBottom: 6 }}>Horario</div>
+                <div style={{ color: COLORS.muted, lineHeight: 1.8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <span>Lunes, Martes, Jueves, Viernes, Sábado</span>
+                    <b style={{ color: COLORS.text }}>6:30 AM – 4:00 PM</b>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <span>Miércoles y Domingo</span>
+                    <b style={{ color: COLORS.text }}>6:30 AM – 3:30 PM</b>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18, marginBottom: 6 }}>Formas de pago</div>
+                <div style={{ color: COLORS.muted }}>Efectivo, tarjeta, transferencia</div>
+              </div>
             </div>
 
-            <div style={cardTitleStyle}>{module.title}</div>
-            <div style={cardTextStyle}>{module.description}</div>
-            <div style={cardFooterStyle}>Abrir módulo →</div>
-          </Link>
-        ))}
-      </div>
-    </div>
-
-    <div>
-      <div
-        style={{
-          marginBottom: 12,
-          display: "inline-block",
-          padding: "8px 12px",
-          borderRadius: 999,
-          fontSize: 12,
-          fontWeight: 800,
-          background: "rgba(53, 92, 125, 0.12)",
-          color: COLORS.info,
-        }}
-      >
-        Operación
-      </div>
-
-      <div style={gridStyle}>
-        {operationModules.map((module) => (
-          <Link
-            key={module.href}
-            href={module.href}
-            style={{
-              ...cardStyle,
-              textDecoration: "none",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-block",
-                padding: "6px 10px",
-                borderRadius: 999,
-                fontSize: 12,
-                fontWeight: 700,
-                marginBottom: 12,
-                background: "rgba(53, 92, 125, 0.12)",
-                color: COLORS.info,
-              }}
-            >
-              Operación
+            <div style={mapContainerStyle}>
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3737.5!2d-99.9871!3d20.6627!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjDCsDM5JzQ1LjciTiA5OcKwNTknMTMuOCJX!5e0!3m2!1ses!2smx!4v1700000000000"
+                width="100%"
+                height="100%"
+                style={{ border: 0, borderRadius: 18, minHeight: 280 }}
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                title="Ubicación Sergio's Carnicería"
+              />
             </div>
+          </div>
+        </div>
 
-            <div style={cardTitleStyle}>{module.title}</div>
-            <div style={cardTextStyle}>{module.description}</div>
-            <div style={cardFooterStyle}>Abrir módulo →</div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  </div>
-</div>
+        {/* Botón discreto para empleados */}
+        <div style={employeeAccessStyle}>
+          <button
+            onClick={() => setShowEmployeeMenu(!showEmployeeMenu)}
+            style={employeeButtonStyle}
+          >
+            {showEmployeeMenu ? "Cerrar panel" : "Acceso empleados"}
+          </button>
+
+          {showEmployeeMenu && (
+            <div style={employeeMenuStyle}>
+              <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13 }}>
+                Módulos internos
+              </div>
+              <div style={employeeGridStyle}>
+                {[...adminModules, ...operationModules].map((m) => (
+                  <Link key={m.href} href={m.href} style={employeeLinkStyle}>
+                    {m.title}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={footerStyle}>
+          <div style={{ color: COLORS.muted, fontSize: 13 }}>
+            © {new Date().getFullYear()} Sergio&apos;s Carnicería — Ezequiel Montes, Qro.
+          </div>
+        </div>
         </div>
       </div>
   );
@@ -494,7 +496,7 @@ export default function HomePage() {
 const pageStyle: React.CSSProperties = {
   minHeight: "100vh",
   background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`,
-  padding: 16,
+  padding: "70px 16px 16px 16px",
   position: "relative",
   overflow: "hidden",
   fontFamily: "Arial, sans-serif",
@@ -837,4 +839,136 @@ const cardFooterStyle: React.CSSProperties = {
   marginTop: 18,
   color: COLORS.primary,
   fontWeight: 700,
+};
+
+/* Sticky navigation */
+const stickyNavStyle: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  zIndex: 100,
+  padding: "10px 16px",
+  transition: "all 0.25s ease",
+};
+
+const navInnerStyle: React.CSSProperties = {
+  maxWidth: 1320,
+  margin: "0 auto",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+};
+
+const navLinksStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 6,
+  alignItems: "center",
+  flexWrap: "wrap",
+};
+
+const navLinkStyle: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 12,
+  color: COLORS.text,
+  textDecoration: "none",
+  fontWeight: 600,
+  fontSize: 14,
+};
+
+const navCtaStyle: React.CSSProperties = {
+  padding: "8px 16px",
+  borderRadius: 12,
+  background: COLORS.primary,
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+/* Location section */
+const locationSectionStyle: React.CSSProperties = {
+  background: "rgba(255,255,255,0.46)",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 28,
+  padding: 20,
+  marginBottom: 24,
+};
+
+const locationGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+  gap: 20,
+};
+
+const locationInfoCardStyle: React.CSSProperties = {
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 22,
+  padding: 22,
+  boxShadow: COLORS.shadow,
+};
+
+const mapContainerStyle: React.CSSProperties = {
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 22,
+  overflow: "hidden",
+  boxShadow: COLORS.shadow,
+  minHeight: 280,
+};
+
+/* Employee access */
+const employeeAccessStyle: React.CSSProperties = {
+  textAlign: "center",
+  padding: "20px 0",
+};
+
+const employeeButtonStyle: React.CSSProperties = {
+  padding: "10px 20px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  background: "rgba(255,255,255,0.6)",
+  color: COLORS.muted,
+  cursor: "pointer",
+  fontWeight: 600,
+  fontSize: 13,
+};
+
+const employeeMenuStyle: React.CSSProperties = {
+  marginTop: 14,
+  padding: 18,
+  borderRadius: 22,
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  boxShadow: COLORS.shadow,
+  maxWidth: 800,
+  marginLeft: "auto",
+  marginRight: "auto",
+};
+
+const employeeGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gap: 8,
+};
+
+const employeeLinkStyle: React.CSSProperties = {
+  display: "block",
+  padding: "10px 14px",
+  borderRadius: 12,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  textDecoration: "none",
+  fontWeight: 600,
+  fontSize: 14,
+  textAlign: "center",
+};
+
+/* Footer */
+const footerStyle: React.CSSProperties = {
+  textAlign: "center",
+  padding: "20px 0 10px 0",
 };

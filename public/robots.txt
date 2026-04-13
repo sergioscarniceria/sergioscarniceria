@@ -1,0 +1,18 @@
+# Sergio's Carnicería - robots.txt
+User-agent: *
+Allow: /
+Allow: /cliente
+Allow: /recetas
+
+# Bloquear rutas de administración y operación
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /ventas
+Disallow: /cobranza
+Disallow: /produccion
+Disallow: /pedidos
+Disallow: /repartidores
+Disallow: /asistencia
+Disallow: /api/
+
+Sitemap: https://sergioscarniceria.com/sitemap.xml
