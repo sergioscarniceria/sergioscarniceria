@@ -13,6 +13,7 @@ type OrderItem = {
   quantity?: number | null;
   prepared_kilos?: number | null;
   is_ready?: boolean | null;
+  is_fixed_price_piece?: boolean | null;
 };
 
 type Order = {
@@ -163,14 +164,18 @@ const [changingId, setChangingId] = useState<string | null>(null);
   }, []);
 
   function total(order: Order) {
-    return (order.order_items || []).reduce((acc, i) => {
-      if (i.sale_type === "pieza") {
-        return acc + Number(i.prepared_kilos || 0) * Number(i.price || 0);
-      }
+  return (order.order_items || []).reduce((acc, i) => {
+    if (i.sale_type === "pieza" && i.is_fixed_price_piece) {
+      return acc + Number(i.quantity || 0) * Number(i.price || 0);
+    }
 
-      return acc + Number(i.kilos || 0) * Number(i.price || 0);
-    }, 0);
-  }
+    if (i.sale_type === "pieza") {
+      return acc + Number(i.prepared_kilos || 0) * Number(i.price || 0);
+    }
+
+    return acc + Number(i.kilos || 0) * Number(i.price || 0);
+  }, 0);
+}
 
   function applyBaseFilters(list: Order[]) {
     let result = list;
@@ -247,10 +252,13 @@ const [changingId, setChangingId] = useState<string | null>(null);
 
           <div style={totalBadgeStyle}>
             {(o.order_items || []).some(
-              (i) => i.sale_type === "pieza" && !Number(i.prepared_kilos || 0)
-            )
-              ? "Por pesar"
-              : `$${total(o).toFixed(2)}`}
+  (i) =>
+    i.sale_type === "pieza" &&
+    !i.is_fixed_price_piece &&
+    !Number(i.prepared_kilos || 0)
+)
+  ? "Por pesar"
+  : `$${total(o).toFixed(2)}`}
           </div>
         </div>
 
@@ -285,19 +293,21 @@ const [changingId, setChangingId] = useState<string | null>(null);
 
               <span style={{ color: COLORS.muted, flexShrink: 0, textAlign: "right" }}>
                 {i.sale_type === "pieza" ? (
-                  <>
-                    <div>
-                      {Number(i.quantity || 0)} pieza{Number(i.quantity || 0) === 1 ? "" : "s"}
-                    </div>
-                    <div style={{ fontSize: 12, marginTop: 4 }}>
-                      {i.prepared_kilos
-                        ? `${i.prepared_kilos} kg reales`
-                        : "Pendiente de pesar"}
-                    </div>
-                  </>
-                ) : (
-                  <div>{i.kilos} kg</div>
-                )}
+  <>
+    <div>
+      {Number(i.quantity || 0)} pieza{Number(i.quantity || 0) === 1 ? "" : "s"}
+    </div>
+    <div style={{ fontSize: 12, marginTop: 4 }}>
+      {i.is_fixed_price_piece
+        ? `Precio fijo: $${Number(i.price || 0).toFixed(2)} c/u`
+        : i.prepared_kilos
+        ? `${i.prepared_kilos} kg reales`
+        : "Pendiente de pesar"}
+    </div>
+  </>
+) : (
+  <div>{i.kilos} kg</div>
+)}
               </span>
             </div>
           ))}
