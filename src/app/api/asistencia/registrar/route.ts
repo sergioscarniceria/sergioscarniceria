@@ -84,6 +84,30 @@ function minutesDiff(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 60000);
 }
 
+/** Convert a UTC ISO timestamp to Mexico City local minutes from midnight */
+function toMexicoMinutes(isoTimestamp: string): number {
+  const date = new Date(isoTimestamp);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Mexico_City",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0");
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value || "0");
+  return hour * 60 + minute;
+}
+
+/** Convert "HH:MM" string to minutes from midnight */
+function timeStrToMinutes(t: string): number {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+/** Tolerances */
+const TOLERANCIA_BREAK_MIN = 30;   // 30 min de salidas no se descuentan
+const TOLERANCIA_EXTRA_MIN = 30;   // 30 min después del cierre no se pagan
+
 function dataUrlToBuffer(dataUrl: string) {
   const match = dataUrl.match(/^data:(.+);base64,(.+)$/);
   if (!match) {
@@ -136,29 +160,35 @@ function buildSummary(
   let minutosExtra = 0;
   let estatus = "jornada incompleta";
 
+  // Aplicar tolerancia de breaks: primeros 30 min no se descuentan
+  const minutosFueraDescontable = Math.max(0, minutosFuera - TOLERANCIA_BREAK_MIN);
+
   if (!horarioDia) {
     estatus = "día no laborable";
   } else {
     const entradaEsperada = horarioDia?.entrada;
     const salidaEsperada = horarioDia?.salida;
 
+    // Comparar en zona horaria de México (minutos desde medianoche)
     if (entrada && entradaEsperada) {
-      const entradaEsperadaDate = new Date(`${fecha}T${entradaEsperada}:00`);
-      const entradaReal = new Date(entrada.timestamp_evento);
-      minutosRetardo = Math.max(0, minutesDiff(entradaReal, entradaEsperadaDate));
+      const realMin = toMexicoMinutes(entrada.timestamp_evento);
+      const expectedMin = timeStrToMinutes(entradaEsperada);
+      minutosRetardo = Math.max(0, realMin - expectedMin);
     }
 
     if (salida && salidaEsperada) {
-      const salidaEsperadaDate = new Date(`${fecha}T${salidaEsperada}:00`);
-      const salidaReal = new Date(salida.timestamp_evento);
-      minutosExtra = Math.max(0, minutesDiff(salidaReal, salidaEsperadaDate));
+      const realMin = toMexicoMinutes(salida.timestamp_evento);
+      const expectedMin = timeStrToMinutes(salidaEsperada);
+      const extraBruto = Math.max(0, realMin - expectedMin);
+      // Tolerancia: primeros 30 min después de cierre no se pagan
+      minutosExtra = Math.max(0, extraBruto - TOLERANCIA_EXTRA_MIN);
     }
 
     if (!entrada || !salida) {
       estatus = "jornada incompleta";
     } else if (minutosRetardo > 0) {
       estatus = "retardo";
-    } else if (minutosFuera > 45) {
+    } else if (minutosFueraDescontable > 0) {
       estatus = "tiempo fuera excedido";
     } else {
       estatus = "puntual";
