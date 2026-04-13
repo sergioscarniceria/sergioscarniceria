@@ -297,6 +297,16 @@ total_general: Number(stats.totalGeneral.toFixed(2)),
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              style={{
+                ...secondaryButtonStyle,
+                background: showHistory ? COLORS.primary : "rgba(255,255,255,0.75)",
+                color: showHistory ? "white" : COLORS.text,
+              }}
+            >
+              {showHistory ? "Ocultar historial" : "Ver historial"}
+            </button>
             <Link href="/" style={secondaryButtonStyle}>
               Inicio
             </Link>
@@ -335,6 +345,121 @@ total_general: Number(stats.totalGeneral.toFixed(2)),
             </div>
           </div>
         </div>
+
+        {showHistory && (
+          <div style={{ ...panelStyle, marginBottom: 20 }}>
+            <div style={panelHeaderStyle}>
+              <div>
+                <h2 style={panelTitleStyle}>Historial de cierres</h2>
+                <p style={panelSubtitleStyle}>
+                  Últimos 30 cierres de caja registrados
+                </p>
+              </div>
+            </div>
+
+            {closureHistory.length === 0 ? (
+              <div style={emptyBoxStyle}>No hay cierres registrados aún</div>
+            ) : (
+              <div style={movementsListStyle}>
+                {closureHistory.map((closure) => {
+                  const diff = Number(closure.difference || 0);
+                  const diffColor =
+                    diff === 0
+                      ? COLORS.success
+                      : diff > 0
+                      ? COLORS.info
+                      : COLORS.danger;
+
+                  return (
+                    <div key={closure.id} style={movementCardStyle}>
+                      <div style={movementHeaderStyle}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={movementTitleStyle}>
+                            {closure.closure_date}
+                          </div>
+                          <div style={movementMetaStyle}>
+                            Registrado: <b>{formatDateTime(closure.created_at)}</b>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            ...amountBadgeStyle,
+                            background: diffColor,
+                          }}
+                        >
+                          {diff >= 0 ? "+" : ""}${money(diff)}
+                        </div>
+                      </div>
+
+                      <div style={historyDetailGridStyle}>
+                        <div style={historyDetailItemStyle}>
+                          <div style={historyDetailLabelStyle}>Efectivo esperado</div>
+                          <div style={historyDetailValueStyle}>${money(closure.expected_cash)}</div>
+                        </div>
+
+                        <div style={historyDetailItemStyle}>
+                          <div style={historyDetailLabelStyle}>Efectivo contado</div>
+                          <div style={historyDetailValueStyle}>${money(closure.counted_cash)}</div>
+                        </div>
+
+                        <div style={historyDetailItemStyle}>
+                          <div style={historyDetailLabelStyle}>Diferencia</div>
+                          <div style={{ ...historyDetailValueStyle, color: diffColor }}>
+                            ${money(diff)}
+                          </div>
+                        </div>
+
+                        {closure.total_sales != null && (
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Ventas</div>
+                            <div style={historyDetailValueStyle}>${money(closure.total_sales)}</div>
+                          </div>
+                        )}
+
+                        {closure.total_cxc != null && (
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Cobros CxC</div>
+                            <div style={historyDetailValueStyle}>${money(closure.total_cxc)}</div>
+                          </div>
+                        )}
+
+                        {closure.total_card != null && (
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Tarjeta</div>
+                            <div style={historyDetailValueStyle}>${money(closure.total_card)}</div>
+                          </div>
+                        )}
+
+                        {closure.total_transfer != null && (
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Transferencia</div>
+                            <div style={historyDetailValueStyle}>${money(closure.total_transfer)}</div>
+                          </div>
+                        )}
+
+                        {closure.total_general != null && (
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Total general</div>
+                            <div style={{ ...historyDetailValueStyle, fontWeight: 800 }}>
+                              ${money(closure.total_general)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {closure.notes && (
+                        <div style={historyNotesStyle}>
+                          {closure.notes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         <div style={heroGridStyle}>
           <div style={heroCardStrongStyle}>
@@ -596,130 +721,6 @@ total_general: Number(stats.totalGeneral.toFixed(2)),
           )}
         </div>
 
-        {/* Historial de cierres de caja */}
-        <div style={{ ...panelStyle, marginTop: 20 }}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <h2 style={panelTitleStyle}>Historial de cierres</h2>
-              <p style={panelSubtitleStyle}>
-                Últimos 30 cierres de caja registrados
-              </p>
-            </div>
-
-            <button
-              onClick={() => setShowHistory(!showHistory)}
-              style={secondaryButtonStyle}
-            >
-              {showHistory ? "Ocultar" : "Ver historial"}
-            </button>
-          </div>
-
-          {showHistory && (
-            <>
-              {closureHistory.length === 0 ? (
-                <div style={emptyBoxStyle}>No hay cierres registrados aún</div>
-              ) : (
-                <div style={movementsListStyle}>
-                  {closureHistory.map((closure) => {
-                    const diff = Number(closure.difference || 0);
-                    const diffColor =
-                      diff === 0
-                        ? COLORS.success
-                        : diff > 0
-                        ? COLORS.info
-                        : COLORS.danger;
-
-                    return (
-                      <div key={closure.id} style={movementCardStyle}>
-                        <div style={movementHeaderStyle}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={movementTitleStyle}>
-                              {closure.closure_date}
-                            </div>
-                            <div style={movementMetaStyle}>
-                              Registrado: <b>{formatDateTime(closure.created_at)}</b>
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              ...amountBadgeStyle,
-                              background: diffColor,
-                            }}
-                          >
-                            {diff >= 0 ? "+" : ""}${money(diff)}
-                          </div>
-                        </div>
-
-                        <div style={historyDetailGridStyle}>
-                          <div style={historyDetailItemStyle}>
-                            <div style={historyDetailLabelStyle}>Efectivo esperado</div>
-                            <div style={historyDetailValueStyle}>${money(closure.expected_cash)}</div>
-                          </div>
-
-                          <div style={historyDetailItemStyle}>
-                            <div style={historyDetailLabelStyle}>Efectivo contado</div>
-                            <div style={historyDetailValueStyle}>${money(closure.counted_cash)}</div>
-                          </div>
-
-                          <div style={historyDetailItemStyle}>
-                            <div style={historyDetailLabelStyle}>Diferencia</div>
-                            <div style={{ ...historyDetailValueStyle, color: diffColor }}>
-                              ${money(diff)}
-                            </div>
-                          </div>
-
-                          {closure.total_sales != null && (
-                            <div style={historyDetailItemStyle}>
-                              <div style={historyDetailLabelStyle}>Ventas</div>
-                              <div style={historyDetailValueStyle}>${money(closure.total_sales)}</div>
-                            </div>
-                          )}
-
-                          {closure.total_cxc != null && (
-                            <div style={historyDetailItemStyle}>
-                              <div style={historyDetailLabelStyle}>Cobros CxC</div>
-                              <div style={historyDetailValueStyle}>${money(closure.total_cxc)}</div>
-                            </div>
-                          )}
-
-                          {closure.total_card != null && (
-                            <div style={historyDetailItemStyle}>
-                              <div style={historyDetailLabelStyle}>Tarjeta</div>
-                              <div style={historyDetailValueStyle}>${money(closure.total_card)}</div>
-                            </div>
-                          )}
-
-                          {closure.total_transfer != null && (
-                            <div style={historyDetailItemStyle}>
-                              <div style={historyDetailLabelStyle}>Transferencia</div>
-                              <div style={historyDetailValueStyle}>${money(closure.total_transfer)}</div>
-                            </div>
-                          )}
-
-                          {closure.total_general != null && (
-                            <div style={historyDetailItemStyle}>
-                              <div style={historyDetailLabelStyle}>Total general</div>
-                              <div style={{ ...historyDetailValueStyle, fontWeight: 800 }}>
-                                ${money(closure.total_general)}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {closure.notes && (
-                          <div style={historyNotesStyle}>
-                            {closure.notes}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
-        </div>
       </div>
     </div>
   );
