@@ -206,7 +206,9 @@ export default function ProduccionPage() {
       return prepared * Number(item.price || 0);
     }
 
-    return Number(item.kilos || 0) * Number(item.price || 0);
+    // Para kg: usar prepared_kilos si existe (peso real ajustado), si no, kilos original
+    const kg = Number(item.prepared_kilos || item.kilos || 0);
+    return kg * Number(item.price || 0);
   }
   async function deleteOrder(id: string) {
   const supabase = getSupabaseClient();
@@ -271,7 +273,9 @@ export default function ProduccionPage() {
         return acc + Number(item.prepared_kilos || 0) * Number(item.price || 0);
       }
 
-      return acc + Number(item.kilos || 0) * Number(item.price || 0);
+      // Para kg: usar prepared_kilos si existe, si no kilos original
+      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      return acc + kg * Number(item.price || 0);
     }, 0);
   }
 
@@ -546,7 +550,9 @@ function Section({
                 </div>
 
                                 <div style={totalBadgeStyle}>
-                  {(o.order_items || []).some((item) => item.sale_type === "pieza")
+                  {(o.order_items || []).some(
+                    (item) => item.sale_type === "pieza" && !item.prepared_kilos
+                  )
                     ? "Por pesar"
                     : `$${total(o).toFixed(2)}`}
                 </div>
@@ -630,6 +636,54 @@ function Section({
                           ) : (
                             <div style={preparedHintStyle}>
                               Falta capturar el peso real.
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {/* Ajustar peso real para items por kilo */}
+                      {item.sale_type === "kg" ? (
+                        <div style={pieceControlsWrapStyle}>
+                          <div style={preparedRowStyle}>
+                            <input
+                              type="number"
+                              step="0.001"
+                              min="0"
+                              placeholder={`Pedido: ${item.kilos} kg`}
+                              value={
+                                preparedKilosDrafts[item.id] ??
+                                (item.prepared_kilos != null ? String(item.prepared_kilos) : "")
+                              }
+                              onChange={(e) =>
+                                setPreparedKilosDrafts((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              style={preparedInputStyle}
+                            />
+
+                            <button
+                              onClick={() => savePreparedKilos(item.id)}
+                              disabled={savingItemId === item.id}
+                              style={{
+                                ...miniActionButtonStyle,
+                                background: "rgba(166,106,16,0.12)",
+                                color: COLORS.warning,
+                                opacity: savingItemId === item.id ? 0.6 : 1,
+                              }}
+                            >
+                              {savingItemId === item.id ? "Guardando..." : "Ajustar peso"}
+                            </button>
+                          </div>
+
+                          {item.prepared_kilos ? (
+                            <div style={preparedHintStyle}>
+                              Peso ajustado: <b>{item.prepared_kilos} kg</b> (pedido original: {item.kilos} kg)
+                            </div>
+                          ) : (
+                            <div style={preparedHintStyle}>
+                              Peso original: {item.kilos} kg — ajusta si el peso real es diferente
                             </div>
                           )}
                         </div>

@@ -12,6 +12,8 @@ type OrderItem = {
   product: string;
   kilos: number;
   price: number;
+  prepared_kilos?: number | null;
+  sale_type?: "kg" | "pieza" | null;
 };
 
 type Ticket = {
@@ -188,7 +190,9 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   function ticketTotal(ticket: Ticket | null) {
     if (!ticket) return 0;
     return (ticket.order_items || []).reduce((acc, item) => {
-      return acc + Number(item.kilos || 0) * Number(item.price || 0);
+      // Usar prepared_kilos (peso real ajustado) si existe, si no el original
+      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      return acc + kg * Number(item.price || 0);
     }, 0);
   }
 
@@ -417,16 +421,17 @@ if (cashError) {
       return;
     }
 
-    const noteItems = (selectedTicket.order_items || []).map((item) => ({
-      cxc_note_id: noteData.id,
-      product: item.product,
-      quantity: Number(Number(item.kilos || 0).toFixed(3)),
-      unit: "kg",
-      price: Number(Number(item.price || 0).toFixed(2)),
-      line_total: Number(
-        (Number(item.kilos || 0) * Number(item.price || 0)).toFixed(2)
-      ),
-    }));
+    const noteItems = (selectedTicket.order_items || []).map((item) => {
+      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      return {
+        cxc_note_id: noteData.id,
+        product: item.product,
+        quantity: Number(kg.toFixed(3)),
+        unit: "kg",
+        price: Number(Number(item.price || 0).toFixed(2)),
+        line_total: Number((kg * Number(item.price || 0)).toFixed(2)),
+      };
+    });
 
     if (noteItems.length > 0) {
       const { error: noteItemsError } = await supabase
@@ -956,12 +961,14 @@ if (cashError) {
                             <div>
                               <div style={itemNameStyle}>{item.product}</div>
                               <div style={itemMetaStyle}>
-                                {item.kilos} kg · ${money(item.price)}
+                                {item.prepared_kilos && item.prepared_kilos !== item.kilos
+                                  ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
+                                  : `${item.kilos} kg`} · ${money(item.price)}
                               </div>
                             </div>
 
                             <div style={itemTotalStyle}>
-                              ${money(Number(item.kilos || 0) * Number(item.price || 0))}
+                              ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
                             </div>
                           </div>
                         ))
