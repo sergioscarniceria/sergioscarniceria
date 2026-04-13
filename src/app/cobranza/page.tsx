@@ -69,6 +69,43 @@ function shortId(id: string) {
 function ticketFolio(id: string) {
   return `TK-${shortId(id)}`;
 }
+
+/**
+ * Extrae un posible ID de ticket desde cualquier texto ingresado:
+ * - UUID completo (ej: "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+ * - Folio TK-xxxxxx (extrae los 6 chars)
+ * - Solo los primeros 6 chars del ID
+ * - URL que contenga un UUID (ej: texto de QR con URL)
+ * - Texto con formato libre del QR
+ */
+function extractTicketId(raw: string): { full: string | null; short: string | null } {
+  const text = raw.trim();
+  if (!text) return { full: null, short: null };
+
+  // Patrón UUID (8-4-4-4-12)
+  const uuidMatch = text.match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+  );
+  if (uuidMatch) {
+    return { full: uuidMatch[1].toLowerCase(), short: uuidMatch[1].slice(0, 6).toLowerCase() };
+  }
+
+  // Patrón TK-xxxxxx
+  const tkMatch = text.match(/TK-([0-9a-f]{4,8})/i);
+  if (tkMatch) {
+    return { full: null, short: tkMatch[1].toLowerCase().slice(0, 6) };
+  }
+
+  // Si parece un fragmento hex (6+ chars, solo hex)
+  const hexClean = text.replace(/^tk-/i, "").trim();
+  if (/^[0-9a-f]{6,}$/i.test(hexClean)) {
+    return { full: hexClean.length >= 32 ? hexClean.toLowerCase() : null, short: hexClean.slice(0, 6).toLowerCase() };
+  }
+
+  // Fallback: devolver como short para búsqueda parcial
+  return { full: null, short: text.toLowerCase().slice(0, 20) };
+}
+
 function todayDateString() {
   const d = new Date();
   const y = d.getFullYear();
@@ -160,7 +197,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   if (!qRaw) return tickets;
 
   const q = qRaw.toLowerCase();
-  const normalizedId = q.replace(/^tk-/i, "").slice(0, 6).trim();
+  const { full, short: shortCode } = extractTicketId(qRaw);
 
   return tickets.filter((ticket) => {
     const id = String(ticket.id).toLowerCase();
@@ -168,12 +205,18 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     const folio = `tk-${short}`;
     const name = (ticket.customer_name || "").toLowerCase();
 
-    return (
-      id.includes(q) ||
-      short.includes(normalizedId) ||
-      folio.includes(q) ||
-      name.includes(q)
-    );
+    // Match por UUID completo
+    if (full && id === full) return true;
+    // Match por short code
+    if (shortCode && short.includes(shortCode)) return true;
+    // Match por folio
+    if (folio.includes(q)) return true;
+    // Match por nombre de cliente
+    if (name.includes(q)) return true;
+    // Match parcial por ID
+    if (id.includes(q)) return true;
+
+    return false;
   });
 }, [tickets, ticketSearch]);
 
@@ -193,6 +236,56 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     }
 
     setSelectedTicket(data as Ticket);
+  }
+
+  /**
+   * Búsqueda directa en Supabase cuando no hay match local.
+   * Acepta UUID completo, folio TK-xxx, o short ID.
+   * Retorna true si encontró y abrió el ticket.
+   */
+  async function searchTicketDirect(rawInput: string): Promise<boolean> {
+    const { full, short: shortCode } = extractTicketId(rawInput);
+
+    // 1) Si tenemos UUID completo, buscar directo por ID
+    if (full) {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+        )
+        .eq("id", full)
+        .single();
+
+      if (!error && data) {
+        setSelectedTicket(data as Ticket);
+        return true;
+      }
+    }
+
+    // 2) Si tenemos short code, buscar tickets cuyo ID empiece con ese código
+    if (shortCode && shortCode.length >= 4) {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+        )
+        .ilike("id", `${shortCode}%`)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      if (!error && data && data.length === 1) {
+        setSelectedTicket(data[0] as Ticket);
+        return true;
+      }
+
+      if (!error && data && data.length > 1) {
+        // Múltiples resultados — no abrir automáticamente
+        alert(`Se encontraron ${data.length} tickets con ese folio. Intenta con el ID completo.`);
+        return false;
+      }
+    }
+
+    return false;
   }
 
   async function markTicketPaid(method: Exclude<PaymentMethod, "credito">) {
@@ -749,41 +842,45 @@ if (cashError) {
                 </div>
 
                 <input
-  placeholder="Buscar por folio o cliente"
+  placeholder="Escanea QR, folio TK-xxx, ID o nombre de cliente"
   value={ticketSearch}
   onChange={(e) => {
-    const value = e.target.value;
-    setTicketSearch(value);
-
-    const raw = value.trim().toLowerCase();
-    const normalized = raw.replace(/^tk-/i, "").slice(0, 6).trim();
-
-    if (!normalized) return;
-
-    const found = tickets.find((ticket) => {
-      const id = String(ticket.id).toLowerCase();
-      const short = id.slice(0, 6);
-      return id === raw || short === normalized;
-    });
-
-    if (found) {
-      openTicket(found.id);
-    }
+    setTicketSearch(e.target.value);
   }}
   autoFocus
-  onKeyDown={(e) => {
+  onKeyDown={async (e) => {
     if (e.key === "Enter") {
-      const raw = ticketSearch.trim().toLowerCase();
-      const normalized = raw.replace(/^tk-/i, "").slice(0, 6).trim();
+      e.preventDefault();
+      const raw = ticketSearch.trim();
+      if (!raw) return;
 
-      const found = tickets.find((ticket) => {
+      const { full, short: shortCode } = extractTicketId(raw);
+
+      // 1) Buscar match local primero (rápido)
+      const localMatch = tickets.find((ticket) => {
         const id = String(ticket.id).toLowerCase();
         const short = id.slice(0, 6);
-        return id === raw || short === normalized;
+        if (full && id === full) return true;
+        if (shortCode && short === shortCode) return true;
+        if (id.includes(raw.toLowerCase())) return true;
+        return false;
       });
 
+      if (localMatch) {
+        openTicket(localMatch.id);
+        setTicketSearch("");
+        return;
+      }
+
+      // 2) Si no hay match local, buscar directo en Supabase
+      const found = await searchTicketDirect(raw);
       if (found) {
-        openTicket(found.id);
+        setTicketSearch("");
+      } else {
+        // 3) Si tampoco hay en Supabase, puede ser nombre de cliente
+        // (el filtro visual de la lista ya lo muestra)
+        if (!full && !shortCode) return;
+        alert("No se encontró ticket con ese folio o ID");
       }
     }
   }}

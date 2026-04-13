@@ -22,6 +22,11 @@ type CashClosure = {
   difference: number | null;
   notes?: string | null;
   created_at?: string | null;
+  total_sales?: number | null;
+  total_cxc?: number | null;
+  total_card?: number | null;
+  total_transfer?: number | null;
+  total_general?: number | null;
 };
 
 const COLORS = {
@@ -86,6 +91,8 @@ export default function CajaPage() {
   const [countedCash, setCountedCash] = useState("");
   const [closureNotes, setClosureNotes] = useState("");
   const [todayClosure, setTodayClosure] = useState<CashClosure | null>(null);
+  const [closureHistory, setClosureHistory] = useState<CashClosure[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -93,7 +100,7 @@ export default function CajaPage() {
 
   async function loadData() {
     setLoading(true);
-    await Promise.all([loadMovements(), loadTodayClosure()]);
+    await Promise.all([loadMovements(), loadTodayClosure(), loadClosureHistory()]);
     setLoading(false);
   }
 
@@ -140,6 +147,21 @@ export default function CajaPage() {
       setCountedCash(String(Number(closure.counted_cash || 0)));
       setClosureNotes(closure.notes || "");
     }
+  }
+
+  async function loadClosureHistory() {
+    const { data, error } = await supabase
+      .from("cash_closures")
+      .select("*")
+      .order("closure_date", { ascending: false })
+      .limit(30);
+
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setClosureHistory((data as CashClosure[]) || []);
   }
 
   const stats = useMemo(() => {
@@ -573,6 +595,131 @@ total_general: Number(stats.totalGeneral.toFixed(2)),
             </div>
           )}
         </div>
+
+        {/* Historial de cierres de caja */}
+        <div style={{ ...panelStyle, marginTop: 20 }}>
+          <div style={panelHeaderStyle}>
+            <div>
+              <h2 style={panelTitleStyle}>Historial de cierres</h2>
+              <p style={panelSubtitleStyle}>
+                Últimos 30 cierres de caja registrados
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              style={secondaryButtonStyle}
+            >
+              {showHistory ? "Ocultar" : "Ver historial"}
+            </button>
+          </div>
+
+          {showHistory && (
+            <>
+              {closureHistory.length === 0 ? (
+                <div style={emptyBoxStyle}>No hay cierres registrados aún</div>
+              ) : (
+                <div style={movementsListStyle}>
+                  {closureHistory.map((closure) => {
+                    const diff = Number(closure.difference || 0);
+                    const diffColor =
+                      diff === 0
+                        ? COLORS.success
+                        : diff > 0
+                        ? COLORS.info
+                        : COLORS.danger;
+
+                    return (
+                      <div key={closure.id} style={movementCardStyle}>
+                        <div style={movementHeaderStyle}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={movementTitleStyle}>
+                              {closure.closure_date}
+                            </div>
+                            <div style={movementMetaStyle}>
+                              Registrado: <b>{formatDateTime(closure.created_at)}</b>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              ...amountBadgeStyle,
+                              background: diffColor,
+                            }}
+                          >
+                            {diff >= 0 ? "+" : ""}${money(diff)}
+                          </div>
+                        </div>
+
+                        <div style={historyDetailGridStyle}>
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Efectivo esperado</div>
+                            <div style={historyDetailValueStyle}>${money(closure.expected_cash)}</div>
+                          </div>
+
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Efectivo contado</div>
+                            <div style={historyDetailValueStyle}>${money(closure.counted_cash)}</div>
+                          </div>
+
+                          <div style={historyDetailItemStyle}>
+                            <div style={historyDetailLabelStyle}>Diferencia</div>
+                            <div style={{ ...historyDetailValueStyle, color: diffColor }}>
+                              ${money(diff)}
+                            </div>
+                          </div>
+
+                          {closure.total_sales != null && (
+                            <div style={historyDetailItemStyle}>
+                              <div style={historyDetailLabelStyle}>Ventas</div>
+                              <div style={historyDetailValueStyle}>${money(closure.total_sales)}</div>
+                            </div>
+                          )}
+
+                          {closure.total_cxc != null && (
+                            <div style={historyDetailItemStyle}>
+                              <div style={historyDetailLabelStyle}>Cobros CxC</div>
+                              <div style={historyDetailValueStyle}>${money(closure.total_cxc)}</div>
+                            </div>
+                          )}
+
+                          {closure.total_card != null && (
+                            <div style={historyDetailItemStyle}>
+                              <div style={historyDetailLabelStyle}>Tarjeta</div>
+                              <div style={historyDetailValueStyle}>${money(closure.total_card)}</div>
+                            </div>
+                          )}
+
+                          {closure.total_transfer != null && (
+                            <div style={historyDetailItemStyle}>
+                              <div style={historyDetailLabelStyle}>Transferencia</div>
+                              <div style={historyDetailValueStyle}>${money(closure.total_transfer)}</div>
+                            </div>
+                          )}
+
+                          {closure.total_general != null && (
+                            <div style={historyDetailItemStyle}>
+                              <div style={historyDetailLabelStyle}>Total general</div>
+                              <div style={{ ...historyDetailValueStyle, fontWeight: 800 }}>
+                                ${money(closure.total_general)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {closure.notes && (
+                          <div style={historyNotesStyle}>
+                            {closure.notes}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -969,6 +1116,7 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
+  cursor: "pointer",
 };
 
 const primaryButtonStyle: React.CSSProperties = {
@@ -982,4 +1130,40 @@ const primaryButtonStyle: React.CSSProperties = {
   fontWeight: 700,
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
   cursor: "pointer",
+};
+
+const historyDetailGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  gap: 10,
+  marginTop: 10,
+};
+
+const historyDetailItemStyle: React.CSSProperties = {
+  background: "white",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 14,
+  padding: 10,
+};
+
+const historyDetailLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 12,
+  marginBottom: 4,
+};
+
+const historyDetailValueStyle: React.CSSProperties = {
+  color: COLORS.text,
+  fontSize: 16,
+  fontWeight: 700,
+};
+
+const historyNotesStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 12,
+  background: "rgba(166,106,16,0.08)",
+  color: COLORS.muted,
+  fontSize: 13,
+  fontStyle: "italic",
 };
