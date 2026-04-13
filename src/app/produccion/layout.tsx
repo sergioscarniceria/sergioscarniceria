@@ -7,9 +7,9 @@ export default function ProduccionLayout({
 }) {
   return (
     <AccessGate
-      scope="operation"
-      title="Acceso a Producción"
-      subtitle="Solo personal autorizado puede entrar aquí."
+      allowedRoles={["admin", "empleado"]}
+      title="Producción"
+      subtitle="Ingresa tu PIN para continuar"
     >
       {children}
     </AccessGate>

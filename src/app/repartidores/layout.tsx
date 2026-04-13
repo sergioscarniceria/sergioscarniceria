@@ -7,9 +7,9 @@ export default function RepartidoresLayout({
 }) {
   return (
     <AccessGate
-      scope="operation"
-      title="Acceso a Repartidores"
-      subtitle="Esta sección está protegida para uso interno."
+      allowedRoles={["admin", "empleado"]}
+      title="Repartidores"
+      subtitle="Ingresa tu PIN para continuar"
     >
       {children}
     </AccessGate>

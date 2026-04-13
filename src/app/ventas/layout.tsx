@@ -1,14 +1,14 @@
 import AccessGate from "@/components/AccessGate";
 
-export default function AdminLayout({
+export default function VentasLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin", "cajera"]}
-      title="Área Administrativa"
+      allowedRoles={["admin", "empleado"]}
+      title="Ventas Mostrador"
       subtitle="Ingresa tu PIN para continuar"
     >
       {children}

@@ -7,9 +7,9 @@ export default function PedidosLayout({
 }) {
   return (
     <AccessGate
-      scope="operation"
-      title="Acceso a Pedidos"
-      subtitle="Esta sección es solo para operación interna."
+      allowedRoles={["admin", "empleado"]}
+      title="Pedidos"
+      subtitle="Ingresa tu PIN para continuar"
     >
       {children}
     </AccessGate>
