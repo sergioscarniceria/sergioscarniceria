@@ -207,7 +207,7 @@ export default function NuevoPedidoPage() {
     setNewCustomerAddress("");
   }
 
-      function addProduct(product: Product, mode: "kg" | "half" | "money" | "piece") {
+      function addProduct(product: Product, mode: "kg" | "half" | "money" | "piece" | "custom") {
     if (!selectedCustomer) {
       alert("Primero selecciona un cliente");
       return;
@@ -243,6 +243,19 @@ export default function NuevoPedidoPage() {
     let kilos = 1;
 
     if (mode === "half") kilos = 0.5;
+
+    if (mode === "custom") {
+      const kilosText = prompt(`¿Cuántos kilos de ${product.name}? (ej: 3.2)`);
+      if (!kilosText) return;
+
+      const parsed = Number(kilosText.replace(",", "."));
+      if (!parsed || parsed <= 0) {
+        alert("Escribe una cantidad válida (ej: 3.2)");
+        return;
+      }
+
+      kilos = Number(parsed.toFixed(3));
+    }
 
     if (mode === "money") {
       const amountText = prompt(`¿Cuánto dinero de ${product.name}?`);
@@ -718,6 +731,9 @@ export default function NuevoPedidoPage() {
                             </button>
                             <button onClick={() => addProduct(product, "half")} style={miniLightButtonStyle}>
                               +0.5
+                            </button>
+                            <button onClick={() => addProduct(product, "custom")} style={miniLightButtonStyle}>
+                              Cant.
                             </button>
                             <button onClick={() => addProduct(product, "piece")} style={miniLightButtonStyle}>
                               Pzas

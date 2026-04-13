@@ -448,11 +448,24 @@ export default function ClientePage() {
     alert("Dirección guardada");
   }
 
-  function addProduct(product: Product, mode: "kg" | "half" | "money") {
+  function addProduct(product: Product, mode: "kg" | "half" | "money" | "custom") {
     let kilos = 1;
     const price = getPrice(product);
 
     if (mode === "half") kilos = 0.5;
+
+    if (mode === "custom") {
+      const kilosText = prompt(`¿Cuántos kilos de ${product.name}? (ej: 3.2)`);
+      if (!kilosText) return;
+
+      const parsed = Number(kilosText.replace(",", "."));
+      if (!parsed || parsed <= 0) {
+        alert("Escribe una cantidad válida (ej: 3.2)");
+        return;
+      }
+
+      kilos = Number(parsed.toFixed(3));
+    }
 
     if (mode === "money") {
       const amountText = prompt(`¿Cuánto dinero de ${product.name}?`);
@@ -1108,6 +1121,9 @@ export default function ClientePage() {
                           </button>
                           <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
                             +0.5
+                          </button>
+                          <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                            Cant.
                           </button>
                           <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
                             $
