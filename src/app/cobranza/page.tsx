@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type TabMode = "ticket" | "manual";
@@ -156,6 +156,39 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [showPrintTicket, setShowPrintTicket] = useState(false);
+
+  // Scanner detection: el escáner USB escribe muy rápido (< 50ms entre chars)
+  const scanBufferRef = useRef("");
+  const scanTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleScannerInput = useCallback(async (scannedText: string) => {
+    const trimmed = scannedText.trim();
+    if (!trimmed || trimmed.length < 6) return;
+
+    // Buscar ticket con el texto escaneado
+    const { full, short: shortCode } = extractTicketId(trimmed);
+
+    // Primero buscar en tickets locales
+    const localMatch = tickets.find((ticket) => {
+      const id = String(ticket.id).toLowerCase();
+      const short = id.slice(0, 6);
+      if (full && id === full) return true;
+      if (shortCode && short === shortCode) return true;
+      return false;
+    });
+
+    if (localMatch) {
+      openTicket(localMatch.id);
+      setTicketSearch("");
+      return;
+    }
+
+    // Si no hay match local, buscar en Supabase
+    const found = await searchTicketDirect(trimmed);
+    if (found) {
+      setTicketSearch("");
+    }
+  }, [tickets]);
 
   useEffect(() => {
     loadData();
@@ -900,12 +933,30 @@ if (cashError) {
   placeholder="Escanea QR, folio TK-xxx, ID o nombre de cliente"
   value={ticketSearch}
   onChange={(e) => {
-    setTicketSearch(e.target.value);
+    const val = e.target.value;
+    setTicketSearch(val);
+
+    // Detección de scanner: acumula caracteres rápidos
+    // El scanner "escribe" todo en < 100ms, un humano tarda mucho más
+    scanBufferRef.current += val.slice(-1);
+    if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+    scanTimerRef.current = setTimeout(() => {
+      const buffer = scanBufferRef.current;
+      scanBufferRef.current = "";
+      // Si se acumularon 8+ chars en < 100ms, es scanner
+      if (buffer.length >= 8) {
+        handleScannerInput(val);
+      }
+    }, 100);
   }}
   autoFocus
   onKeyDown={async (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      // Limpiar buffer del scanner
+      scanBufferRef.current = "";
+      if (scanTimerRef.current) clearTimeout(scanTimerRef.current);
+
       const raw = ticketSearch.trim();
       if (!raw) return;
 
@@ -933,7 +984,6 @@ if (cashError) {
         setTicketSearch("");
       } else {
         // 3) Si tampoco hay en Supabase, puede ser nombre de cliente
-        // (el filtro visual de la lista ya lo muestra)
         if (!full && !shortCode) return;
         alert("No se encontró ticket con ese folio o ID");
       }
@@ -1254,6 +1304,14 @@ if (cashError) {
                             <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16, margin: "8px 0" }}>
                               <span>TOTAL</span>
                               <span>${money(ticketFinalTotal(selectedTicket))}</span>
+                            </div>
+
+                            <div style={{ textAlign: "center", margin: "8px 0" }}>
+                              <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(selectedTicket.id)}`}
+                                alt="QR"
+                                style={{ width: 100, height: 100 }}
+                              />
                             </div>
 
                             <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
