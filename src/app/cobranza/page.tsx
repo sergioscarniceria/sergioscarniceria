@@ -1155,22 +1155,25 @@ if (cashError) {
                                 if (el) {
                                   const win = window.open("", "_blank", "width=400,height=600");
                                   if (win) {
+                                    // Reemplazar src relativo por absoluto para el logo
+                                    let html = el.innerHTML;
+                                    html = html.replace(
+                                      /src="\/logo\.png"/g,
+                                      `src="${window.location.origin}/logo.png"`
+                                    );
                                     win.document.write(`<html><head><title>Ticket</title><style>
                                       body { font-family: monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; }
                                       .center { text-align: center; }
-                                      .right { text-align: right; }
-                                      .bold { font-weight: bold; }
+                                      img { display: block; margin: 0 auto 4px auto; }
                                       .line { border-top: 1px dashed #000; margin: 6px 0; }
                                       .row { display: flex; justify-content: space-between; margin: 2px 0; }
-                                      .mayoreo-badge { background: #f0e6d0; padding: 3px 6px; border-radius: 4px; font-size: 11px; margin: 4px 0; }
-                                      .discount-row { color: #1f7a4d; }
-                                      .total-row { font-size: 16px; font-weight: bold; margin: 8px 0; }
                                       @media print { button { display: none; } }
                                     </style></head><body>`);
-                                    win.document.write(el.innerHTML);
+                                    win.document.write(html);
                                     win.document.write("</body></html>");
                                     win.document.close();
-                                    win.print();
+                                    // Esperar a que cargue el logo antes de imprimir
+                                    win.onload = () => win.print();
                                   }
                                 }
                               }}
@@ -1185,6 +1188,12 @@ if (cashError) {
 
                           <div id="printable-ticket" style={{ fontFamily: "monospace", fontSize: 12, maxWidth: 300 }}>
                             <div style={{ textAlign: "center", marginBottom: 8 }}>
+                              <img
+                                src="/logo.png"
+                                alt="Sergio's Carnicería"
+                                style={{ width: 120, height: "auto", marginBottom: 4 }}
+                                data-print-src={`${typeof window !== "undefined" ? window.location.origin : ""}/logo.png`}
+                              />
                               <div style={{ fontWeight: 800, fontSize: 14 }}>SERGIO&apos;S CARNICERÍA</div>
                               <div style={{ fontSize: 11, color: "#666" }}>sergioscarniceria.com</div>
                             </div>
