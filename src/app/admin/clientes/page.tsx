@@ -46,6 +46,8 @@ export default function AdminClientesPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     loadCustomers();
@@ -141,6 +143,53 @@ export default function AdminClientesPage() {
 
     setCustomers((prev) => prev.filter((c) => c.id !== id));
     setDeletingId(null);
+  }
+
+  async function saveCustomerEdit() {
+    if (!editingCustomer) return;
+    if (!editingCustomer.name.trim()) {
+      alert("El nombre es obligatorio");
+      return;
+    }
+
+    setSavingEdit(true);
+
+    const { error } = await supabase
+      .from("customers")
+      .update({
+        name: editingCustomer.name.trim(),
+        phone: editingCustomer.phone?.trim() || null,
+        email: editingCustomer.email?.trim() || null,
+        business_name: editingCustomer.business_name?.trim() || null,
+        address: editingCustomer.address?.trim() || null,
+      })
+      .eq("id", editingCustomer.id);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo guardar los cambios");
+      setSavingEdit(false);
+      return;
+    }
+
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === editingCustomer.id
+          ? {
+              ...c,
+              name: editingCustomer.name.trim(),
+              phone: editingCustomer.phone?.trim() || null,
+              email: editingCustomer.email?.trim() || null,
+              business_name: editingCustomer.business_name?.trim() || null,
+              address: editingCustomer.address?.trim() || null,
+            }
+          : c
+      )
+    );
+
+    setSavingEdit(false);
+    setEditingCustomer(null);
+    alert("Cliente actualizado");
   }
 
   const filtered = useMemo(() => {
@@ -272,6 +321,13 @@ export default function AdminClientesPage() {
                 </div>
 
                 <div style={quickLinksWrapStyle}>
+                  <button
+                    onClick={() => setEditingCustomer({ ...c })}
+                    style={miniEditButtonStyle}
+                  >
+                    Editar datos
+                  </button>
+
                   <Link
                     href={`/admin/cxc/nueva-nota?customer_id=${c.id}`}
                     style={miniLinkButtonStyle}
@@ -406,6 +462,93 @@ export default function AdminClientesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {editingCustomer && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <h2 style={{ margin: "0 0 16px 0", color: COLORS.text }}>
+                Editar cliente
+              </h2>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Nombre *</div>
+                <input
+                  value={editingCustomer.name}
+                  onChange={(e) =>
+                    setEditingCustomer({ ...editingCustomer, name: e.target.value })
+                  }
+                  style={textInputStyle}
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Teléfono</div>
+                <input
+                  value={editingCustomer.phone || ""}
+                  onChange={(e) =>
+                    setEditingCustomer({ ...editingCustomer, phone: e.target.value })
+                  }
+                  style={textInputStyle}
+                  placeholder="Teléfono"
+                />
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Correo</div>
+                <input
+                  value={editingCustomer.email || ""}
+                  onChange={(e) =>
+                    setEditingCustomer({ ...editingCustomer, email: e.target.value })
+                  }
+                  style={textInputStyle}
+                  placeholder="Correo electrónico"
+                />
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Nombre de negocio</div>
+                <input
+                  value={editingCustomer.business_name || ""}
+                  onChange={(e) =>
+                    setEditingCustomer({ ...editingCustomer, business_name: e.target.value })
+                  }
+                  style={textInputStyle}
+                  placeholder="Nombre del negocio"
+                />
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Dirección</div>
+                <input
+                  value={editingCustomer.address || ""}
+                  onChange={(e) =>
+                    setEditingCustomer({ ...editingCustomer, address: e.target.value })
+                  }
+                  style={textInputStyle}
+                  placeholder="Dirección de entrega"
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button
+                  onClick={saveCustomerEdit}
+                  disabled={savingEdit}
+                  style={saveEditButtonStyle}
+                >
+                  {savingEdit ? "Guardando..." : "Guardar cambios"}
+                </button>
+
+                <button
+                  onClick={() => setEditingCustomer(null)}
+                  style={cancelEditButtonStyle}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -780,5 +923,70 @@ const secondaryButtonStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.75)",
   color: COLORS.text,
   textDecoration: "none",
+  fontWeight: 700,
+};
+
+const miniEditButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "8px 14px",
+  borderRadius: 12,
+  border: `1px solid ${COLORS.border}`,
+  background: "rgba(123, 34, 24, 0.08)",
+  color: COLORS.primary,
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.4)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+  padding: 16,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 480,
+  background: "white",
+  borderRadius: 22,
+  padding: 24,
+  boxShadow: COLORS.shadow,
+  border: `1px solid ${COLORS.border}`,
+  maxHeight: "90vh",
+  overflowY: "auto",
+};
+
+const editFieldBlockStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 6,
+  marginBottom: 12,
+};
+
+const saveEditButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  cursor: "pointer",
+  fontWeight: 700,
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+};
+
+const cancelEditButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "12px 16px",
+  borderRadius: 14,
+  border: `1px solid ${COLORS.border}`,
+  background: "white",
+  color: COLORS.text,
+  cursor: "pointer",
   fontWeight: 700,
 };
