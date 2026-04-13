@@ -6,7 +6,15 @@ import { getSupabaseClient } from "@/lib/supabase";
  * Crea la tabla app_pins e inserta los 3 roles con PINs por defecto.
  * Solo ejecutar UNA vez.
  */
+export async function GET(req: Request) {
+  return handler(req);
+}
+
 export async function POST(req: Request) {
+  return handler(req);
+}
+
+async function handler(req: Request) {
   const { searchParams } = new URL(req.url);
   if (searchParams.get("secret") !== "sergios2026") {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
