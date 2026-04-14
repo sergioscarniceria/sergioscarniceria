@@ -172,6 +172,8 @@ export default function ClientePage() {
   const [creditLimit, setCreditLimit] = useState(0);
   const [creditDays, setCreditDays] = useState(0);
 
+  const [activeTab, setActiveTab] = useState<"orden" | "catalogo" | "pedidos" | "cuenta">("orden");
+
   useEffect(() => {
     checkUser();
   }, []);
@@ -580,6 +582,7 @@ export default function ClientePage() {
     setNotes(order.notes || "");
     setDeliveryDate(order.delivery_date || getTodayDateInput());
     setShowCart(true);
+    setActiveTab("orden");
     window.scrollTo({ top: 0, behavior: "smooth" });
     alert("Pedido cargado otra vez en tu pedido");
   }
@@ -732,33 +735,34 @@ export default function ClientePage() {
           </div>
 
           <div style={authCardStyle}>
-            <div style={{ textAlign: "center", marginBottom: 22 }}>
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
               <img
                 src="/logo.png"
                 alt="Sergios Carnicería"
                 style={{
-                  width: 170,
+                  width: 200,
                   maxWidth: "100%",
                   height: "auto",
                   display: "block",
-                  margin: "0 auto 14px auto",
+                  margin: "0 auto 18px auto",
                 }}
               />
-              <h1 style={{ margin: 0, color: COLORS.text, fontSize: 28 }}>
-                Bienvenido a Sergio{"'"}s
+              <h1 style={{ margin: 0, color: COLORS.text, fontSize: 32, fontWeight: 800 }}>
+                Sergio{"'"}s Carnicería
               </h1>
-              <p style={{ color: COLORS.muted, marginTop: 8, fontSize: 15 }}>
-                Haz tus pedidos de carne fresca desde tu celular
+              <p style={{ color: COLORS.muted, marginTop: 10, fontSize: 16, lineHeight: 1.5 }}>
+                Pide carne fresca desde tu celular
               </p>
             </div>
 
-            <div style={{ marginBottom: 18, display: "flex", gap: 10 }}>
+            <div style={{ marginBottom: 22, display: "flex", gap: 12 }}>
               <button
                 onClick={() => { setMode("login"); setLoginError(""); }}
                 style={{
                   ...switchButtonStyle,
                   background: mode === "login" ? COLORS.primary : "#efe8df",
                   color: mode === "login" ? "white" : COLORS.text,
+                  fontWeight: 800,
                 }}
               >
                 Entrar
@@ -769,9 +773,10 @@ export default function ClientePage() {
                   ...switchButtonStyle,
                   background: mode === "register" ? COLORS.primary : "#efe8df",
                   color: mode === "register" ? "white" : COLORS.text,
+                  fontWeight: 800,
                 }}
               >
-                Registro
+                Crear cuenta
               </button>
             </div>
 
@@ -781,28 +786,28 @@ export default function ClientePage() {
 
             {mode === "login" ? (
               <>
-                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
                   <button
                     onClick={() => { setLoginMethod("phone"); setLoginError(""); }}
                     style={{
                       ...loginMethodButtonStyle,
-                      background: loginMethod === "phone" ? "rgba(123,34,24,0.08)" : "transparent",
+                      background: loginMethod === "phone" ? "rgba(123,34,24,0.12)" : "transparent",
                       color: loginMethod === "phone" ? COLORS.primary : COLORS.muted,
                       borderColor: loginMethod === "phone" ? COLORS.primary : COLORS.border,
                     }}
                   >
-                    Con teléfono
+                    Teléfono
                   </button>
                   <button
                     onClick={() => { setLoginMethod("email"); setLoginError(""); }}
                     style={{
                       ...loginMethodButtonStyle,
-                      background: loginMethod === "email" ? "rgba(123,34,24,0.08)" : "transparent",
+                      background: loginMethod === "email" ? "rgba(123,34,24,0.12)" : "transparent",
                       color: loginMethod === "email" ? COLORS.primary : COLORS.muted,
                       borderColor: loginMethod === "email" ? COLORS.primary : COLORS.border,
                     }}
                   >
-                    Con correo
+                    Correo
                   </button>
                 </div>
 
@@ -879,11 +884,11 @@ export default function ClientePage() {
             )}
 
             <div style={authPromoStyle}>
-              <div style={{ fontWeight: 700, color: COLORS.primary, marginBottom: 6 }}>
-                Pide desde tu celular
+              <div style={{ fontWeight: 800, color: COLORS.primary, marginBottom: 8, fontSize: 16 }}>
+                🥩 Carne fresca todos los días
               </div>
-              <div style={{ color: COLORS.muted, fontSize: 13, lineHeight: 1.5 }}>
-                Carne fresca, cortes especiales y complementos. Hacemos tu pedido y te avisamos cuando esté listo.
+              <div style={{ color: COLORS.muted, fontSize: 14, lineHeight: 1.6 }}>
+                Cortes especiales, marinados y complementos. Hacemos tu pedido a medida.
               </div>
             </div>
           </div>
@@ -899,28 +904,28 @@ export default function ClientePage() {
 
       <div style={shellStyle}>
         <div style={topBarStyle}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <img
               src="/logo.png"
               alt="Sergios Carnicería"
               style={{
-                width: isMobile ? 72 : 96,
+                width: isMobile ? 60 : 80,
                 height: "auto",
                 display: "block",
               }}
             />
 
             <div>
-              <h1 style={{ margin: 0, color: COLORS.text, fontSize: isMobile ? 26 : 32 }}>
-                Hola, bienvenido
+              <h1 style={{ margin: 0, color: COLORS.text, fontSize: isMobile ? 24 : 28, fontWeight: 800 }}>
+                Bienvenido
               </h1>
               <p style={{ color: COLORS.muted, margin: "4px 0 0 0", fontSize: 14 }}>
-                Pide tu carne fresca y te la preparamos
+                Sergio{"'"}s Carnicería
               </p>
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Link href="/" style={secondaryButtonStyle}>
               Inicio
             </Link>
@@ -930,382 +935,422 @@ export default function ClientePage() {
           </div>
         </div>
 
-        {/* Promotional banner */}
-        <div style={promoBannerStyle}>
-          <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 800, color: COLORS.primary }}>
-            Carne fresca todos los días
-          </div>
-          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
-            Haz tu pedido ahora y lo tenemos listo para cuando lo necesites. Cortes al gusto, marinados y complementos.
-          </div>
-        </div>
-
-        <div style={heroGridStyle}>
-          <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Puntos acumulados</div>
-            <div style={heroValueStyle}>{points}</div>
-            <div style={heroMetaStyle}>
-              Tipo de cliente: <b>{customerType}</b>
-            </div>
-          </div>
-
-          <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Resumen del pedido</div>
-            <div style={heroValueStyle}>${cartTotal().toFixed(2)}</div>
-            <div style={heroMetaStyle}>
-              {cart.length} artículo{cart.length === 1 ? "" : "s"}
-            </div>
-          </div>
-
-          <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Adeudo pendiente</div>
-            <div style={heroValueStyle}>${totalDebt.toFixed(2)}</div>
-            <div style={heroMetaStyle}>
-              {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta{openNotes.length === 1 ? "" : "s"}
-            </div>
-          </div>
-
-          <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Crédito</div>
-            <div style={heroValueStyle}>{creditEnabled ? "Activo" : "No"}</div>
-            <div style={heroMetaStyle}>
-              Límite: <b>${creditLimit.toFixed(2)}</b> · {creditDays || 0} días
-            </div>
-          </div>
-        </div>
-
-        {creditEnabled || cxcNotes.length > 0 || cxcPayments.length > 0 ? (
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <div>
-                <h2 style={panelTitleStyle}>Mi estado de cuenta</h2>
-                <p style={panelSubtitleStyle}>
-                  Solo consulta. Aquí puedes ver tus adeudos, notas y pagos.
-                </p>
-              </div>
-            </div>
-
-            <div style={accountSummaryGridStyle}>
-              <div style={accountSummaryCardStyle}>
-                <div style={smallLabelStyle}>Saldo pendiente</div>
-                <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
-              </div>
-
-              <div style={accountSummaryCardStyle}>
-                <div style={smallLabelStyle}>Notas abiertas</div>
-                <div style={accountValueStyle}>{openNotes.length}</div>
-              </div>
-
-              <div style={accountSummaryCardStyle}>
-                <div style={smallLabelStyle}>Vencidas</div>
-                <div style={accountValueStyle}>{overdueNotes.length}</div>
-              </div>
-
-              <div style={accountSummaryCardStyle}>
-                <div style={smallLabelStyle}>Pagos registrados</div>
-                <div style={accountValueStyle}>{cxcPayments.length}</div>
-              </div>
-            </div>
-
-            <div style={accountGridStyle}>
-              <div style={subPanelStyle}>
-                <div style={subPanelTitleStyle}>Notas abiertas</div>
-
-                {openNotes.length === 0 ? (
-                  <div style={emptyBoxStyle}>No tienes notas abiertas</div>
-                ) : (
-                  openNotes.map((note) => (
-                    <div key={note.id} style={accountCardStyle}>
-                      <div style={accountCardHeaderStyle}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={accountCardTitleStyle}>
-                            {note.note_number || "Sin folio"}
-                          </div>
-                          <div style={accountMetaStyle}>
-                            Fecha: <b>{formatCxcDate(note.note_date)}</b>
-                          </div>
-                          <div style={accountMetaStyle}>
-                            Vence: <b>{formatCxcDate(note.due_date || note.note_date)}</b>
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...accountBadgeStyle,
-                            background: isOverdue(note)
-                              ? "rgba(180,35,24,0.10)"
-                              : "rgba(166,106,16,0.12)",
-                            color: isOverdue(note) ? COLORS.danger : COLORS.warning,
-                          }}
-                        >
-                          {isOverdue(note) ? "Vencida" : note.status}
-                        </div>
-                      </div>
-
-                      <div style={accountMetaWrapStyle}>
-                        <span style={metaPillStyle}>
-                          Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
-                        </span>
-                        <span style={metaPillStyle}>
-                          Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
-                        </span>
-                        <span style={metaPillStyle}>
-                          Origen: <b>{note.source_type || "manual"}</b>
-                        </span>
-                      </div>
-
-                      {Number(note.discount_amount || 0) > 0 ? (
-                        <div style={accountMetaStyle}>
-                          Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
-                        </div>
-                      ) : null}
-
-                      {note.notes ? (
-                        <div style={accountNotesStyle}>
-                          <b>Notas:</b> {note.notes}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div style={subPanelStyle}>
-                <div style={subPanelTitleStyle}>Pagos realizados</div>
-
-                {cxcPayments.length === 0 ? (
-                  <div style={emptyBoxStyle}>Todavía no tienes pagos registrados</div>
-                ) : (
-                  cxcPayments.map((payment) => (
-                    <div key={payment.id} style={accountCardStyle}>
-                      <div style={accountCardHeaderStyle}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={accountCardTitleStyle}>
-                            Pago del {formatCxcDate(payment.payment_date)}
-                          </div>
-                          <div style={accountMetaStyle}>
-                            Método: <b>{payment.payment_method || "No definido"}</b>
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...accountBadgeStyle,
-                            background: "rgba(31,122,77,0.12)",
-                            color: COLORS.success,
-                          }}
-                        >
-                          ${Number(payment.amount || 0).toFixed(2)}
-                        </div>
-                      </div>
-
-                      {payment.reference ? (
-                        <div style={accountMetaStyle}>
-                          Referencia: <b>{payment.reference}</b>
-                        </div>
-                      ) : null}
-
-                      {payment.notes ? (
-                        <div style={accountNotesStyle}>
-                          <b>Notas:</b> {payment.notes}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {paidNotes.length > 0 ? (
-              <div style={{ marginTop: 20 }}>
-                <div style={subPanelTitleStyle}>Notas pagadas</div>
-
-                <div style={paidNotesGridStyle}>
-                  {paidNotes.map((note) => (
-                    <div key={note.id} style={paidNoteCardStyle}>
-                      <div style={accountCardHeaderStyle}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={accountCardTitleStyle}>
-                            {note.note_number || "Sin folio"}
-                          </div>
-                          <div style={accountMetaStyle}>
-                            Fecha: <b>{formatCxcDate(note.note_date)}</b>
-                          </div>
-                        </div>
-
-                        <div
-                          style={{
-                            ...accountBadgeStyle,
-                            background: "rgba(31,122,77,0.12)",
-                            color: COLORS.success,
-                          }}
-                        >
-                          Pagada
-                        </div>
-                      </div>
-
-                      <div style={accountMetaWrapStyle}>
-                        <span style={metaPillStyle}>
-                          Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
-                        </span>
-                        <span style={metaPillStyle}>
-                          Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div style={panelStyle}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <h2 style={panelTitleStyle}>Dirección de entrega</h2>
-              <p style={panelSubtitleStyle}>Esta dirección se guardará en tu pedido</p>
-            </div>
-          </div>
-
-          <textarea
-            placeholder="Escribe calle, número, colonia, referencias..."
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            style={{ ...textareaStyle, minHeight: 100 }}
-          />
-
-          <button onClick={saveAddress} style={primaryButtonStyle}>
-            Guardar dirección
+        <div style={tabNavigationStyle}>
+          <button
+            onClick={() => setActiveTab("orden")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "orden" ? COLORS.primary : "transparent",
+              color: activeTab === "orden" ? "white" : COLORS.text,
+              borderBottom: activeTab === "orden" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            🛒 Hacer pedido
+          </button>
+          <button
+            onClick={() => setActiveTab("catalogo")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "catalogo" ? COLORS.primary : "transparent",
+              color: activeTab === "catalogo" ? "white" : COLORS.text,
+              borderBottom: activeTab === "catalogo" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            📋 Catálogo
+          </button>
+          <button
+            onClick={() => setActiveTab("pedidos")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "pedidos" ? COLORS.primary : "transparent",
+              color: activeTab === "pedidos" ? "white" : COLORS.text,
+              borderBottom: activeTab === "pedidos" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            📦 Mis pedidos
+          </button>
+          <button
+            onClick={() => setActiveTab("cuenta")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "cuenta" ? COLORS.primary : "transparent",
+              color: activeTab === "cuenta" ? "white" : COLORS.text,
+              borderBottom: activeTab === "cuenta" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            👤 Mi cuenta
           </button>
         </div>
 
-        <div style={{ ...panelStyle, marginTop: 20 }}>
-          <div style={panelHeaderStyle}>
-            <div>
-              <h2 style={panelTitleStyle}>Fecha de entrega</h2>
-              <p style={panelSubtitleStyle}>Selecciona cuándo quieres recibir tu pedido</p>
-            </div>
-          </div>
+        {/* TAB: HACER PEDIDO */}
+        {activeTab === "orden" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={heroGridStyle}>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Puntos acumulados</div>
+                <div style={heroValueStyle}>{points}</div>
+                <div style={heroMetaStyle}>
+                  Tipo: <b>{customerType}</b>
+                </div>
+              </div>
 
-          <input
-            type="date"
-            value={deliveryDate}
-            min={getTodayDateInput()}
-            onChange={(e) => setDeliveryDate(e.target.value)}
-            style={inputStyle}
-          />
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Resumen del pedido</div>
+                <div style={heroValueStyle}>${cartTotal().toFixed(2)}</div>
+                <div style={heroMetaStyle}>
+                  {cart.length} artículo{cart.length === 1 ? "" : "s"}
+                </div>
+              </div>
 
-          <div style={datePreviewStyle}>
-            Fecha seleccionada: <b>{formatOrderDate(deliveryDate)}</b>
-          </div>
-        </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Adeudo pendiente</div>
+                <div style={heroValueStyle}>${totalDebt.toFixed(2)}</div>
+                <div style={heroMetaStyle}>
+                  {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta
+                </div>
+              </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(360px, 0.85fr)",
-            gap: 20,
-            alignItems: "start",
-            marginTop: 20,
-          }}
-        >
-          <div style={panelStyle}>
-            <div style={panelHeaderStyle}>
-              <div>
-                <h2 style={panelTitleStyle}>Productos</h2>
-                <p style={panelSubtitleStyle}>
-                  Busca uno específico o abre el catálogo completo
-                </p>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Tu crédito</div>
+                <div style={heroValueStyle}>{creditEnabled ? "✓" : "—"}</div>
+                <div style={heroMetaStyle}>
+                  Límite: ${creditLimit.toFixed(2)} · {creditDays} días
+                </div>
               </div>
             </div>
 
-            <div style={searchHeaderWrapStyle}>
-              <input
-                placeholder="Buscar producto"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ ...inputStyle, marginBottom: 0 }}
-              />
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1.15fr) minmax(360px, 0.85fr)",
+                gap: 20,
+                alignItems: "start",
+              }}
+            >
+              <div style={panelStyle}>
+                <div style={panelHeaderStyle}>
+                  <div>
+                    <h2 style={panelTitleStyle}>Buscar productos</h2>
+                    <p style={panelSubtitleStyle}>
+                      Escribe el nombre del corte o abre el catálogo completo
+                    </p>
+                  </div>
+                </div>
 
-              <button
-                onClick={() => setShowCatalog((prev) => !prev)}
-                style={catalogToggleButtonStyle}
-              >
-                {showCatalog ? "Ocultar catálogo" : "Ver catálogo"}
-              </button>
-            </div>
+                <div style={searchHeaderWrapStyle}>
+                  <input
+                    placeholder="Buscar producto"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{ ...inputStyle, marginBottom: 0 }}
+                  />
 
-            {search.trim() ? (
-              <div style={{ marginTop: 14 }}>
-                <div style={miniSectionTitleStyle}>Resultados de búsqueda</div>
+                  <button
+                    onClick={() => setShowCatalog((prev) => !prev)}
+                    style={catalogToggleButtonStyle}
+                  >
+                    {showCatalog ? "Ocultar" : "Catálogo"}
+                  </button>
+                </div>
 
-                {filteredProducts.length === 0 ? (
-                  <div style={emptyBoxStyle}>No encontramos productos con ese nombre</div>
-                ) : (
-                  <div style={searchResultsListStyle}>
-                    {filteredProducts.map((p) => (
-                      <div key={p.id} style={searchResultRowStyle}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={productNameStyle}>{p.name}</div>
-                          <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4 }}>
-                            ${getPrice(p).toFixed(2)}
+                {search.trim() ? (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={miniSectionTitleStyle}>Resultados de búsqueda</div>
+
+                    {filteredProducts.length === 0 ? (
+                      <div style={emptyBoxStyle}>No encontramos productos con ese nombre</div>
+                    ) : (
+                      <div style={searchResultsListStyle}>
+                        {filteredProducts.map((p) => (
+                          <div key={p.id} style={searchResultRowStyle}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={productNameStyle}>🥩 {p.name}</div>
+                              <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4, fontSize: 16 }}>
+                                ${getPrice(p).toFixed(2)}/kg
+                              </div>
+                            </div>
+
+                            <div style={productButtonsWrapStyle}>
+                              <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                                +1 kg
+                              </button>
+                              <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                                +0.5
+                              </button>
+                              <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                                Cant.
+                              </button>
+                              <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                                $
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+
+                {showCatalog ? (
+                  <div style={{ marginTop: 18 }}>
+                    <div style={miniSectionTitleStyle}>Catálogo de productos</div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: isMobile
+                          ? "repeat(2, minmax(0, 1fr))"
+                          : "repeat(auto-fit, minmax(210px, 1fr))",
+                        gap: 14,
+                        marginTop: 12,
+                        maxHeight: 620,
+                        overflowY: "auto",
+                        paddingRight: 4,
+                      }}
+                    >
+                      {catalogProducts.map((p) => (
+                        <div key={p.id} style={productCardStyle}>
+                          <div style={{ fontSize: 28, marginBottom: 8, textAlign: "center" }}>🥩</div>
+                          <div style={{ minHeight: isMobile ? 42 : 46 }}>
+                            <div style={productNameStyle}>{p.name}</div>
+                          </div>
+
+                          <div style={productPriceStyle}>${getPrice(p).toFixed(2)}/kg</div>
+
+                          <div style={{ minHeight: 28, marginBottom: 10 }}>
+                            {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
+                              <span style={discountBadgeStyle}>Mayoreo</span>
+                            ) : null}
+
+                            {p.is_excluded_from_discount ? (
+                              <span style={excludedBadgeStyle}>Fijo</span>
+                            ) : null}
+                          </div>
+
+                          <div style={productButtonsWrapStyle}>
+                            <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                              +1 kg
+                            </button>
+                            <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                              +0.5
+                            </button>
+                            <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                              $
+                            </button>
                           </div>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
-                        <div style={productButtonsWrapStyle}>
-                          <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                            +1 kg
-                          </button>
-                          <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                            +0.5
-                          </button>
-                          <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
-                            Cant.
-                          </button>
-                          <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                            $
-                          </button>
-                        </div>
+                {!search.trim() && !showCatalog ? (
+                  <div style={catalogPromptStyle}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>
+                      Busca lo que necesitas
+                    </div>
+                    <div style={{ color: COLORS.muted, fontSize: 14, marginBottom: 14 }}>
+                      Escribe el nombre del corte o abre el catálogo completo
+                    </div>
+                    <button
+                      onClick={() => setShowCatalog(true)}
+                      style={{ ...primaryButtonStyle, width: "100%" }}
+                    >
+                      Ver catálogo completo
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+
+              {!isMobile && (
+                <div style={{ display: "grid", gap: 20 }}>
+                  <div style={panelStyle}>
+                    <div style={panelHeaderStyle}>
+                      <div>
+                        <h2 style={panelTitleStyle}>Mi pedido</h2>
+                        <p style={panelSubtitleStyle}>Revisa antes de enviar</p>
                       </div>
-                    ))}
+                    </div>
+
+                    <div style={{ ...emptyBoxStyle, marginBottom: 12 }}>
+                      Entrega: <b>{formatOrderDate(deliveryDate)}</b>
+                    </div>
+
+                    {cart.length === 0 ? (
+                      <div style={emptyBoxStyle}>Todavía no agregas productos</div>
+                    ) : (
+                      <>
+                        {cart.map((c, i) => (
+                          <div key={i} style={cartRowStyle}>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontWeight: 700, color: COLORS.text }}>🥩 {c.name}</div>
+                              <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                                {c.kilos} kg · ${c.price.toFixed(2)}/kg
+                              </div>
+                            </div>
+
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
+                                ${(c.kilos * c.price).toFixed(2)}
+                              </div>
+                              <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div style={totalBoxStyle}>
+                          <span>Total del pedido</span>
+                          <span>${cartTotal().toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
+                        Dirección de entrega
+                      </label>
+                      <textarea
+                        placeholder="Calle, número, colonia, referencias..."
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        style={{
+                          ...textareaStyle,
+                          minHeight: 80,
+                        }}
+                      />
+                      <button onClick={saveAddress} style={{ ...secondaryButtonStyle, width: "100%", display: "block", textAlign: "center" }}>
+                        Guardar dirección
+                      </button>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
+                        Fecha de entrega
+                      </label>
+                      <input
+                        type="date"
+                        value={deliveryDate}
+                        min={getTodayDateInput()}
+                        onChange={(e) => setDeliveryDate(e.target.value)}
+                        style={inputStyle}
+                      />
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
+                        Notas para tu pedido
+                      </label>
+                      <textarea
+                        placeholder="Instrucciones especiales, preferencias, etc."
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        style={{
+                          ...textareaStyle,
+                          minHeight: 90,
+                        }}
+                      />
+                    </div>
+
+                    <button onClick={createOrder} style={{ ...primaryButtonStyle, width: "100%", marginTop: 14, fontSize: 16, padding: "14px 18px" }}>
+                      {saving ? "Enviando..." : "Enviar pedido"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isMobile && (
+              <>
+                <div style={{ height: 90 }} />
+
+                <button
+                  onClick={() => setShowCart(true)}
+                  style={floatingCartButtonStyle}
+                >
+                  Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
+                </button>
+
+                {showCart && (
+                  <div style={mobileOverlayStyle} onClick={() => setShowCart(false)}>
+                    <div style={mobileSheetStyle} onClick={(e) => e.stopPropagation()}>
+                      <div style={mobileSheetHeaderStyle}>
+                        <div>
+                          <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 24 }}>
+                            Mi pedido
+                          </div>
+                          <div style={{ color: COLORS.muted }}>Revisa antes de enviar</div>
+                        </div>
+
+                        <button onClick={() => setShowCart(false)} style={closeButtonStyle}>
+                          ✕
+                        </button>
+                      </div>
+
+                      <CartPanel
+                        cart={cart}
+                        notes={notes}
+                        setNotes={setNotes}
+                        removeCartItem={removeCartItem}
+                        cartTotal={cartTotal}
+                        createOrder={createOrder}
+                        saving={saving}
+                        mobile
+                        deliveryDate={deliveryDate}
+                        address={address}
+                        setAddress={setAddress}
+                        saveAddress={saveAddress}
+                      />
+                    </div>
                   </div>
                 )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* TAB: CATALOGO */}
+        {activeTab === "catalogo" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>Catálogo de productos</h2>
+                  <p style={panelSubtitleStyle}>
+                    Todos nuestros cortes y complementos disponibles
+                  </p>
+                </div>
               </div>
-            ) : null}
 
-            {showCatalog ? (
-              <div style={{ marginTop: 18 }}>
-                <div style={miniSectionTitleStyle}>Catálogo de productos</div>
-
+              {products.length === 0 ? (
+                <div style={emptyBoxStyle}>No hay productos disponibles</div>
+              ) : (
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns: isMobile
                       ? "repeat(2, minmax(0, 1fr))"
-                      : "repeat(auto-fit, minmax(210px, 1fr))",
-                    gap: 14,
-                    marginTop: 12,
-                    maxHeight: 620,
-                    overflowY: "auto",
-                    paddingRight: 4,
+                      : "repeat(auto-fill, minmax(220px, 1fr))",
+                    gap: 16,
                   }}
                 >
-                  {catalogProducts.map((p) => (
-                    <div key={p.id} style={productCardStyle}>
-                      <div style={{ minHeight: isMobile ? 42 : 46 }}>
+                  {products.map((p) => (
+                    <div key={p.id} style={catalogCardStyle}>
+                      <div style={{ fontSize: 32, marginBottom: 12, textAlign: "center" }}>🥩</div>
+                      <div style={{ minHeight: 50 }}>
                         <div style={productNameStyle}>{p.name}</div>
                       </div>
 
-                      <div style={productPriceStyle}>${getPrice(p).toFixed(2)}</div>
+                      <div style={productPriceStyle}>${getPrice(p).toFixed(2)}/kg</div>
 
-                      <div style={{ minHeight: 28, marginBottom: 10 }}>
+                      <div style={{ minHeight: 32, marginBottom: 12 }}>
                         {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
                           <span style={discountBadgeStyle}>Precio mayoreo</span>
                         ) : null}
 
                         {p.is_excluded_from_discount ? (
-                          <span style={excludedBadgeStyle}>Sin descuento</span>
+                          <span style={excludedBadgeStyle}>Precio fijo</span>
                         ) : null}
                       </div>
 
@@ -1316,6 +1361,9 @@ export default function ClientePage() {
                         <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
                           +0.5
                         </button>
+                        <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                          Cant.
+                        </button>
                         <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
                           $
                         </button>
@@ -1323,93 +1371,389 @@ export default function ClientePage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            ) : null}
-
-            {!search.trim() && !showCatalog ? (
-              <div style={catalogPromptStyle}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>
-                  Busca lo que necesitas
-                </div>
-                <div style={{ color: COLORS.muted, fontSize: 14, marginBottom: 14 }}>
-                  Escribe el nombre del corte o abre el catálogo completo para ver todos nuestros productos
-                </div>
-                <button
-                  onClick={() => setShowCatalog(true)}
-                  style={{ ...primaryButtonStyle, width: "100%" }}
-                >
-                  Ver todo el catálogo
-                </button>
-              </div>
-            ) : null}
-          </div>
-
-          {!isMobile && (
-            <div style={{ display: "grid", gap: 20 }}>
-              <CartPanel
-                cart={cart}
-                notes={notes}
-                setNotes={setNotes}
-                removeCartItem={removeCartItem}
-                cartTotal={cartTotal}
-                createOrder={createOrder}
-                saving={saving}
-                deliveryDate={deliveryDate}
-              />
-
-              <OrdersPanel orders={orders} repeatOrder={repeatOrder} />
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {isMobile && (
-          <>
-            <div style={{ height: 90 }} />
+        {/* TAB: MIS PEDIDOS */}
+        {activeTab === "pedidos" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>Mis pedidos</h2>
+                  <p style={panelSubtitleStyle}>Historial y repetición rápida</p>
+                </div>
+              </div>
 
-            <button
-              onClick={() => setShowCart(true)}
-              style={floatingCartButtonStyle}
-            >
-              Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
-            </button>
+              {orders.length === 0 ? (
+                <div style={emptyBoxStyle}>No hay pedidos</div>
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  {orders.map((o) => {
+                    const statusColor =
+                      o.status === "nuevo" ? { bg: "rgba(53, 92, 125, 0.12)", color: COLORS.info } :
+                      o.status === "proceso" ? { bg: "rgba(166, 106, 16, 0.12)", color: COLORS.warning } :
+                      { bg: "rgba(31, 122, 77, 0.12)", color: COLORS.success };
 
-            {showCart && (
-              <div style={mobileOverlayStyle} onClick={() => setShowCart(false)}>
-                <div style={mobileSheetStyle} onClick={(e) => e.stopPropagation()}>
-                  <div style={mobileSheetHeaderStyle}>
-                    <div>
-                      <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 24 }}>
-                        Mi pedido
+                    return (
+                      <div key={o.id} style={orderCardStyle}>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: 12,
+                            marginBottom: 12,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18 }}>
+                              Pedido de {o.customer_name}
+                            </div>
+                            {o.created_at ? (
+                              <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
+                                {new Date(o.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div
+                            style={{
+                              ...statusBadgeStyle,
+                              background: statusColor.bg,
+                              color: statusColor.color,
+                            }}
+                          >
+                            {o.status === "nuevo" ? "🆕 Nuevo" :
+                             o.status === "proceso" ? "⏳ Proceso" :
+                             o.status === "terminado" ? "✓ Terminado" :
+                             o.status === "entregado" ? "📦 Entregado" : o.status}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+                          <div style={orderInfoPillStyle}>
+                            📅 {formatOrderDate(o.delivery_date)}
+                          </div>
+                          <div style={orderInfoPillStyle}>
+                            ⭐ {o.loyalty_points_earned || 0} puntos
+                          </div>
+                        </div>
+
+                        {o.notes ? (
+                          <div style={{ marginBottom: 12, padding: 10, background: COLORS.bgSoft, borderRadius: 12, color: COLORS.text, fontSize: 14 }}>
+                            📝 <b>Notas:</b> {o.notes}
+                          </div>
+                        ) : null}
+
+                        {o.order_items?.length ? (
+                          <div style={{ display: "grid", gap: 6, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${COLORS.border}` }}>
+                            {o.order_items.map((item) => (
+                              <div key={item.id} style={historyItemStyle}>
+                                <span style={{ minWidth: 0 }}>🥩 {item.product}</span>
+                                <span style={{ flexShrink: 0, fontWeight: 700 }}>
+                                  {item.kilos} kg · ${(item.kilos * item.price).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <button onClick={() => repeatOrder(o)} style={{ ...primaryButtonStyle, width: "100%" }}>
+                          🔄 Repetir pedido
+                        </button>
                       </div>
-                      <div style={{ color: COLORS.muted }}>Revisa antes de enviar</div>
-                    </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
-                    <button onClick={() => setShowCart(false)} style={closeButtonStyle}>
-                      ✕
-                    </button>
+        {/* TAB: MI CUENTA */}
+        {activeTab === "cuenta" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={{ display: "grid", gap: 20 }}>
+              <div style={panelStyle}>
+                <div style={panelHeaderStyle}>
+                  <div>
+                    <h2 style={panelTitleStyle}>Mi información</h2>
+                    <p style={panelSubtitleStyle}>Datos y preferencias de tu cuenta</p>
+                  </div>
+                </div>
+
+                <div style={accountGridStyle}>
+                  <div style={accountItemStyle}>
+                    <div style={accountLabelStyle}>Tipo de cliente</div>
+                    <div style={accountValueStyle}>{customerType}</div>
                   </div>
 
-                  <CartPanel
-                    cart={cart}
-                    notes={notes}
-                    setNotes={setNotes}
-                    removeCartItem={removeCartItem}
-                    cartTotal={cartTotal}
-                    createOrder={createOrder}
-                    saving={saving}
-                    mobile
-                    deliveryDate={deliveryDate}
-                  />
+                  <div style={accountItemStyle}>
+                    <div style={accountLabelStyle}>Puntos acumulados</div>
+                    <div style={accountValueStyle}>{points}</div>
+                  </div>
+
+                  <div style={accountItemStyle}>
+                    <div style={accountLabelStyle}>Crédito disponible</div>
+                    <div style={accountValueStyle}>{creditEnabled ? "✓ Activo" : "No"}</div>
+                    {creditEnabled && (
+                      <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>
+                        Límite: ${creditLimit.toFixed(2)} · {creditDays} días
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={accountItemStyle}>
+                    <div style={accountLabelStyle}>Adeudo pendiente</div>
+                    <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
+                    {totalDebt > 0 && (
+                      <div style={{ fontSize: 13, color: COLORS.danger, marginTop: 4 }}>
+                        {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta{openNotes.length === 1 ? "" : "s"}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
 
-            <div style={{ marginTop: 10 }}>
-              <OrdersPanel orders={orders} repeatOrder={repeatOrder} mobile />
+              <div style={panelStyle}>
+                <div style={panelHeaderStyle}>
+                  <div>
+                    <h2 style={panelTitleStyle}>Dirección de entrega</h2>
+                    <p style={panelSubtitleStyle}>Se usará en tus pedidos</p>
+                  </div>
+                </div>
+
+                <textarea
+                  placeholder="Calle, número, colonia, referencias..."
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  style={{ ...textareaStyle, minHeight: 100 }}
+                />
+
+                <button onClick={saveAddress} style={{ ...primaryButtonStyle, width: "100%" }}>
+                  Guardar dirección
+                </button>
+              </div>
+
+              {creditEnabled || cxcNotes.length > 0 || cxcPayments.length > 0 ? (
+                <div style={panelStyle}>
+                  <div style={panelHeaderStyle}>
+                    <div>
+                      <h2 style={panelTitleStyle}>Mi estado de cuenta</h2>
+                      <p style={panelSubtitleStyle}>
+                        Adeudos, notas y pagos registrados
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={accountSummaryGridStyle}>
+                    <div style={accountSummaryCardStyle}>
+                      <div style={smallLabelStyle}>Saldo pendiente</div>
+                      <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
+                    </div>
+
+                    <div style={accountSummaryCardStyle}>
+                      <div style={smallLabelStyle}>Notas abiertas</div>
+                      <div style={accountValueStyle}>{openNotes.length}</div>
+                    </div>
+
+                    <div style={accountSummaryCardStyle}>
+                      <div style={smallLabelStyle}>Vencidas</div>
+                      <div style={accountValueStyle}>{overdueNotes.length}</div>
+                    </div>
+
+                    <div style={accountSummaryCardStyle}>
+                      <div style={smallLabelStyle}>Pagos registrados</div>
+                      <div style={accountValueStyle}>{cxcPayments.length}</div>
+                    </div>
+                  </div>
+
+                  <div style={accountGridStyle}>
+                    <div style={subPanelStyle}>
+                      <div style={subPanelTitleStyle}>Notas abiertas</div>
+
+                      {openNotes.length === 0 ? (
+                        <div style={emptyBoxStyle}>No tienes notas abiertas</div>
+                      ) : (
+                        openNotes.map((note) => (
+                          <div key={note.id} style={accountCardStyle}>
+                            <div style={accountCardHeaderStyle}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={accountCardTitleStyle}>
+                                  {note.note_number || "Sin folio"}
+                                </div>
+                                <div style={accountMetaStyle}>
+                                  Fecha: <b>{formatCxcDate(note.note_date)}</b>
+                                </div>
+                                <div style={accountMetaStyle}>
+                                  Vence: <b>{formatCxcDate(note.due_date || note.note_date)}</b>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  ...accountBadgeStyle,
+                                  background: isOverdue(note)
+                                    ? "rgba(180,35,24,0.10)"
+                                    : "rgba(166,106,16,0.12)",
+                                  color: isOverdue(note) ? COLORS.danger : COLORS.warning,
+                                }}
+                              >
+                                {isOverdue(note) ? "Vencida" : note.status}
+                              </div>
+                            </div>
+
+                            <div style={accountMetaWrapStyle}>
+                              <span style={metaPillStyle}>
+                                Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                              </span>
+                              <span style={metaPillStyle}>
+                                Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                              </span>
+                              <span style={metaPillStyle}>
+                                Origen: <b>{note.source_type || "manual"}</b>
+                              </span>
+                            </div>
+
+                            {Number(note.discount_amount || 0) > 0 ? (
+                              <div style={accountMetaStyle}>
+                                Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
+                              </div>
+                            ) : null}
+
+                            {note.notes ? (
+                              <div style={accountNotesStyle}>
+                                <b>Notas:</b> {note.notes}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div style={subPanelStyle}>
+                      <div style={subPanelTitleStyle}>Pagos realizados</div>
+
+                      {cxcPayments.length === 0 ? (
+                        <div style={emptyBoxStyle}>Todavía no tienes pagos registrados</div>
+                      ) : (
+                        cxcPayments.map((payment) => (
+                          <div key={payment.id} style={accountCardStyle}>
+                            <div style={accountCardHeaderStyle}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={accountCardTitleStyle}>
+                                  Pago del {formatCxcDate(payment.payment_date)}
+                                </div>
+                                <div style={accountMetaStyle}>
+                                  Método: <b>{payment.payment_method || "No definido"}</b>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  ...accountBadgeStyle,
+                                  background: "rgba(31,122,77,0.12)",
+                                  color: COLORS.success,
+                                }}
+                              >
+                                ${Number(payment.amount || 0).toFixed(2)}
+                              </div>
+                            </div>
+
+                            {payment.reference ? (
+                              <div style={accountMetaStyle}>
+                                Referencia: <b>{payment.reference}</b>
+                              </div>
+                            ) : null}
+
+                            {payment.notes ? (
+                              <div style={accountNotesStyle}>
+                                <b>Notas:</b> {payment.notes}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {paidNotes.length > 0 ? (
+                    <div style={{ marginTop: 20 }}>
+                      <div style={subPanelTitleStyle}>Notas pagadas</div>
+
+                      <div style={paidNotesGridStyle}>
+                        {paidNotes.map((note) => (
+                          <div key={note.id} style={paidNoteCardStyle}>
+                            <div style={accountCardHeaderStyle}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={accountCardTitleStyle}>
+                                  {note.note_number || "Sin folio"}
+                                </div>
+                                <div style={accountMetaStyle}>
+                                  Fecha: <b>{formatCxcDate(note.note_date)}</b>
+                                </div>
+                              </div>
+
+                              <div
+                                style={{
+                                  ...accountBadgeStyle,
+                                  background: "rgba(31,122,77,0.12)",
+                                  color: COLORS.success,
+                                }}
+                              >
+                                Pagada
+                              </div>
+                            </div>
+
+                            <div style={accountMetaWrapStyle}>
+                              <span style={metaPillStyle}>
+                                Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                              </span>
+                              <span style={metaPillStyle}>
+                                Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <button
+                onClick={logout}
+                style={{
+                  ...primaryButtonStyle,
+                  width: "100%",
+                  background: COLORS.danger,
+                  padding: "14px 18px",
+                  fontSize: 16,
+                }}
+              >
+                🚪 Cerrar sesión
+              </button>
             </div>
-          </>
+          </div>
         )}
       </div>
+
+      <style>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }
@@ -1424,6 +1768,9 @@ function CartPanel({
   saving,
   mobile = false,
   deliveryDate,
+  address,
+  setAddress,
+  saveAddress,
 }: {
   cart: CartItem[];
   notes: string;
@@ -1434,6 +1781,9 @@ function CartPanel({
   saving: boolean;
   mobile?: boolean;
   deliveryDate: string;
+  address: string;
+  setAddress: (value: string) => void;
+  saveAddress: () => void;
 }) {
   return (
     <div style={panelStyle}>
@@ -1455,7 +1805,7 @@ function CartPanel({
           {cart.map((c, i) => (
             <div key={i} style={cartRowStyle}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 700, color: COLORS.text }}>{c.name}</div>
+                <div style={{ fontWeight: 700, color: COLORS.text }}>🥩 {c.name}</div>
                 <div style={{ color: COLORS.muted, fontSize: 14 }}>
                   {c.kilos} kg · ${c.price.toFixed(2)}/kg
                 </div>
@@ -1466,115 +1816,60 @@ function CartPanel({
                   ${(c.kilos * c.price).toFixed(2)}
                 </div>
                 <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
-                  Quitar
+                  ✕
                 </button>
               </div>
             </div>
           ))}
 
           <div style={totalBoxStyle}>
-            <span>Total</span>
+            <span>Total del pedido</span>
             <span>${cartTotal().toFixed(2)}</span>
           </div>
         </>
       )}
 
-      <textarea
-        placeholder="Notas para tu pedido"
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        style={{
-          ...textareaStyle,
-          minHeight: mobile ? 100 : 110,
-        }}
-      />
+      <div style={{ marginTop: 14 }}>
+        <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
+          Dirección de entrega
+        </label>
+        <textarea
+          placeholder="Calle, número, colonia, referencias..."
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          style={{
+            ...textareaStyle,
+            minHeight: mobile ? 80 : 100,
+          }}
+        />
+        <button onClick={saveAddress} style={{ ...secondaryButtonStyle, width: "100%", display: "block", textAlign: "center" }}>
+          Guardar dirección
+        </button>
+      </div>
 
-      <button onClick={createOrder} style={{ ...primaryButtonStyle, width: "100%" }}>
+      <div style={{ marginTop: 14 }}>
+        <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
+          Notas para tu pedido
+        </label>
+        <textarea
+          placeholder="Instrucciones especiales, preferencias, etc."
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          style={{
+            ...textareaStyle,
+            minHeight: mobile ? 100 : 110,
+          }}
+        />
+      </div>
+
+      <button onClick={createOrder} style={{ ...primaryButtonStyle, width: "100%", marginTop: 14, fontSize: 16, padding: "14px 18px" }}>
         {saving ? "Enviando..." : "Enviar pedido"}
       </button>
     </div>
   );
 }
 
-function OrdersPanel({
-  orders,
-  repeatOrder,
-  mobile = false,
-}: {
-  orders: Order[];
-  repeatOrder: (order: Order) => void;
-  mobile?: boolean;
-}) {
-  return (
-    <div style={panelStyle}>
-      <div style={panelHeaderStyle}>
-        <div>
-          <h2 style={panelTitleStyle}>Mis pedidos</h2>
-          <p style={panelSubtitleStyle}>Historial y repetición rápida</p>
-        </div>
-      </div>
-
-      {orders.length === 0 ? (
-        <div style={emptyBoxStyle}>No hay pedidos</div>
-      ) : (
-        orders.map((o) => (
-          <div key={o.id} style={historyCardStyle}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: 12,
-                marginBottom: 10,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, color: COLORS.text, fontSize: mobile ? 18 : 20 }}>
-                  {o.customer_name} - {o.status}
-                </div>
-                {o.created_at ? (
-                  <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
-                    {new Date(o.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
-                  </div>
-                ) : null}
-                <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
-                  Fecha de entrega: <b>{formatOrderDate(o.delivery_date)}</b>
-                </div>
-              </div>
-
-              <button onClick={() => repeatOrder(o)} style={repeatButtonStyle}>
-                Repetir
-              </button>
-            </div>
-
-            {o.notes ? (
-              <div style={{ marginBottom: 10, color: COLORS.muted }}>📝 {o.notes}</div>
-            ) : null}
-
-            {o.order_items?.length ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                {o.order_items.map((item) => (
-                  <div key={item.id} style={historyItemStyle}>
-                    <span style={{ minWidth: 0 }}>{item.product}</span>
-                    <span style={{ flexShrink: 0 }}>
-                      {item.kilos} kg · ${item.price}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 12, color: COLORS.muted, fontSize: 14 }}>
-              Puntos generados:{" "}
-              <b style={{ color: COLORS.text }}>{o.loyalty_points_earned || 0}</b>
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
-}
+// STYLES
 
 const loadingPageStyle: React.CSSProperties = {
   minHeight: "100vh",
@@ -1684,10 +1979,36 @@ const topBarStyle: React.CSSProperties = {
   marginBottom: 18,
 };
 
+const tabNavigationStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(4, 1fr)",
+  gap: 8,
+  marginBottom: 20,
+  background: COLORS.card,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 20,
+  padding: 8,
+  position: "sticky",
+  top: 0,
+  zIndex: 10,
+  backdropFilter: "blur(10px)",
+  boxShadow: "0 4px 12px rgba(91, 25, 15, 0.05)",
+};
+
+const tabButtonStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 14,
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 800,
+  fontSize: 14,
+  transition: "all 0.2s ease",
+};
+
 const heroGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 16,
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+  gap: 14,
   marginBottom: 20,
 };
 
@@ -1696,14 +2017,17 @@ const heroCardStyle: React.CSSProperties = {
   backdropFilter: "blur(10px)",
   border: `1px solid ${COLORS.border}`,
   borderRadius: 24,
-  padding: 20,
+  padding: 18,
   boxShadow: COLORS.shadow,
 };
 
 const smallLabelStyle: React.CSSProperties = {
   color: COLORS.muted,
-  fontSize: 14,
-  marginBottom: 10,
+  fontSize: 12,
+  marginBottom: 8,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.5px",
 };
 
 const heroValueStyle: React.CSSProperties = {
@@ -1715,7 +2039,7 @@ const heroValueStyle: React.CSSProperties = {
 
 const heroMetaStyle: React.CSSProperties = {
   color: COLORS.muted,
-  fontSize: 14,
+  fontSize: 13,
 };
 
 const panelStyle: React.CSSProperties = {
@@ -1738,26 +2062,28 @@ const panelHeaderStyle: React.CSSProperties = {
 const panelTitleStyle: React.CSSProperties = {
   margin: 0,
   color: COLORS.text,
+  fontSize: 22,
+  fontWeight: 800,
 };
 
 const panelSubtitleStyle: React.CSSProperties = {
   margin: "6px 0 0 0",
   color: COLORS.muted,
-  fontSize: 14,
+  fontSize: 13,
 };
 
 const accountSummaryGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-  gap: 14,
+  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+  gap: 12,
   marginBottom: 18,
 };
 
 const accountSummaryCardStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
-  borderRadius: 20,
-  padding: 16,
+  borderRadius: 18,
+  padding: 14,
 };
 
 const accountValueStyle: React.CSSProperties = {
@@ -1768,8 +2094,23 @@ const accountValueStyle: React.CSSProperties = {
 
 const accountGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-  gap: 18,
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gap: 12,
+};
+
+const accountItemStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 18,
+  padding: 16,
+};
+
+const accountLabelStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  marginBottom: 6,
 };
 
 const subPanelStyle: React.CSSProperties = {
@@ -1782,16 +2123,16 @@ const subPanelStyle: React.CSSProperties = {
 const subPanelTitleStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 800,
-  fontSize: 20,
+  fontSize: 18,
   marginBottom: 12,
 };
 
 const accountCardStyle: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 18,
+  padding: 12,
+  borderRadius: 16,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
-  marginBottom: 12,
+  marginBottom: 10,
 };
 
 const accountCardHeaderStyle: React.CSSProperties = {
@@ -1799,20 +2140,20 @@ const accountCardHeaderStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "flex-start",
   gap: 12,
-  marginBottom: 10,
+  marginBottom: 8,
 };
 
 const accountCardTitleStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 800,
-  fontSize: 18,
+  fontSize: 16,
 };
 
 const accountBadgeStyle: React.CSSProperties = {
   display: "inline-block",
-  padding: "6px 10px",
+  padding: "4px 8px",
   borderRadius: 999,
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
   textTransform: "capitalize",
   flexShrink: 0,
@@ -1820,35 +2161,36 @@ const accountBadgeStyle: React.CSSProperties = {
 
 const accountMetaStyle: React.CSSProperties = {
   color: COLORS.muted,
-  fontSize: 14,
-  marginTop: 4,
+  fontSize: 13,
+  marginTop: 3,
 };
 
 const accountMetaWrapStyle: React.CSSProperties = {
   display: "flex",
-  gap: 8,
+  gap: 6,
   flexWrap: "wrap",
-  marginTop: 10,
+  marginTop: 8,
 };
 
 const accountNotesStyle: React.CSSProperties = {
-  marginTop: 10,
-  padding: 12,
-  borderRadius: 14,
+  marginTop: 8,
+  padding: 10,
+  borderRadius: 12,
   background: "rgba(255,255,255,0.7)",
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
+  fontSize: 13,
 };
 
 const paidNotesGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  gap: 10,
 };
 
 const paidNoteCardStyle: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 18,
+  padding: 12,
+  borderRadius: 16,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
 };
@@ -1859,6 +2201,15 @@ const productCardStyle: React.CSSProperties = {
   borderRadius: 20,
   padding: 14,
   minWidth: 0,
+};
+
+const catalogCardStyle: React.CSSProperties = {
+  background: COLORS.cardStrong,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 20,
+  padding: 16,
+  minWidth: 0,
+  transition: "all 0.2s ease",
 };
 
 const productNameStyle: React.CSSProperties = {
@@ -1886,33 +2237,53 @@ const cartRowStyle: React.CSSProperties = {
   display: "flex",
   justifyContent: "space-between",
   gap: 12,
-  padding: 14,
+  padding: 12,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
-  borderRadius: 18,
+  borderRadius: 16,
   marginBottom: 10,
   alignItems: "flex-start",
 };
 
 const totalBoxStyle: React.CSSProperties = {
-  marginTop: 14,
+  marginTop: 12,
   display: "flex",
   justifyContent: "space-between",
   alignItems: "center",
-  padding: 16,
-  borderRadius: 18,
+  padding: 14,
+  borderRadius: 16,
   background: COLORS.primary,
   color: "white",
-  fontWeight: 700,
-  fontSize: 18,
+  fontWeight: 800,
+  fontSize: 16,
 };
 
-const historyCardStyle: React.CSSProperties = {
+const orderCardStyle: React.CSSProperties = {
   padding: 16,
   borderRadius: 18,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
-  marginBottom: 12,
+};
+
+const orderInfoPillStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 12px",
+  borderRadius: 12,
+  background: "white",
+  border: `1px solid ${COLORS.border}`,
+  color: COLORS.text,
+  fontSize: 13,
+  fontWeight: 600,
+};
+
+const statusBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "capitalize",
+  flexShrink: 0,
 };
 
 const historyItemStyle: React.CSSProperties = {
@@ -1920,35 +2291,36 @@ const historyItemStyle: React.CSSProperties = {
   justifyContent: "space-between",
   gap: 12,
   color: COLORS.text,
-  fontSize: 14,
+  fontSize: 13,
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: 14,
-  borderRadius: 16,
+  padding: 12,
+  borderRadius: 14,
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
   marginBottom: 12,
-  background: "rgba(255,255,255,0.82)",
+  background: "rgba(255,255,255,0.85)",
   color: COLORS.text,
-  fontSize: 15,
+  fontSize: 14,
 };
 
 const textareaStyle: React.CSSProperties = {
   width: "100%",
-  padding: 14,
-  borderRadius: 16,
+  padding: 12,
+  borderRadius: 14,
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
-  marginTop: 14,
+  marginTop: 12,
   marginBottom: 12,
-  background: "rgba(255,255,255,0.82)",
+  background: "rgba(255,255,255,0.85)",
   color: COLORS.text,
-  fontSize: 15,
+  fontSize: 14,
   resize: "vertical",
+  fontFamily: "Arial, sans-serif",
 };
 
 const switchButtonStyle: React.CSSProperties = {
@@ -1957,7 +2329,6 @@ const switchButtonStyle: React.CSSProperties = {
   borderRadius: 14,
   border: "none",
   cursor: "pointer",
-  fontWeight: 700,
 };
 
 const primaryButtonStyle: React.CSSProperties = {
@@ -1967,7 +2338,7 @@ const primaryButtonStyle: React.CSSProperties = {
   background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
   color: "white",
   cursor: "pointer",
-  fontWeight: 700,
+  fontWeight: 800,
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
 };
 
@@ -2003,30 +2374,31 @@ const lightMiniButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 700,
-  fontSize: 14,
+  fontSize: 12,
 };
 
 const darkMiniButtonStyle: React.CSSProperties = {
-  width: 46,
-  minWidth: 46,
-  height: 46,
+  width: 44,
+  minWidth: 44,
+  height: 44,
   borderRadius: 12,
   border: "none",
   background: COLORS.primary,
   color: "white",
   cursor: "pointer",
   fontWeight: 700,
-  fontSize: 20,
+  fontSize: 18,
 };
 
 const removeButtonStyle: React.CSSProperties = {
-  padding: "7px 10px",
-  borderRadius: 10,
+  padding: "6px 8px",
+  borderRadius: 8,
   border: "none",
   background: COLORS.danger,
   color: "white",
   cursor: "pointer",
   fontWeight: 700,
+  fontSize: 14,
 };
 
 const repeatButtonStyle: React.CSSProperties = {
@@ -2053,7 +2425,7 @@ const discountBadgeStyle: React.CSSProperties = {
   borderRadius: 999,
   background: "rgba(31, 122, 77, 0.10)",
   color: COLORS.success,
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
 };
 
@@ -2063,7 +2435,7 @@ const excludedBadgeStyle: React.CSSProperties = {
   borderRadius: 999,
   background: "rgba(166, 106, 16, 0.12)",
   color: COLORS.warning,
-  fontSize: 12,
+  fontSize: 11,
   fontWeight: 700,
 };
 
@@ -2081,6 +2453,7 @@ const floatingCartButtonStyle: React.CSSProperties = {
   fontWeight: 800,
   fontSize: 16,
   boxShadow: "0 16px 30px rgba(123, 34, 24, 0.28)",
+  cursor: "pointer",
 };
 
 const mobileOverlayStyle: React.CSSProperties = {
@@ -2140,8 +2513,8 @@ const searchHeaderWrapStyle: React.CSSProperties = {
 };
 
 const catalogToggleButtonStyle: React.CSSProperties = {
-  padding: "14px 16px",
-  borderRadius: 16,
+  padding: "12px 14px",
+  borderRadius: 14,
   border: "none",
   background: "rgba(123, 34, 24, 0.12)",
   color: COLORS.primary,
@@ -2154,7 +2527,7 @@ const miniSectionTitleStyle: React.CSSProperties = {
   color: COLORS.text,
   fontWeight: 800,
   marginBottom: 10,
-  fontSize: 18,
+  fontSize: 16,
 };
 
 const searchResultsListStyle: React.CSSProperties = {
@@ -2166,8 +2539,8 @@ const searchResultRowStyle: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "minmax(0, 1fr) auto",
   gap: 12,
-  padding: 14,
-  borderRadius: 16,
+  padding: 12,
+  borderRadius: 14,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   alignItems: "center",
@@ -2175,12 +2548,12 @@ const searchResultRowStyle: React.CSSProperties = {
 
 const metaPillStyle: React.CSSProperties = {
   display: "inline-block",
-  padding: "8px 12px",
+  padding: "6px 10px",
   borderRadius: 999,
   background: "white",
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
-  fontSize: 13,
+  fontSize: 12,
 };
 
 const loginErrorStyle: React.CSSProperties = {
@@ -2205,11 +2578,11 @@ const loginMethodButtonStyle: React.CSSProperties = {
 };
 
 const authPromoStyle: React.CSSProperties = {
-  marginTop: 20,
-  padding: 16,
-  borderRadius: 16,
-  background: "rgba(123, 34, 24, 0.04)",
-  border: "1px solid rgba(123, 34, 24, 0.08)",
+  marginTop: 24,
+  padding: 18,
+  borderRadius: 18,
+  background: "rgba(123, 34, 24, 0.06)",
+  border: "1px solid rgba(123, 34, 24, 0.10)",
   textAlign: "center",
 };
 
