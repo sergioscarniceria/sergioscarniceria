@@ -58,8 +58,8 @@ const jsonLd = {
   },
   geo: {
     "@type": "GeoCoordinates",
-    latitude: 20.6627,
-    longitude: -99.9871,
+    latitude: 20.6649555,
+    longitude: -99.8990919,
   },
   telephone: "+524421234567",
   servesCuisine: "Carnicería mexicana",
