@@ -10,6 +10,8 @@ type Product = {
   price: number;
   is_active?: boolean;
   is_excluded_from_discount?: boolean;
+  category?: string | null;
+  fixed_piece_price?: number | null;
 };
 
 type CartItem = {
@@ -104,6 +106,19 @@ const COLORS = {
   info: "#355c7d",
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
+
+function getCategoryEmoji(category?: string | null): string {
+  const cat = (category || "").toLowerCase();
+  if (cat.includes("res") || cat.includes("asar")) return "🥩";
+  if (cat.includes("cerdo")) return "🐷";
+  if (cat.includes("embutido")) return "🌭";
+  if (cat.includes("complemento")) return "🧂";
+  return "🥩";
+}
+
+function isPieceProduct(product: Product): boolean {
+  return product.fixed_piece_price != null && product.fixed_piece_price > 0;
+}
 
 function getTodayDateInput() {
   const now = new Date();
@@ -1127,25 +1142,40 @@ export default function ClientePage() {
                         {filteredProducts.map((p) => (
                           <div key={p.id} style={searchResultRowStyle}>
                             <div style={{ minWidth: 0 }}>
-                              <div style={productNameStyle}>🥩 {p.name}</div>
+                              <div style={productNameStyle}>{getCategoryEmoji(p.category)} {p.name}</div>
                               <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4, fontSize: 16 }}>
-                                ${getPrice(p).toFixed(2)}/kg
+                                {isPieceProduct(p)
+                                  ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
+                                  : `$${getPrice(p).toFixed(2)}/kg`}
                               </div>
                             </div>
 
                             <div style={productButtonsWrapStyle}>
-                              <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                                +1 kg
-                              </button>
-                              <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                                +0.5
-                              </button>
-                              <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
-                                Cant.
-                              </button>
-                              <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                                $
-                              </button>
+                              {isPieceProduct(p) ? (
+                                <>
+                                  <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                                    +1 pza
+                                  </button>
+                                  <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                                    Cant.
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                                    +1 kg
+                                  </button>
+                                  <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                                    +0.5
+                                  </button>
+                                  <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                                    Cant.
+                                  </button>
+                                  <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                                    $
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1173,12 +1203,16 @@ export default function ClientePage() {
                     >
                       {catalogProducts.map((p) => (
                         <div key={p.id} style={productCardStyle}>
-                          <div style={{ fontSize: 28, marginBottom: 8, textAlign: "center" }}>🥩</div>
+                          <div style={{ fontSize: 28, marginBottom: 8, textAlign: "center" }}>{getCategoryEmoji(p.category)}</div>
                           <div style={{ minHeight: isMobile ? 42 : 46 }}>
                             <div style={productNameStyle}>{p.name}</div>
                           </div>
 
-                          <div style={productPriceStyle}>${getPrice(p).toFixed(2)}/kg</div>
+                          <div style={productPriceStyle}>
+                            {isPieceProduct(p)
+                              ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
+                              : `$${getPrice(p).toFixed(2)}/kg`}
+                          </div>
 
                           <div style={{ minHeight: 28, marginBottom: 10 }}>
                             {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
@@ -1188,18 +1222,43 @@ export default function ClientePage() {
                             {p.is_excluded_from_discount ? (
                               <span style={excludedBadgeStyle}>Fijo</span>
                             ) : null}
+
+                            {isPieceProduct(p) ? (
+                              <span style={{
+                                display: "inline-block",
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                background: "rgba(53,92,125,0.10)",
+                                color: COLORS.info,
+                                fontSize: 12,
+                                fontWeight: 700,
+                              }}>Por pieza</span>
+                            ) : null}
                           </div>
 
                           <div style={productButtonsWrapStyle}>
-                            <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                              +1 kg
-                            </button>
-                            <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                              +0.5
-                            </button>
-                            <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                              $
-                            </button>
+                            {isPieceProduct(p) ? (
+                              <>
+                                <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                                  +1 pza
+                                </button>
+                                <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                                  Cant.
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                                  +1 kg
+                                </button>
+                                <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                                  +0.5
+                                </button>
+                                <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                                  $
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -1243,12 +1302,18 @@ export default function ClientePage() {
                       <div style={emptyBoxStyle}>Todavía no agregas productos</div>
                     ) : (
                       <>
-                        {cart.map((c, i) => (
+                        {cart.map((c, i) => {
+                          const matchedProduct = products.find((p) => p.name === c.name);
+                          const isPiece = matchedProduct ? isPieceProduct(matchedProduct) : false;
+                          const emoji = getCategoryEmoji(matchedProduct?.category);
+                          return (
                           <div key={i} style={cartRowStyle}>
                             <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontWeight: 700, color: COLORS.text }}>🥩 {c.name}</div>
+                              <div style={{ fontWeight: 700, color: COLORS.text }}>{emoji} {c.name}</div>
                               <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                                {c.kilos} kg · ${c.price.toFixed(2)}/kg
+                                {isPiece
+                                  ? `${c.kilos} pza · $${c.price.toFixed(2)}/pza`
+                                  : `${c.kilos} kg · $${c.price.toFixed(2)}/kg`}
                               </div>
                             </div>
 
@@ -1261,7 +1326,8 @@ export default function ClientePage() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
 
                         <div style={totalBoxStyle}>
                           <span>Total del pedido</span>
@@ -1364,6 +1430,7 @@ export default function ClientePage() {
                         address={address}
                         setAddress={setAddress}
                         saveAddress={saveAddress}
+                        products={products}
                       />
                     </div>
                   </div>
@@ -1400,12 +1467,16 @@ export default function ClientePage() {
                 >
                   {products.map((p) => (
                     <div key={p.id} style={catalogCardStyle}>
-                      <div style={{ fontSize: 32, marginBottom: 12, textAlign: "center" }}>🥩</div>
+                      <div style={{ fontSize: 32, marginBottom: 12, textAlign: "center" }}>{getCategoryEmoji(p.category)}</div>
                       <div style={{ minHeight: 50 }}>
                         <div style={productNameStyle}>{p.name}</div>
                       </div>
 
-                      <div style={productPriceStyle}>${getPrice(p).toFixed(2)}/kg</div>
+                      <div style={productPriceStyle}>
+                        {isPieceProduct(p)
+                          ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
+                          : `$${getPrice(p).toFixed(2)}/kg`}
+                      </div>
 
                       <div style={{ minHeight: 32, marginBottom: 12 }}>
                         {customerType === "mayoreo" && !p.is_excluded_from_discount ? (
@@ -1415,21 +1486,46 @@ export default function ClientePage() {
                         {p.is_excluded_from_discount ? (
                           <span style={excludedBadgeStyle}>Precio fijo</span>
                         ) : null}
+
+                        {isPieceProduct(p) ? (
+                          <span style={{
+                            display: "inline-block",
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background: "rgba(53,92,125,0.10)",
+                            color: COLORS.info,
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}>Por pieza</span>
+                        ) : null}
                       </div>
 
                       <div style={productButtonsWrapStyle}>
-                        <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
-                          +1 kg
-                        </button>
-                        <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
-                          +0.5
-                        </button>
-                        <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
-                          Cant.
-                        </button>
-                        <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
-                          $
-                        </button>
+                        {isPieceProduct(p) ? (
+                          <>
+                            <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                              +1 pza
+                            </button>
+                            <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                              Cant.
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
+                              +1 kg
+                            </button>
+                            <button onClick={() => addProduct(p, "half")} style={lightMiniButtonStyle}>
+                              +0.5
+                            </button>
+                            <button onClick={() => addProduct(p, "custom")} style={lightMiniButtonStyle}>
+                              Cant.
+                            </button>
+                            <button onClick={() => addProduct(p, "money")} style={darkMiniButtonStyle}>
+                              $
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -1514,14 +1610,20 @@ export default function ClientePage() {
 
                         {o.order_items?.length ? (
                           <div style={{ display: "grid", gap: 6, marginBottom: 12, paddingBottom: 12, borderBottom: `1px solid ${COLORS.border}` }}>
-                            {o.order_items.map((item) => (
+                            {o.order_items.map((item) => {
+                              const mp = products.find((p) => p.name === item.product);
+                              const isPiece = mp ? isPieceProduct(mp) : false;
+                              return (
                               <div key={item.id} style={historyItemStyle}>
-                                <span style={{ minWidth: 0 }}>🥩 {item.product}</span>
+                                <span style={{ minWidth: 0 }}>{getCategoryEmoji(mp?.category)} {item.product}</span>
                                 <span style={{ flexShrink: 0, fontWeight: 700 }}>
-                                  {item.kilos} kg · ${(item.kilos * item.price).toFixed(2)}
+                                  {isPiece
+                                    ? `${item.kilos} pza · $${(item.kilos * item.price).toFixed(2)}`
+                                    : `${item.kilos} kg · $${(item.kilos * item.price).toFixed(2)}`}
                                 </span>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         ) : null}
 
@@ -1668,7 +1770,10 @@ export default function ClientePage() {
                                   display: "grid",
                                   gap: 6,
                                 }}>
-                                  {items.map((item) => (
+                                  {items.map((item) => {
+                                    const mp = products.find((p) => p.name === item.product);
+                                    const isPiece = mp ? isPieceProduct(mp) : false;
+                                    return (
                                     <div
                                       key={item.id}
                                       style={{
@@ -1684,17 +1789,20 @@ export default function ClientePage() {
                                     >
                                       <div style={{ minWidth: 0, flex: 1 }}>
                                         <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>
-                                          🥩 {item.product}
+                                          {getCategoryEmoji(mp?.category)} {item.product}
                                         </div>
                                         <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
-                                          {item.kilos} kg × ${Number(item.price || 0).toFixed(2)}
+                                          {isPiece
+                                            ? `${item.kilos} pza × $${Number(item.price || 0).toFixed(2)}`
+                                            : `${item.kilos} kg × $${Number(item.price || 0).toFixed(2)}`}
                                         </div>
                                       </div>
                                       <div style={{ fontWeight: 800, color: COLORS.primary, fontSize: 14, flexShrink: 0 }}>
                                         ${(Number(item.kilos || 0) * Number(item.price || 0)).toFixed(2)}
                                       </div>
                                     </div>
-                                  ))}
+                                    );
+                                  })}
                                 </div>
 
                                 {/* Total */}
@@ -2056,6 +2164,7 @@ function CartPanel({
   address,
   setAddress,
   saveAddress,
+  products,
 }: {
   cart: CartItem[];
   notes: string;
@@ -2069,6 +2178,7 @@ function CartPanel({
   address: string;
   setAddress: (value: string) => void;
   saveAddress: () => void;
+  products: Product[];
 }) {
   return (
     <div style={panelStyle}>
@@ -2087,12 +2197,18 @@ function CartPanel({
         <div style={emptyBoxStyle}>Todavía no agregas productos</div>
       ) : (
         <>
-          {cart.map((c, i) => (
+          {cart.map((c, i) => {
+            const mp = products.find((p) => p.name === c.name);
+            const isPiece = mp ? isPieceProduct(mp) : false;
+            const emoji = getCategoryEmoji(mp?.category);
+            return (
             <div key={i} style={cartRowStyle}>
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 700, color: COLORS.text }}>🥩 {c.name}</div>
+                <div style={{ fontWeight: 700, color: COLORS.text }}>{emoji} {c.name}</div>
                 <div style={{ color: COLORS.muted, fontSize: 14 }}>
-                  {c.kilos} kg · ${c.price.toFixed(2)}/kg
+                  {isPiece
+                    ? `${c.kilos} pza · $${c.price.toFixed(2)}/pza`
+                    : `${c.kilos} kg · $${c.price.toFixed(2)}/kg`}
                 </div>
               </div>
 
@@ -2105,7 +2221,8 @@ function CartPanel({
                 </button>
               </div>
             </div>
-          ))}
+            );
+          })}
 
           <div style={totalBoxStyle}>
             <span>Total del pedido</span>
