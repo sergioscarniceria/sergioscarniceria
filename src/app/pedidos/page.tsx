@@ -275,7 +275,7 @@ const [changingId, setChangingId] = useState<string | null>(null);
 
           {o.created_at ? (
             <div style={metaPillStyle}>
-              Creado: <b>{new Date(o.created_at).toLocaleString()}</b>
+              Creado: <b>{new Date(o.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</b>
             </div>
           ) : null}
         </div>

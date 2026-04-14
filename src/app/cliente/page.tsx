@@ -1535,7 +1535,7 @@ function OrdersPanel({
                 </div>
                 {o.created_at ? (
                   <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
-                    {new Date(o.created_at).toLocaleString()}
+                    {new Date(o.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
                   </div>
                 ) : null}
                 <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>

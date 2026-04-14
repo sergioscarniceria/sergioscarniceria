@@ -507,7 +507,7 @@ export default function AdminDashboardPage() {
                   </div>
                   {order.created_at ? (
                     <div style={{ color: COLORS.muted, marginTop: 4, fontSize: 13 }}>
-                      {new Date(order.created_at).toLocaleString()}
+                      {new Date(order.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
                     </div>
                   ) : null}
                 </div>

@@ -270,7 +270,7 @@ export default function CxcPagosPage() {
 
                     {payment.created_at ? (
                       <div style={metaPillStyle}>
-                        Capturado: <b>{new Date(payment.created_at).toLocaleString()}</b>
+                        Capturado: <b>{new Date(payment.created_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</b>
                       </div>
                     ) : null}
                   </div>

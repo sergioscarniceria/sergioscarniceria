@@ -324,7 +324,7 @@ export default function InventarioComplementosPage() {
                             {m.notes && <span style={{ color: C.muted, marginLeft: 8, fontStyle: "italic" }}>({m.notes})</span>}
                           </div>
                           <span style={{ color: C.muted, fontSize: 12 }}>
-                            {new Date(m.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                            {new Date(m.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}
                           </span>
                         </div>
                       ))}

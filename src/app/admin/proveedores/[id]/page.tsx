@@ -48,7 +48,7 @@ function money(v?: number | null) {
 
 function formatDate(d: string) {
   return new Date(d + "T12:00:00").toLocaleDateString("es-MX", {
-    day: "2-digit", month: "short", year: "numeric",
+    day: "2-digit", month: "short", year: "numeric", timeZone: "America/Mexico_City",
   });
 }
 

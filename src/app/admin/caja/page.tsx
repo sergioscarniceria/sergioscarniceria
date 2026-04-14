@@ -92,13 +92,13 @@ function todayStr() {
 function fmtDateTime(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
-  return isNaN(d.getTime()) ? v : d.toLocaleString("es-MX");
+  return isNaN(d.getTime()) ? v : d.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 }
 
 function fmtDate(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v + "T12:00:00");
-  return isNaN(d.getTime()) ? v : d.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short" });
+  return isNaN(d.getTime()) ? v : d.toLocaleDateString("es-MX", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Mexico_City" });
 }
 
 function typeName(t?: string | null) {

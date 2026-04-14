@@ -78,9 +78,10 @@ function formatHour(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
 
-  return date.toLocaleTimeString([], {
+  return date.toLocaleTimeString("es-MX", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "America/Mexico_City",
   });
 }
 
@@ -607,7 +608,7 @@ const paidTickets = useMemo(() => {
                   <div>
                     <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>{sale.employee_name} — {(saleItems as Item[]).length} productos</div>
                     <div style={{ color: COLORS.muted, fontSize: 12 }}>${money(saleTotal)} {sale.notes ? `— ${sale.notes}` : ""}</div>
-                    <div style={{ color: COLORS.muted, fontSize: 11 }}>{new Date(sale.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</div>
+                    <div style={{ color: COLORS.muted, fontSize: 11 }}>{new Date(sale.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}</div>
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button onClick={() => resumeHeldSale(sale)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "rgba(31,122,77,0.12)", color: COLORS.success, fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Continuar</button>

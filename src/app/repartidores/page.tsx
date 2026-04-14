@@ -51,13 +51,13 @@ function isToday(v?: string | null) {
 function fmtTime(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
-  return isNaN(d.getTime()) ? v : d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return isNaN(d.getTime()) ? v : d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
 }
 
 function fmtDateTime(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
-  return isNaN(d.getTime()) ? v : d.toLocaleString("es-MX");
+  return isNaN(d.getTime()) ? v : d.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 }
 
 function minutesBetween(from?: string | null, to?: string | null) {
