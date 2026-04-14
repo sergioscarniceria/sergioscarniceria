@@ -56,6 +56,11 @@ const adminModules = [
     description: "Tus recetas con costo exacto por kilo, sin adivinar.",
     href: "/admin/recetario",
   },
+  {
+    title: "Inventario",
+    description: "Complementos y bodega, pieza por pieza bajo control.",
+    href: "/admin/inventario/complementos",
+  },
 ];
 
 const operationModules = [
