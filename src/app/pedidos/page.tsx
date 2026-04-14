@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import NotificationBell from "@/components/NotificationBell";
 
 type OrderItem = {
   id: string;
@@ -370,7 +371,8 @@ const [changingId, setChangingId] = useState<string | null>(null);
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <NotificationBell />
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>

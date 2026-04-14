@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import NotificationBell from "@/components/NotificationBell";
 
 const COLORS = {
   bg: "#f7f1e8",
@@ -574,7 +575,10 @@ export default function HomePage() {
               {empRole ? (
                 <>
                   <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span>Módulos — {empRole === "admin" ? "Administrador" : empRole === "cajera" ? `Cajera${empName ? `: ${empName}` : ""}` : `Carnicero${empName ? `: ${empName}` : ""}`}</span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>Módulos — {empRole === "admin" ? "Administrador" : empRole === "cajera" ? `Cajera${empName ? `: ${empName}` : ""}` : `Carnicero${empName ? `: ${empName}` : ""}`}</span>
+                      <NotificationBell />
+                    </div>
                     <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); }} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.muted, fontWeight: 700, cursor: "pointer", fontSize: 11 }}>Salir</button>
                   </div>
                   <div style={employeeGridStyle}>

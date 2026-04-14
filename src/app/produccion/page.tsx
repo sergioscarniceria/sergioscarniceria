@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import NotificationBell from "@/components/NotificationBell";
 
 type OrderItem = {
   id: string;
@@ -391,7 +392,8 @@ function isOrderReady(o: Order) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <NotificationBell />
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/repartidores" style={repartidoresButtonStyle}>Repartidores</Link>
