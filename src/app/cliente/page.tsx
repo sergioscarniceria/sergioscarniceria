@@ -107,6 +107,146 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
+type RecipeIngredient = {
+  name: string;
+  productMatch: string; // partial name to match in product catalog
+  kgPerPerson: number; // kg (or pieces) per person
+  unit: "kg" | "pza";
+  isFromStore: boolean; // true = we sell it, false = bring your own
+};
+
+type Recipe = {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  time: string;
+  basePeople: number;
+  emoji: string;
+  ingredients: RecipeIngredient[];
+  otherIngredients: string[]; // things we don't sell
+  steps: string[];
+};
+
+const RECIPES: Recipe[] = [
+  {
+    id: "arrachera-ajo-limon",
+    title: "Arrachera al ajo y limon",
+    description: "Rapida, lucidora y con mucho sabor. Perfecta para impresionar.",
+    image: "https://images.unsplash.com/photo-1529692236671-f1f6cf9683ba?auto=format&fit=crop&w=600&q=80",
+    time: "25 min",
+    basePeople: 4,
+    emoji: "🥩",
+    ingredients: [
+      { name: "Arrachera", productMatch: "arrachera", kgPerPerson: 0.25, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["4 dientes de ajo picados", "Jugo de 3 limones", "Aceite de oliva", "Sal y pimienta"],
+    steps: [
+      "Mezcla ajo, limon, aceite, sal y pimienta.",
+      "Marina la arrachera por 30 a 60 minutos.",
+      "Cocina en parrilla o sarten bien caliente.",
+      "Deja reposar 5 minutos y rebana en tiras finas.",
+      "Acompaña con cebollitas o tortillas calientes.",
+    ],
+  },
+  {
+    id: "rib-eye-mantequilla",
+    title: "Rib eye a la mantequilla",
+    description: "Para una cena especial, con acabado elegante de ajo y romero.",
+    image: "https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&w=600&q=80",
+    time: "20 min",
+    basePeople: 2,
+    emoji: "🥩",
+    ingredients: [
+      { name: "Rib eye", productMatch: "rib eye", kgPerPerson: 0.35, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["Mantequilla", "Dientes de ajo", "Ramita de romero", "Sal gruesa y pimienta"],
+    steps: [
+      "Sazona los rib eyes con sal y pimienta.",
+      "Sella en sarten o parrilla muy caliente.",
+      "Agrega mantequilla, ajo y romero.",
+      "Baña la carne con la mantequilla mientras termina su coccion.",
+      "Deja reposar unos minutos antes de servir.",
+    ],
+  },
+  {
+    id: "aguja-parrilla",
+    title: "Aguja marinada para parrilla",
+    description: "Rendidora y perfecta para reuniones familiares o con amigos.",
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+    time: "35 min",
+    basePeople: 6,
+    emoji: "🥩",
+    ingredients: [
+      { name: "Aguja", productMatch: "aguja", kgPerPerson: 0.25, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["Salsa inglesa", "Jugo de naranja", "Mostaza", "Sal, pimienta y ajo en polvo"],
+    steps: [
+      "Mezcla todos los ingredientes del marinado.",
+      "Deja reposar la carne al menos 1 hora.",
+      "Asa a fuego medio hasta obtener buen color.",
+      "Rebana y sirve con frijoles o guacamole.",
+    ],
+  },
+  {
+    id: "tacos-bistec",
+    title: "Tacos de bistec",
+    description: "El clasico que nunca falla. Rapido, sabroso y para toda la familia.",
+    image: "https://images.unsplash.com/photo-1551504734-5ee1c4a1479b?auto=format&fit=crop&w=600&q=80",
+    time: "15 min",
+    basePeople: 4,
+    emoji: "🌮",
+    ingredients: [
+      { name: "Bistec de res", productMatch: "bistec", kgPerPerson: 0.2, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["Tortillas", "Cebolla", "Cilantro", "Limon", "Salsa verde"],
+    steps: [
+      "Corta el bistec en tiras finas.",
+      "Sazona con sal y pimienta.",
+      "Cocina en sarten caliente con poco aceite.",
+      "Sirve en tortillas con cebolla y cilantro.",
+    ],
+  },
+  {
+    id: "costillas-bbq",
+    title: "Costillas BBQ",
+    description: "Costillas tiernas y jugosas con salsa barbecue casera.",
+    image: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80",
+    time: "2 hrs",
+    basePeople: 4,
+    emoji: "🐷",
+    ingredients: [
+      { name: "Costilla de cerdo", productMatch: "costilla", kgPerPerson: 0.35, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["Salsa BBQ", "Miel", "Vinagre de manzana", "Paprika", "Ajo en polvo"],
+    steps: [
+      "Sazona las costillas con especias.",
+      "Envuelve en aluminio y hornea a 150°C por 1.5 hrs.",
+      "Retira el aluminio, baña con salsa BBQ.",
+      "Hornea 20 min mas para caramelizar.",
+    ],
+  },
+  {
+    id: "hamburguesas",
+    title: "Hamburguesas caseras",
+    description: "Jugosas, con queso y todos los complementos. Las favoritas de los niños.",
+    image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=600&q=80",
+    time: "20 min",
+    basePeople: 4,
+    emoji: "🍔",
+    ingredients: [
+      { name: "Carne molida", productMatch: "molida", kgPerPerson: 0.2, unit: "kg", isFromStore: true },
+    ],
+    otherIngredients: ["Pan para hamburguesa", "Queso americano", "Lechuga", "Tomate", "Cebolla", "Catsup y mostaza"],
+    steps: [
+      "Forma las hamburguesas con la carne molida, sal y pimienta.",
+      "Cocina en sarten o parrilla 4 min por lado.",
+      "Agrega queso los ultimos 2 minutos.",
+      "Arma con pan, lechuga, tomate y salsas.",
+    ],
+  },
+];
+
 function getCategoryEmoji(category?: string | null): string {
   const cat = (category || "").toLowerCase();
   if (cat.includes("res") || cat.includes("asar")) return "🥩";
@@ -201,9 +341,11 @@ export default function ClientePage() {
   const [creditLimit, setCreditLimit] = useState(0);
   const [creditDays, setCreditDays] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<"orden" | "catalogo" | "pedidos" | "tickets" | "cuenta">("orden");
+  const [activeTab, setActiveTab] = useState<"orden" | "catalogo" | "pedidos" | "tickets" | "recetas" | "cuenta">("orden");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
+  const [expandedRecipe, setExpandedRecipe] = useState<string | null>(null);
+  const [recipeServings, setRecipeServings] = useState<Record<string, number>>({});
 
   useEffect(() => {
     checkUser();
@@ -654,9 +796,56 @@ export default function ClientePage() {
     alert("Pedido cargado otra vez en tu pedido");
   }
 
+  function getServings(recipeId: string, basePeople: number) {
+    return recipeServings[recipeId] || basePeople;
+  }
+
+  function orderRecipeIngredients(recipe: Recipe) {
+    const servings = getServings(recipe.id, recipe.basePeople);
+    const multiplier = servings / recipe.basePeople;
+    const newItems: CartItem[] = [];
+    const notFound: string[] = [];
+
+    for (const ing of recipe.ingredients) {
+      if (!ing.isFromStore) continue;
+
+      // Find product by partial name match
+      const match = products.find((p) =>
+        p.name.toLowerCase().includes(ing.productMatch.toLowerCase())
+      );
+
+      if (match) {
+        const kilos = Number((ing.kgPerPerson * servings).toFixed(3));
+        newItems.push({
+          name: match.name,
+          price: isPieceProduct(match) ? Number(match.fixed_piece_price) : getPrice(match),
+          kilos,
+        });
+      } else {
+        notFound.push(ing.name);
+      }
+    }
+
+    if (newItems.length === 0) {
+      alert("No encontramos los productos de esta receta en nuestro catalogo. Contactanos por WhatsApp.");
+      return;
+    }
+
+    setCart((prev) => [...prev, ...newItems]);
+    setActiveTab("orden");
+    setShowCart(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    if (notFound.length > 0) {
+      alert(`Se agregaron los productos disponibles. No encontramos: ${notFound.join(", ")}`);
+    } else {
+      alert(`Se agregaron ${newItems.length} producto${newItems.length > 1 ? "s" : ""} para ${servings} persona${servings > 1 ? "s" : ""}`);
+    }
+  }
+
   async function createOrder() {
     if (!user) {
-      alert("Debes iniciar sesión");
+      alert("Debes iniciar sesion");
       return;
     }
 
@@ -1046,6 +1235,17 @@ export default function ClientePage() {
             }}
           >
             🧾 Tickets
+          </button>
+          <button
+            onClick={() => setActiveTab("recetas")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "recetas" ? COLORS.primary : "transparent",
+              color: activeTab === "recetas" ? "white" : COLORS.text,
+              borderBottom: activeTab === "recetas" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            👨‍🍳 Recetas
           </button>
           <button
             onClick={() => setActiveTab("cuenta")}
@@ -1867,6 +2067,302 @@ export default function ClientePage() {
           </div>
         )}
 
+        {/* TAB: RECETAS */}
+        {activeTab === "recetas" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>Recetas para inspirarte</h2>
+                  <p style={panelSubtitleStyle}>
+                    Elige una receta, ajusta las personas y ordena los ingredientes directo
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 16 }}>
+                {RECIPES.map((recipe) => {
+                  const isExpanded = expandedRecipe === recipe.id;
+                  const servings = getServings(recipe.id, recipe.basePeople);
+
+                  return (
+                    <div
+                      key={recipe.id}
+                      style={{
+                        background: COLORS.bgSoft,
+                        border: `1px solid ${isExpanded ? COLORS.primary : COLORS.border}`,
+                        borderRadius: 20,
+                        overflow: "hidden",
+                        transition: "border-color 0.2s",
+                      }}
+                    >
+                      {/* Recipe card header */}
+                      <div
+                        onClick={() => setExpandedRecipe(isExpanded ? null : recipe.id)}
+                        style={{
+                          cursor: "pointer",
+                          WebkitTapHighlightColor: "transparent",
+                        }}
+                      >
+                        {/* Image */}
+                        <div style={{
+                          width: "100%",
+                          height: isMobile ? 140 : 180,
+                          backgroundImage: `url(${recipe.image})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          position: "relative",
+                        }}>
+                          <div style={{
+                            position: "absolute",
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            padding: "32px 16px 12px",
+                            background: "linear-gradient(transparent, rgba(0,0,0,0.6))",
+                          }}>
+                            <div style={{
+                              color: "white",
+                              fontWeight: 800,
+                              fontSize: isMobile ? 18 : 22,
+                              textShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                            }}>
+                              {recipe.emoji} {recipe.title}
+                            </div>
+                          </div>
+                          {/* Time badge */}
+                          <div style={{
+                            position: "absolute",
+                            top: 10,
+                            right: 10,
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background: "rgba(255,255,255,0.9)",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: COLORS.text,
+                          }}>
+                            ⏱ {recipe.time}
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div style={{ padding: "12px 16px" }}>
+                          <div style={{ color: COLORS.muted, fontSize: 14, lineHeight: 1.5 }}>
+                            {recipe.description}
+                          </div>
+                          <div style={{
+                            color: COLORS.primary,
+                            fontWeight: 700,
+                            fontSize: 13,
+                            marginTop: 8,
+                          }}>
+                            {isExpanded ? "Ocultar detalles ▲" : "Ver receta y ordenar ▼"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded content */}
+                      {isExpanded && (
+                        <div style={{
+                          padding: "0 16px 16px",
+                          borderTop: `1px solid ${COLORS.border}`,
+                        }}>
+                          {/* Servings selector */}
+                          <div style={{
+                            marginTop: 14,
+                            padding: 14,
+                            borderRadius: 16,
+                            background: "rgba(255,255,255,0.8)",
+                            border: `1px solid ${COLORS.border}`,
+                          }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8, fontSize: 15 }}>
+                              ¿Para cuantas personas?
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                              {[2, 4, 6, 8, 10, 15].map((n) => (
+                                <button
+                                  key={n}
+                                  onClick={() => setRecipeServings((prev) => ({ ...prev, [recipe.id]: n }))}
+                                  style={{
+                                    padding: "10px 16px",
+                                    borderRadius: 12,
+                                    border: servings === n ? `2px solid ${COLORS.primary}` : `1px solid ${COLORS.border}`,
+                                    background: servings === n ? COLORS.primary : "white",
+                                    color: servings === n ? "white" : COLORS.text,
+                                    fontWeight: 700,
+                                    fontSize: 15,
+                                    cursor: "pointer",
+                                    minWidth: 48,
+                                    WebkitTapHighlightColor: "transparent",
+                                  }}
+                                >
+                                  {n}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* What you need from us */}
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 15, marginBottom: 8 }}>
+                              Lo que necesitas de nosotros
+                            </div>
+                            {recipe.ingredients.map((ing, idx) => {
+                              const qty = Number((ing.kgPerPerson * servings).toFixed(2));
+                              const matchedProd = products.find((p) =>
+                                p.name.toLowerCase().includes(ing.productMatch.toLowerCase())
+                              );
+                              const price = matchedProd
+                                ? isPieceProduct(matchedProd)
+                                  ? Number(matchedProd.fixed_piece_price)
+                                  : getPrice(matchedProd)
+                                : 0;
+
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    padding: "10px 14px",
+                                    borderRadius: 14,
+                                    background: "rgba(255,255,255,0.8)",
+                                    border: `1px solid ${COLORS.border}`,
+                                    marginBottom: 6,
+                                    gap: 8,
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>
+                                      {getCategoryEmoji(matchedProd?.category)} {matchedProd?.name || ing.name}
+                                    </div>
+                                    <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                                      {qty} {ing.unit} para {servings} personas
+                                    </div>
+                                  </div>
+                                  <div style={{ fontWeight: 800, color: COLORS.primary, fontSize: 15, flexShrink: 0 }}>
+                                    {price > 0 ? `$${(qty * price).toFixed(2)}` : "—"}
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* Total estimate */}
+                            {(() => {
+                              const total = recipe.ingredients.reduce((acc, ing) => {
+                                const qty = ing.kgPerPerson * servings;
+                                const mp = products.find((p) =>
+                                  p.name.toLowerCase().includes(ing.productMatch.toLowerCase())
+                                );
+                                const price = mp ? (isPieceProduct(mp) ? Number(mp.fixed_piece_price) : getPrice(mp)) : 0;
+                                return acc + qty * price;
+                              }, 0);
+                              return total > 0 ? (
+                                <div style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  padding: "12px 14px",
+                                  borderRadius: 14,
+                                  background: COLORS.primary,
+                                  color: "white",
+                                  fontWeight: 800,
+                                  fontSize: 15,
+                                  marginTop: 6,
+                                }}>
+                                  <span>Estimado</span>
+                                  <span>${total.toFixed(2)}</span>
+                                </div>
+                              ) : null;
+                            })()}
+                          </div>
+
+                          {/* Other ingredients */}
+                          {recipe.otherIngredients.length > 0 && (
+                            <div style={{ marginTop: 14 }}>
+                              <div style={{ fontWeight: 700, color: COLORS.muted, fontSize: 13, marginBottom: 6 }}>
+                                Tambien necesitas (traelos de casa):
+                              </div>
+                              <div style={{
+                                padding: 12,
+                                borderRadius: 14,
+                                background: "rgba(255,255,255,0.6)",
+                                border: `1px dashed ${COLORS.border}`,
+                                color: COLORS.muted,
+                                fontSize: 13,
+                                lineHeight: 1.6,
+                              }}>
+                                {recipe.otherIngredients.join(" · ")}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Steps */}
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 15, marginBottom: 8 }}>
+                              Preparacion
+                            </div>
+                            <div style={{ display: "grid", gap: 6 }}>
+                              {recipe.steps.map((step, idx) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: "flex",
+                                    gap: 10,
+                                    padding: "8px 12px",
+                                    borderRadius: 12,
+                                    background: "rgba(255,255,255,0.6)",
+                                    fontSize: 14,
+                                    color: COLORS.text,
+                                    alignItems: "flex-start",
+                                  }}
+                                >
+                                  <span style={{
+                                    fontWeight: 800,
+                                    color: COLORS.primary,
+                                    fontSize: 13,
+                                    minWidth: 20,
+                                    flexShrink: 0,
+                                  }}>
+                                    {idx + 1}.
+                                  </span>
+                                  <span>{step}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* ORDER BUTTON */}
+                          <button
+                            onClick={() => orderRecipeIngredients(recipe)}
+                            style={{
+                              width: "100%",
+                              marginTop: 16,
+                              padding: "14px 18px",
+                              borderRadius: 16,
+                              border: "none",
+                              background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+                              color: "white",
+                              fontWeight: 800,
+                              fontSize: 16,
+                              cursor: "pointer",
+                              boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+                              WebkitTapHighlightColor: "transparent",
+                            }}
+                          >
+                            🛒 Ordenar insumos para {servings} personas
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB: MI CUENTA */}
         {activeTab === "cuenta" && (
           <div style={{ animation: "fadeIn 0.3s ease" }}>
@@ -2382,9 +2878,8 @@ const topBarStyle: React.CSSProperties = {
 };
 
 const tabNavigationStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(4, 1fr)",
-  gap: 8,
+  display: "flex",
+  gap: 6,
   marginBottom: 20,
   background: COLORS.card,
   border: `1px solid ${COLORS.border}`,
@@ -2395,16 +2890,22 @@ const tabNavigationStyle: React.CSSProperties = {
   zIndex: 10,
   backdropFilter: "blur(10px)",
   boxShadow: "0 4px 12px rgba(91, 25, 15, 0.05)",
+  overflowX: "auto",
+  WebkitOverflowScrolling: "touch",
+  scrollbarWidth: "none",
 };
 
 const tabButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
+  padding: "10px 14px",
   borderRadius: 14,
   border: "none",
   cursor: "pointer",
   fontWeight: 800,
-  fontSize: 14,
+  fontSize: 13,
   transition: "all 0.2s ease",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
+  WebkitTapHighlightColor: "transparent",
 };
 
 const heroGridStyle: React.CSSProperties = {
