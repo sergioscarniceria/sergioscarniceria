@@ -74,6 +74,20 @@ type CxcPayment = {
   created_at?: string | null;
 };
 
+type Ticket = {
+  id: string;
+  type: string | null;
+  source: string | null;
+  amount: number | null;
+  payment_method: string | null;
+  created_at: string | null;
+  reference_id?: string | null;
+  cashier_name?: string | null;
+  is_cancelled?: boolean | null;
+  order_items?: OrderItem[];
+  customer_name?: string | null;
+};
+
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
@@ -172,7 +186,9 @@ export default function ClientePage() {
   const [creditLimit, setCreditLimit] = useState(0);
   const [creditDays, setCreditDays] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<"orden" | "catalogo" | "pedidos" | "cuenta">("orden");
+  const [activeTab, setActiveTab] = useState<"orden" | "catalogo" | "pedidos" | "tickets" | "cuenta">("orden");
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [expandedTicket, setExpandedTicket] = useState<string | null>(null);
 
   useEffect(() => {
     checkUser();
@@ -288,6 +304,40 @@ export default function ClientePage() {
         .order("created_at", { ascending: false });
 
       setCxcPayments((paymentsData as CxcPayment[]) || []);
+
+      // Cargar tickets de compra (cash_movements de los últimos 4 meses)
+      const fourMonthsAgo = new Date();
+      fourMonthsAgo.setMonth(fourMonthsAgo.getMonth() - 4);
+      const sinceDate = fourMonthsAgo.toISOString();
+
+      // Traer orders pagados del cliente para obtener sus IDs
+      const paidOrderIds = ((ordersData as Order[]) || [])
+        .filter((o) => o.id)
+        .map((o) => o.id);
+
+      if (paidOrderIds.length > 0) {
+        const { data: ticketsData } = await supabase
+          .from("cash_movements")
+          .select("*")
+          .in("reference_id", paidOrderIds)
+          .gte("created_at", sinceDate)
+          .eq("type", "venta")
+          .order("created_at", { ascending: false });
+
+        // Enriquecer tickets con items del order
+        const enrichedTickets: Ticket[] = ((ticketsData as Ticket[]) || []).map((t) => {
+          const matchingOrder = ((ordersData as Order[]) || []).find((o) => o.id === t.reference_id);
+          return {
+            ...t,
+            order_items: matchingOrder?.order_items || [],
+            customer_name: matchingOrder?.customer_name || null,
+          };
+        });
+
+        setTickets(enrichedTickets);
+      } else {
+        setTickets([]);
+      }
     } else {
       setPoints(0);
       setOrders([]);
@@ -297,6 +347,7 @@ export default function ClientePage() {
       setCreditEnabled(false);
       setCreditLimit(0);
       setCreditDays(0);
+      setTickets([]);
     }
 
     await loadProducts();
@@ -486,6 +537,7 @@ export default function ClientePage() {
     setCreditEnabled(false);
     setCreditLimit(0);
     setCreditDays(0);
+    setTickets([]);
   }
 
   async function saveAddress() {
@@ -968,6 +1020,17 @@ export default function ClientePage() {
             }}
           >
             📦 Mis pedidos
+          </button>
+          <button
+            onClick={() => setActiveTab("tickets")}
+            style={{
+              ...tabButtonStyle,
+              background: activeTab === "tickets" ? COLORS.primary : "transparent",
+              color: activeTab === "tickets" ? "white" : COLORS.text,
+              borderBottom: activeTab === "tickets" ? "none" : `2px solid ${COLORS.border}`,
+            }}
+          >
+            🧾 Tickets
           </button>
           <button
             onClick={() => setActiveTab("cuenta")}
@@ -1465,6 +1528,228 @@ export default function ClientePage() {
                         <button onClick={() => repeatOrder(o)} style={{ ...primaryButtonStyle, width: "100%" }}>
                           🔄 Repetir pedido
                         </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: TICKETS DE COMPRA */}
+        {activeTab === "tickets" && (
+          <div style={{ animation: "fadeIn 0.3s ease" }}>
+            <div style={panelStyle}>
+              <div style={panelHeaderStyle}>
+                <div>
+                  <h2 style={panelTitleStyle}>Mis tickets de compra</h2>
+                  <p style={panelSubtitleStyle}>
+                    Historial de los ultimos 4 meses. Toca un ticket para ver el desglose.
+                  </p>
+                </div>
+                <div style={{
+                  padding: "6px 14px",
+                  borderRadius: 999,
+                  background: "rgba(123,34,24,0.08)",
+                  color: COLORS.primary,
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}>
+                  {tickets.length} ticket{tickets.length !== 1 ? "s" : ""}
+                </div>
+              </div>
+
+              {tickets.length === 0 ? (
+                <div style={emptyBoxStyle}>
+                  No tienes tickets de compra recientes
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  {tickets.map((t) => {
+                    const isExpanded = expandedTicket === t.id;
+                    const items = t.order_items || [];
+                    const itemsTotal = items.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.kilos || 0)), 0);
+
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          background: COLORS.bgSoft,
+                          border: `1px solid ${isExpanded ? COLORS.primary : COLORS.border}`,
+                          borderRadius: 20,
+                          overflow: "hidden",
+                          transition: "border-color 0.2s",
+                        }}
+                      >
+                        {/* Ticket header - clickable */}
+                        <div
+                          onClick={() => setExpandedTicket(isExpanded ? null : t.id)}
+                          style={{
+                            padding: "16px 18px",
+                            cursor: "pointer",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            WebkitTapHighlightColor: "transparent",
+                          }}
+                        >
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                              <span style={{ fontSize: 18 }}>🧾</span>
+                              <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 16 }}>
+                                ${Number(t.amount || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}
+                              </span>
+                              {t.is_cancelled && (
+                                <span style={{
+                                  padding: "2px 8px",
+                                  borderRadius: 999,
+                                  background: "rgba(180,35,24,0.10)",
+                                  color: COLORS.danger,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                }}>
+                                  Cancelado
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ color: COLORS.muted, fontSize: 13 }}>
+                              {t.created_at
+                                ? new Date(t.created_at).toLocaleString("es-MX", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    timeZone: "America/Mexico_City",
+                                  })
+                                : "Sin fecha"}
+                              {t.payment_method && (
+                                <span style={{ marginLeft: 8 }}>
+                                  · {t.payment_method === "efectivo" ? "💵 Efectivo" : t.payment_method === "tarjeta" ? "💳 Tarjeta" : t.payment_method === "transferencia" ? "📱 Transferencia" : t.payment_method}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{
+                            width: 28,
+                            height: 28,
+                            borderRadius: 8,
+                            background: isExpanded ? COLORS.primary : "rgba(123,34,24,0.08)",
+                            color: isExpanded ? "white" : COLORS.primary,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 800,
+                            fontSize: 14,
+                            flexShrink: 0,
+                            transition: "all 0.2s",
+                          }}>
+                            {isExpanded ? "−" : "+"}
+                          </div>
+                        </div>
+
+                        {/* Ticket detail - expandable */}
+                        {isExpanded && (
+                          <div style={{
+                            padding: "0 18px 16px 18px",
+                            borderTop: `1px solid ${COLORS.border}`,
+                          }}>
+                            {t.cashier_name && (
+                              <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 12, marginBottom: 8 }}>
+                                Cajera: <b style={{ color: COLORS.text }}>{t.cashier_name}</b>
+                              </div>
+                            )}
+
+                            {items.length > 0 ? (
+                              <div style={{ marginTop: 10 }}>
+                                <div style={{
+                                  display: "grid",
+                                  gap: 6,
+                                }}>
+                                  {items.map((item) => (
+                                    <div
+                                      key={item.id}
+                                      style={{
+                                        display: "flex",
+                                        justifyContent: "space-between",
+                                        alignItems: "center",
+                                        padding: "10px 14px",
+                                        borderRadius: 14,
+                                        background: "rgba(255,255,255,0.8)",
+                                        border: `1px solid ${COLORS.border}`,
+                                        gap: 10,
+                                      }}
+                                    >
+                                      <div style={{ minWidth: 0, flex: 1 }}>
+                                        <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>
+                                          🥩 {item.product}
+                                        </div>
+                                        <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                                          {item.kilos} kg × ${Number(item.price || 0).toFixed(2)}
+                                        </div>
+                                      </div>
+                                      <div style={{ fontWeight: 800, color: COLORS.primary, fontSize: 14, flexShrink: 0 }}>
+                                        ${(Number(item.kilos || 0) * Number(item.price || 0)).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* Total */}
+                                <div style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginTop: 10,
+                                  padding: "12px 14px",
+                                  borderRadius: 14,
+                                  background: COLORS.primary,
+                                  color: "white",
+                                  fontWeight: 800,
+                                  fontSize: 15,
+                                }}>
+                                  <span>Total cobrado</span>
+                                  <span>${Number(t.amount || 0).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</span>
+                                </div>
+
+                                {Math.abs(itemsTotal - Number(t.amount || 0)) > 0.5 && itemsTotal > 0 && (
+                                  <div style={{
+                                    marginTop: 6,
+                                    padding: "8px 12px",
+                                    borderRadius: 12,
+                                    background: "rgba(166,106,16,0.08)",
+                                    color: COLORS.warning,
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                  }}>
+                                    Subtotal productos: ${itemsTotal.toFixed(2)} (se aplico descuento o ajuste)
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div style={{
+                                ...emptyBoxStyle,
+                                marginTop: 10,
+                                fontSize: 13,
+                              }}>
+                                Venta directa sin desglose de productos
+                              </div>
+                            )}
+
+                            {/* Ticket ID mini */}
+                            <div style={{
+                              marginTop: 10,
+                              color: COLORS.muted,
+                              fontSize: 11,
+                              fontFamily: "monospace",
+                              opacity: 0.6,
+                            }}>
+                              ID: {t.id.slice(0, 8)}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
