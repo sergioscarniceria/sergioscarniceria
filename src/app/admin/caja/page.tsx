@@ -150,6 +150,12 @@ export default function CajaPage() {
   const supabase = getSupabaseClient();
   const today = todayStr();
 
+  // Role check
+  const [userRole, setUserRole] = useState<string>("");
+  useEffect(() => {
+    try { setUserRole(sessionStorage.getItem("pin_role") || ""); } catch {}
+  }, []);
+
   // State
   const [tab, setTab] = useState<Tab>("resumen");
   const [loading, setLoading] = useState(true);
@@ -490,13 +496,15 @@ export default function CajaPage() {
     );
   }
 
+  const isAdmin = userRole === "admin";
+
   const TABS: { id: Tab; label: string; icon: string }[] = [
     { id: "resumen", label: "Resumen", icon: "📊" },
     { id: "apertura", label: "Apertura", icon: "🔓" },
     { id: "gastos", label: "Gastos", icon: "💸" },
     { id: "cierre", label: "Cierre", icon: "🔒" },
     { id: "historial", label: "Historial", icon: "📋" },
-    { id: "reportes", label: "Reportes", icon: "📈" },
+    ...(isAdmin ? [{ id: "reportes" as Tab, label: "Reportes", icon: "📈" }] : []),
   ];
 
   return (
