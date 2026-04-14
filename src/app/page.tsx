@@ -437,11 +437,11 @@ export default function HomePage() {
                 <div style={{ color: COLORS.muted, lineHeight: 1.8 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                     <span>Lunes, Martes, Jueves, Viernes, Sábado</span>
-                    <b style={{ color: COLORS.text }}>6:30 AM – 4:00 PM</b>
+                    <b style={{ color: COLORS.text }}>7:30 AM – 3:30 PM</b>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                     <span>Miércoles y Domingo</span>
-                    <b style={{ color: COLORS.text }}>6:30 AM – 3:30 PM</b>
+                    <b style={{ color: COLORS.text }}>7:30 AM – 3:00 PM</b>
                   </div>
                 </div>
               </div>
