@@ -7,9 +7,9 @@ export default function CajaLayout({
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin"]}
+      allowedRoles={["admin", "cajera"]}
       title="Caja"
-      subtitle="Solo administradores"
+      subtitle="Administrador o cajera"
     >
       {children}
     </AccessGate>
