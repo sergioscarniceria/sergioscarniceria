@@ -57,6 +57,12 @@ export default function AdminClientesPage() {
   const [portalSaving, setPortalSaving] = useState(false);
   const [portalAccess, setPortalAccess] = useState<Record<string, boolean>>({});
 
+  // Change password
+  const [passwordCustomer, setPasswordCustomer] = useState<Customer | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+
   useEffect(() => {
     loadCustomers();
   }, []);
@@ -140,6 +146,52 @@ export default function AdminClientesPage() {
     }
 
     setPortalSaving(false);
+  }
+
+  async function changePassword() {
+    if (!passwordCustomer) return;
+    if (!newPassword || newPassword.length < 6) {
+      setPasswordError("Mínimo 6 caracteres");
+      return;
+    }
+
+    setPasswordSaving(true);
+    setPasswordError("");
+
+    try {
+      const res = await fetch("/api/portal/cambiar-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_id: passwordCustomer.id,
+          new_password: newPassword,
+          secret: "sergios2026",
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setPasswordError(result.error || "Error al cambiar contraseña");
+        setPasswordSaving(false);
+        return;
+      }
+
+      // Update local state
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === passwordCustomer.id ? { ...c, portal_password: newPassword } : c
+        )
+      );
+
+      alert("Contraseña cambiada. Nueva contraseña: " + newPassword);
+      setPasswordCustomer(null);
+      setNewPassword("");
+    } catch {
+      setPasswordError("Error de conexión");
+    }
+
+    setPasswordSaving(false);
   }
 
   function updateLocalCustomer(
@@ -396,18 +448,28 @@ export default function AdminClientesPage() {
                   </div>
                 </div>
 
-                {portalAccess[c.id] && c.portal_password && (
+                {portalAccess[c.id] && (
                   <div style={portalCredentialsBoxStyle}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <span style={{ color: "#355c7d", fontWeight: 700, fontSize: 13 }}>
                         Acceso portal
                       </span>
+                      <button
+                        onClick={() => {
+                          setPasswordCustomer({ ...c });
+                          setNewPassword("");
+                          setPasswordError("");
+                        }}
+                        style={changePasswordBtnStyle}
+                      >
+                        Cambiar contraseña
+                      </button>
                     </div>
                     <div style={{ color: COLORS.text, fontSize: 14, marginTop: 6 }}>
                       <b>Usuario:</b> {c.phone || c.email || "---"}
                     </div>
                     <div style={{ color: COLORS.text, fontSize: 14, marginTop: 2 }}>
-                      <b>Contraseña:</b> {c.portal_password}
+                      <b>Contraseña:</b> {c.portal_password || "(no guardada)"}
                     </div>
                   </div>
                 )}
@@ -567,6 +629,59 @@ export default function AdminClientesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {passwordCustomer && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <h2 style={{ margin: "0 0 6px 0", color: COLORS.text }}>
+                Cambiar contraseña
+              </h2>
+              <p style={{ color: COLORS.muted, margin: "0 0 16px 0", fontSize: 14 }}>
+                {passwordCustomer.name}
+              </p>
+
+              {passwordError && (
+                <div style={{ padding: 12, borderRadius: 12, background: "rgba(180,35,24,0.08)", border: "1px solid rgba(180,35,24,0.15)", color: "#b42318", fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
+                  {passwordError}
+                </div>
+              )}
+
+              <div style={{ marginBottom: 12 }}>
+                <div style={fieldLabelStyle}>Contraseña actual</div>
+                <div style={{ padding: 12, borderRadius: 14, background: COLORS.bgSoft, border: `1px solid ${COLORS.border}`, color: COLORS.text, fontSize: 15 }}>
+                  {passwordCustomer.portal_password || "(no guardada — se asignó antes de esta función)"}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <div style={fieldLabelStyle}>Nueva contraseña *</div>
+                <input
+                  type="text"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  style={textInputStyle}
+                  placeholder="Mínimo 6 caracteres"
+                />
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  onClick={changePassword}
+                  disabled={passwordSaving}
+                  style={{ ...saveEditButtonStyle, opacity: passwordSaving ? 0.65 : 1 }}
+                >
+                  {passwordSaving ? "Cambiando..." : "Cambiar contraseña"}
+                </button>
+                <button
+                  onClick={() => setPasswordCustomer(null)}
+                  style={cancelEditButtonStyle}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1227,6 +1342,17 @@ const portalInfoBoxStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   marginBottom: 16,
+};
+
+const changePasswordBtnStyle: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 10,
+  border: "none",
+  background: "rgba(53, 92, 125, 0.15)",
+  color: "#355c7d",
+  fontWeight: 700,
+  fontSize: 12,
+  cursor: "pointer",
 };
 
 const portalCredentialsBoxStyle: React.CSSProperties = {
