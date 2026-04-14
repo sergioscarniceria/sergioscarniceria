@@ -996,8 +996,13 @@ const paidTickets = useMemo(() => {
                 </div>
               </div>
 
-              <div style={ticketBottomStyle}>
+              <div style={{ ...ticketBottomStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <b>${money(getTicketTotal(ticket))}</b>
+                <button onClick={() => deliverTicket(ticket.id)} style={{
+                  padding: "6px 14px", borderRadius: 10, border: "none",
+                  background: "rgba(31,122,77,0.12)", color: COLORS.success,
+                  fontWeight: 700, cursor: "pointer", fontSize: 12,
+                }}>Entregar</button>
               </div>
             </div>
           ))}
