@@ -13,6 +13,20 @@ type Movement = {
   payment_method: string | null;
   created_at: string | null;
   reference_id?: string | null;
+  cashier_name?: string | null;
+  is_cancelled?: boolean | null;
+  cancel_reason?: string | null;
+  cancelled_by?: string | null;
+  cancelled_at?: string | null;
+};
+
+type OrderItem = {
+  id: string;
+  product: string;
+  kilos?: number | null;
+  price?: number | null;
+  quantity?: number | null;
+  sale_type?: string | null;
 };
 
 type CashClosure = {
@@ -185,6 +199,21 @@ export default function CajaPage() {
   const [expCategory, setExpCategory] = useState("varios");
   const [expNotes, setExpNotes] = useState("");
 
+  // Desglose modal
+  const [desgloseMovement, setDesgloseMovement] = useState<Movement | null>(null);
+  const [desgloseItems, setDesgloseItems] = useState<OrderItem[]>([]);
+  const [desgloseLoading, setDesgloseLoading] = useState(false);
+
+  // Cancel modal
+  const [cancelMovement, setCancelMovement] = useState<Movement | null>(null);
+  const [cancelCode, setCancelCode] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelSaving, setCancelSaving] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  // Cancelled view
+  const [showCancelled, setShowCancelled] = useState(false);
+
   // ─── Loaders ───────────────────────────────────────────────
   const loadMovements = useCallback(async () => {
     const start = new Date(`${dateFrom}T00:00:00`).toISOString();
@@ -262,6 +291,98 @@ export default function CajaPage() {
     }
   }, [dateFrom, dateTo]);
 
+  async function openDesglose(m: Movement) {
+    if (!m.reference_id) {
+      alert("Este movimiento no tiene ticket asociado");
+      return;
+    }
+    setDesgloseMovement(m);
+    setDesgloseLoading(true);
+    setDesgloseItems([]);
+
+    const { data } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", m.reference_id);
+
+    setDesgloseItems((data as OrderItem[]) || []);
+    setDesgloseLoading(false);
+  }
+
+  async function cancelMovement_fn() {
+    if (!cancelMovement) return;
+    if (!cancelCode.trim()) {
+      setCancelError("Ingresa el código de cajera");
+      return;
+    }
+    if (!cancelReason.trim()) {
+      setCancelError("Escribe el motivo de cancelación");
+      return;
+    }
+
+    setCancelSaving(true);
+    setCancelError("");
+
+    // Verify cajera code
+    const { data: emp } = await supabase
+      .from("employee_codes")
+      .select("name, code")
+      .eq("code", cancelCode.trim())
+      .eq("role", "cajera")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!emp) {
+      setCancelError("Código de cajera incorrecto");
+      setCancelSaving(false);
+      return;
+    }
+
+    // Update cash_movement as cancelled
+    const { error } = await supabase
+      .from("cash_movements")
+      .update({
+        is_cancelled: true,
+        cancel_reason: cancelReason.trim(),
+        cancelled_by: emp.name,
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq("id", cancelMovement.id);
+
+    if (error) {
+      console.error(error);
+      setCancelError("No se pudo cancelar. Verifica que las columnas existan en la base de datos.");
+      setCancelSaving(false);
+      return;
+    }
+
+    // If there's an associated order, mark it as cancelled too
+    if (cancelMovement.reference_id) {
+      await supabase
+        .from("orders")
+        .update({ status: "cancelado", payment_status: "cancelado" })
+        .eq("id", cancelMovement.reference_id);
+    }
+
+    alert(`Movimiento cancelado por ${emp.name}. Motivo: ${cancelReason.trim()}`);
+
+    // Refresh
+    setCancelMovement(null);
+    setCancelCode("");
+    setCancelReason("");
+    setCancelSaving(false);
+    await loadMovements();
+  }
+
+  // Filtered movements
+  const activeMovements = useMemo(() => {
+    return movements.filter((m) => !m.is_cancelled);
+  }, [movements]);
+
+  const cancelledMovements = useMemo(() => {
+    return movements.filter((m) => m.is_cancelled);
+  }, [movements]);
+
   const loadWeekData = useCallback(async () => {
     const endDate = new Date();
     const startDate = new Date();
@@ -287,8 +408,9 @@ export default function CajaPage() {
 
   // ─── Computed stats ────────────────────────────────────────
   const stats = useMemo(() => {
-    const ventas = movements.filter((m) => m.type === "venta");
-    const cxc = movements.filter((m) => m.type === "cxc_pago");
+    const active = movements.filter((m) => !m.is_cancelled);
+    const ventas = active.filter((m) => m.type === "venta");
+    const cxc = active.filter((m) => m.type === "cxc_pago");
 
     const sum = (arr: Movement[], method: string) =>
       arr.filter((m) => m.payment_method === method).reduce((a, m) => a + Number(m.amount || 0), 0);
@@ -321,7 +443,8 @@ export default function CajaPage() {
       totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalGeneral,
       totalGastos, fondoInicial, efectivoEsperado,
       ticketCount, ticketPromedio,
-      totalMovements: movements.length,
+      totalMovements: active.length,
+      cancelledCount: movements.filter((m) => m.is_cancelled).length,
     };
   }, [movements, expenses, todayOpening]);
 
@@ -608,25 +731,90 @@ export default function CajaPage() {
             </div>
 
             {/* Movimientos */}
-            <Panel title="Movimientos del rango" subtitle={`${movements.length} movimiento${movements.length === 1 ? "" : "s"}`}>
-              {movements.length === 0 ? (
-                <EmptyBox>No hay movimientos en este rango</EmptyBox>
-              ) : (
-                <div style={{ display: "grid", gap: 10, maxHeight: 500, overflowY: "auto" }}>
-                  {movements.map((m) => (
-                    <div key={m.id} style={movCard}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                        <div>
-                          <div style={{ fontWeight: 800, color: C.text }}>{typeName(m.type)}</div>
-                          <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>{methodName(m.payment_method)} — {fmtDateTime(m.created_at)}</div>
+            <Panel title={showCancelled ? "Tickets cancelados" : "Movimientos del rango"} subtitle={showCancelled ? `${cancelledMovements.length} cancelado${cancelledMovements.length === 1 ? "" : "s"}` : `${activeMovements.length} movimiento${activeMovements.length === 1 ? "" : "s"}`}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+                <button
+                  onClick={() => setShowCancelled(false)}
+                  style={{ ...tabBtnSt, background: !showCancelled ? C.primary : "transparent", color: !showCancelled ? "white" : C.text }}
+                >
+                  Activos ({activeMovements.length})
+                </button>
+                <button
+                  onClick={() => setShowCancelled(true)}
+                  style={{ ...tabBtnSt, background: showCancelled ? C.danger : "transparent", color: showCancelled ? "white" : C.text, borderColor: showCancelled ? C.danger : C.border }}
+                >
+                  Cancelados ({cancelledMovements.length})
+                </button>
+              </div>
+
+              {!showCancelled ? (
+                activeMovements.length === 0 ? (
+                  <EmptyBox>No hay movimientos en este rango</EmptyBox>
+                ) : (
+                  <div style={{ display: "grid", gap: 10, maxHeight: 500, overflowY: "auto" }}>
+                    {activeMovements.map((m) => (
+                      <div key={m.id} style={movCard}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: C.text }}>{typeName(m.type)}</div>
+                            <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
+                              {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
+                              {m.cashier_name && <span> — {m.cashier_name}</span>}
+                            </div>
+                          </div>
+                          <div style={{ ...amtBadge, background: m.payment_method === "efectivo" ? C.success : m.payment_method === "tarjeta" ? C.info : C.warning }}>
+                            ${money(m.amount)}
+                          </div>
                         </div>
-                        <div style={{ ...amtBadge, background: m.payment_method === "efectivo" ? C.success : m.payment_method === "tarjeta" ? C.info : C.warning }}>
-                          ${money(m.amount)}
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          {m.reference_id && (
+                            <button onClick={() => openDesglose(m)} style={desgloseBtnSt}>
+                              Ver desglose
+                            </button>
+                          )}
+                          <button onClick={() => { setCancelMovement(m); setCancelCode(""); setCancelReason(""); setCancelError(""); }} style={cancelBtnSt}>
+                            Cancelar
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )
+              ) : (
+                cancelledMovements.length === 0 ? (
+                  <EmptyBox>No hay tickets cancelados en este rango</EmptyBox>
+                ) : (
+                  <div style={{ display: "grid", gap: 10, maxHeight: 500, overflowY: "auto" }}>
+                    {cancelledMovements.map((m) => (
+                      <div key={m.id} style={{ ...movCard, borderLeft: `4px solid ${C.danger}`, opacity: 0.85 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 800, color: C.danger }}>CANCELADO — {typeName(m.type)}</div>
+                            <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
+                              {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
+                            </div>
+                            <div style={{ color: C.danger, fontSize: 13, marginTop: 4, fontWeight: 700 }}>
+                              Motivo: {m.cancel_reason || "Sin motivo"}
+                            </div>
+                            <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                              Canceló: <b>{m.cancelled_by || "—"}</b> — {fmtDateTime(m.cancelled_at)}
+                            </div>
+                          </div>
+                          <div style={{ ...amtBadge, background: C.danger, textDecoration: "line-through" }}>
+                            ${money(m.amount)}
+                          </div>
+                        </div>
+                        {m.reference_id && (
+                          <div style={{ marginTop: 8 }}>
+                            <button onClick={() => openDesglose(m)} style={desgloseBtnSt}>
+                              Ver desglose
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
               )}
             </Panel>
           </>
@@ -869,6 +1057,108 @@ export default function CajaPage() {
           </>
         )}
       </div>
+
+      {/* ═══ MODAL: DESGLOSE ═══ */}
+      {desgloseMovement && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, color: C.text, fontSize: 20 }}>Desglose del ticket</h2>
+              <button onClick={() => setDesgloseMovement(null)} style={closeBtn}>✕</button>
+            </div>
+
+            <div style={{ padding: 12, borderRadius: 14, background: C.bgSoft, border: `1px solid ${C.border}`, marginBottom: 14 }}>
+              <div style={{ color: C.muted, fontSize: 13 }}>
+                {typeName(desgloseMovement.type)} — {methodName(desgloseMovement.payment_method)} — {fmtDateTime(desgloseMovement.created_at)}
+              </div>
+              {desgloseMovement.cashier_name && (
+                <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Cajera: <b>{desgloseMovement.cashier_name}</b></div>
+              )}
+              <div style={{ color: C.text, fontWeight: 800, fontSize: 22, marginTop: 6 }}>${money(desgloseMovement.amount)}</div>
+            </div>
+
+            {desgloseLoading ? (
+              <div style={{ padding: 16, textAlign: "center", color: C.muted }}>Cargando...</div>
+            ) : desgloseItems.length === 0 ? (
+              <div style={{ padding: 16, borderRadius: 14, background: C.bgSoft, border: `1px dashed ${C.border}`, color: C.muted }}>No se encontraron artículos para este ticket</div>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {desgloseItems.map((item) => {
+                  const qty = item.sale_type === "pieza" ? Number(item.quantity || 0) : Number(item.kilos || 0);
+                  const unit = item.sale_type === "pieza" ? "pz" : "kg";
+                  const subtotal = qty * Number(item.price || 0);
+                  return (
+                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, background: "white", border: `1px solid ${C.border}` }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: C.text }}>{item.product}</div>
+                        <div style={{ color: C.muted, fontSize: 13 }}>{qty} {unit} × ${Number(item.price || 0).toFixed(2)}</div>
+                      </div>
+                      <div style={{ fontWeight: 800, color: C.text }}>${subtotal.toFixed(2)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODAL: CANCELAR ═══ */}
+      {cancelMovement && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, color: C.danger, fontSize: 20 }}>Cancelar movimiento</h2>
+              <button onClick={() => setCancelMovement(null)} style={closeBtn}>✕</button>
+            </div>
+
+            <div style={{ padding: 12, borderRadius: 14, background: "rgba(180,35,24,0.06)", border: "1px solid rgba(180,35,24,0.12)", marginBottom: 14 }}>
+              <div style={{ color: C.text, fontWeight: 700 }}>{typeName(cancelMovement.type)} — ${money(cancelMovement.amount)}</div>
+              <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>{methodName(cancelMovement.payment_method)} — {fmtDateTime(cancelMovement.created_at)}</div>
+            </div>
+
+            {cancelError && (
+              <div style={{ padding: 12, borderRadius: 12, background: "rgba(180,35,24,0.08)", border: "1px solid rgba(180,35,24,0.15)", color: C.danger, fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
+                {cancelError}
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={fieldLabel}>Código de cajera *</div>
+              <input
+                type="password"
+                value={cancelCode}
+                onChange={(e) => setCancelCode(e.target.value)}
+                placeholder="Ingresa tu código"
+                style={inputSt}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={fieldLabel}>Motivo de cancelación *</div>
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Escribe por qué se cancela este cobro..."
+                style={{ ...textareaSt, minHeight: 80 }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={cancelMovement_fn}
+                disabled={cancelSaving}
+                style={{ ...btnDanger, flex: 1, opacity: cancelSaving ? 0.65 : 1 }}
+              >
+                {cancelSaving ? "Cancelando..." : "Confirmar cancelación"}
+              </button>
+              <button onClick={() => setCancelMovement(null)} style={{ ...btnSec, flex: 1 }}>
+                Volver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1107,3 +1397,10 @@ const amtBadge: React.CSSProperties = { padding: "8px 12px", borderRadius: 14, c
 const btnSec: React.CSSProperties = { display: "inline-block", padding: "10px 16px", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.75)", color: C.text, textDecoration: "none", fontWeight: 700, cursor: "pointer", fontSize: 14 };
 const btnPri: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, color: "white", fontWeight: 700, boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)", cursor: "pointer", fontSize: 15 };
 const tdSt: React.CSSProperties = { padding: "8px", borderBottom: `1px solid ${C.border}`, color: C.text };
+const tabBtnSt: React.CSSProperties = { padding: "10px 16px", borderRadius: 14, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 14 };
+const desgloseBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: "white", color: C.info, fontWeight: 700, fontSize: 13, cursor: "pointer" };
+const cancelBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: "none", background: "rgba(180,35,24,0.10)", color: C.danger, fontWeight: 700, fontSize: 13, cursor: "pointer" };
+const btnDanger: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${C.danger} 0%, #8b1a12 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 15, boxShadow: "0 8px 18px rgba(180,35,24,0.20)" };
+const modalOverlay: React.CSSProperties = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 9999, padding: 16 };
+const modalCard: React.CSSProperties = { width: "100%", maxWidth: 520, background: "white", borderRadius: 22, padding: 24, boxShadow: C.shadow, border: `1px solid ${C.border}`, maxHeight: "90vh", overflowY: "auto" };
+const closeBtn: React.CSSProperties = { width: 40, height: 40, borderRadius: 999, border: "none", background: "#efe8df", color: C.text, fontWeight: 800, fontSize: 18, cursor: "pointer" };
