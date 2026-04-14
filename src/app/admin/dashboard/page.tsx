@@ -519,7 +519,97 @@ export default function AdminDashboardPage() {
             ))
           )}
         </div>
+        {/* Panel de salud del sistema */}
+        <SystemHealthPanel />
       </div>
+    </div>
+  );
+}
+
+function SystemHealthPanel() {
+  const [health, setHealth] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+
+  async function checkHealth() {
+    setLoading(true);
+    setShow(true);
+    try {
+      const res = await fetch("/api/health?secret=sergios2026");
+      const data = await res.json();
+      setHealth(data);
+    } catch {
+      setHealth({ status: "error", database: { usage_percent: -1 } });
+    }
+    setLoading(false);
+  }
+
+  const statusColor = health?.status === "ok" ? COLORS.success : health?.status === "warning" ? COLORS.warning : COLORS.danger;
+
+  return (
+    <div style={{ background: COLORS.cardStrong, border: `1px solid ${COLORS.border}`, borderRadius: 24, padding: 18, boxShadow: COLORS.shadow, marginTop: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <h2 style={{ margin: 0, color: COLORS.text }}>Salud del sistema</h2>
+          <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 14 }}>Base de datos, almacenamiento y backups</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={checkHealth} disabled={loading} style={{ padding: "10px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+            {loading ? "Verificando..." : "Verificar ahora"}
+          </button>
+          <a href="/api/backup?secret=sergios2026" target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+            Descargar backup
+          </a>
+        </div>
+      </div>
+
+      {show && health && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+          <div style={{ background: health.database?.can_write ? "rgba(31,122,77,0.10)" : "rgba(180,35,24,0.10)", border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>Estado</div>
+            <div style={{ color: statusColor, fontSize: 20, fontWeight: 800 }}>
+              {health.status === "ok" ? "OK" : health.status === "warning" ? "Atención" : "Problema"}
+            </div>
+            <div style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>
+              {health.database?.can_write ? "Escritura activa" : "SOLO LECTURA"}
+            </div>
+          </div>
+
+          <div style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>Registros totales</div>
+            <div style={{ color: COLORS.text, fontSize: 20, fontWeight: 800 }}>{health.database?.total_rows?.toLocaleString() || "—"}</div>
+          </div>
+
+          <div style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>Uso estimado</div>
+            <div style={{ color: (health.database?.usage_percent || 0) > 50 ? COLORS.danger : COLORS.text, fontSize: 20, fontWeight: 800 }}>
+              {health.database?.estimated_size_mb || 0} MB / 500 MB
+            </div>
+            <div style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>{health.database?.usage_percent || 0}%</div>
+          </div>
+
+          <div style={{ background: COLORS.bgSoft, border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>Tablas</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, maxHeight: 120, overflowY: "auto" }}>
+              {health.tables && Object.entries(health.tables).map(([t, c]: [string, any]) => (
+                <div key={t} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
+                  <span>{t}</span>
+                  <b style={{ color: COLORS.text }}>{c}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {health.recommendations && health.recommendations.length > 0 && (
+            <div style={{ gridColumn: "1 / -1", background: "rgba(166,106,16,0.08)", border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+              <div style={{ color: COLORS.warning, fontWeight: 800, marginBottom: 6 }}>Recomendaciones</div>
+              {health.recommendations.map((r: string, i: number) => (
+                <div key={i} style={{ color: COLORS.text, fontSize: 13, marginTop: 4 }}>• {r}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
