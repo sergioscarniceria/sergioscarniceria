@@ -17,6 +17,10 @@ export const metadata: Metadata = {
     default: "Sergio's Carnicería | Carnes de calidad en Ezequiel Montes, Qro.",
     template: "%s | Sergio's Carnicería",
   },
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
   description:
     "Cortes de carne premium, marinados y productos frescos con entrega a domicilio. Pide en línea o visita nuestra sucursal en Ezequiel Montes, Querétaro.",
   keywords: [
