@@ -276,7 +276,7 @@ export default function HomePage() {
 
             <div style={promoButtonsWrapStyle}>
               <a
-                href="https://maps.app.goo.gl/hTsYSdQNFN6sphnBA?g_st=ic"
+                href="https://maps.app.goo.gl/XeRuLcML1HRg4U8G8"
                 target="_blank"
                 rel="noreferrer"
                 style={secondarySmallButtonStyle}
@@ -454,7 +454,7 @@ export default function HomePage() {
 
             <div style={mapContainerStyle}>
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3737.5!2d-99.9871!3d20.6627!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjDCsDM5JzQ1LjciTiA5OcKwNTknMTMuOCJX!5e0!3m2!1ses!2smx!4v1700000000000"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1868.5!2d-99.98948!3d20.66336!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x85d35e21e8d2e4f7%3A0x9e4a3c08c6e3a2b1!2sCarniceria%20sergios!5e0!3m2!1ses!2smx!4v1700000000000"
                 width="100%"
                 height="100%"
                 style={{ border: 0, borderRadius: 18, minHeight: 280 }}
