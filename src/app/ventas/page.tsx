@@ -415,10 +415,12 @@ async function deliverTicket(id: string) {
 
   if (error) {
     console.log(error);
-    alert("Error al entregar");
+    alert("Error al entregar: " + error.message);
     return;
   }
 
+  // Actualizar lista local inmediatamente
+  setTickets((prev) => prev.map((t) => t.id === id ? { ...t, status: "entregado" } : t));
   await loadTickets();
 }
   async function saveTicket() {
@@ -534,11 +536,11 @@ await loadTickets();
 const paidTickets = useMemo(() => {
   return tickets.filter(
     (ticket) =>
-      ticket.payment_status === "pagado" ||
+      ticket.status !== "entregado" &&
+      (ticket.payment_status === "pagado" ||
       ticket.payment_status === "credito" ||
-      ticket.payment_status === "credito_autorizado"
+      ticket.payment_status === "credito_autorizado")
   );
-
 }, [tickets]);
 
   if (loading) {
@@ -559,14 +561,14 @@ const paidTickets = useMemo(() => {
             <h1 style={titleStyle}>Ventas Mostrador</h1>
             <p style={subtitleStyle}>{attendant ? `Atendiendo: ${attendant}` : "Selecciona quién atiende"}</p>
           </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             {heldSales.length > 0 && (
-              <button onClick={() => setShowHeld(!showHeld)} style={{ padding: "8px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "rgba(166,106,16,0.10)", color: COLORS.warning, fontWeight: 700, cursor: "pointer", fontSize: 13, position: "relative" }}>
+              <button onClick={() => setShowHeld(!showHeld)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(166,106,16,0.10)", color: COLORS.warning, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
                 En espera ({heldSales.length})
               </button>
             )}
             {items.length > 0 && (
-              <button onClick={() => setShowHoldModal(true)} style={{ padding: "8px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+              <button onClick={() => setShowHoldModal(true)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
                 Pausar venta
               </button>
             )}
@@ -574,10 +576,10 @@ const paidTickets = useMemo(() => {
         </div>
 
         {/* Selector de empleado */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", padding: "0 4px" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", padding: "0 4px" }}>
           {CARNICEROS.map((name) => (
             <button key={name} onClick={() => setAttendant(name)} style={{
-              padding: "8px 14px", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 13,
+              padding: "14px 20px", borderRadius: 14, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48,
               border: attendant === name ? "none" : `1px solid ${COLORS.border}`,
               background: attendant === name ? `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)` : "white",
               color: attendant === name ? "white" : COLORS.text,
@@ -996,12 +998,12 @@ const paidTickets = useMemo(() => {
                 </div>
               </div>
 
-              <div style={{ ...ticketBottomStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <b>${money(getTicketTotal(ticket))}</b>
+              <div style={{ ...ticketBottomStyle, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <b style={{ fontSize: 18 }}>${money(getTicketTotal(ticket))}</b>
                 <button onClick={() => deliverTicket(ticket.id)} style={{
-                  padding: "6px 14px", borderRadius: 10, border: "none",
-                  background: "rgba(31,122,77,0.12)", color: COLORS.success,
-                  fontWeight: 700, cursor: "pointer", fontSize: 12,
+                  padding: "14px 24px", borderRadius: 14, border: "none",
+                  background: "#1f7a4d", color: "white",
+                  fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48,
                 }}>Entregar</button>
               </div>
             </div>
@@ -1312,14 +1314,15 @@ const inputStyle: React.CSSProperties = {
 
 const addButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "18px 16px",
+  padding: "20px 16px",
   borderRadius: 16,
   border: "none",
   background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
   color: "white",
   cursor: "pointer",
   fontWeight: 800,
-  fontSize: 18,
+  fontSize: 20,
+  minHeight: 56,
 };
 
 const orderListStyle: React.CSSProperties = {
@@ -1361,13 +1364,15 @@ const orderItemMetaStyle: React.CSSProperties = {
 
 const removeButtonStyle: React.CSSProperties = {
   marginTop: 10,
-  padding: "10px 12px",
-  borderRadius: 12,
+  padding: "14px 16px",
+  borderRadius: 14,
   border: "none",
   background: "rgba(180,35,24,0.10)",
   color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 48,
 };
 
 const totalCardStyle: React.CSSProperties = {
@@ -1408,14 +1413,15 @@ const summaryRowStyle: React.CSSProperties = {
 
 const printButtonStyle: React.CSSProperties = {
   width: "100%",
-  padding: "16px 16px",
+  padding: "20px 16px",
   borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
   background: "white",
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 800,
-  fontSize: 16,
+  fontSize: 18,
+  minHeight: 56,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
@@ -1443,9 +1449,9 @@ const ticketsListStyle: React.CSSProperties = {
 
 const ticketCardStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
-  borderRadius: 16,
+  borderRadius: 18,
   background: COLORS.bgSoft,
-  padding: 12,
+  padding: 16,
 };
 
 const ticketTopStyle: React.CSSProperties = {
@@ -1468,9 +1474,9 @@ const ticketMetaStyle: React.CSSProperties = {
 };
 
 const ticketStatusStyle: React.CSSProperties = {
-  padding: "6px 10px",
+  padding: "8px 14px",
   borderRadius: 999,
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 800,
   textAlign: "center",
   flexShrink: 0,
@@ -1483,13 +1489,15 @@ const ticketBottomStyle: React.CSSProperties = {
 const deliverButtonStyle: React.CSSProperties = {
   marginTop: 10,
   width: "100%",
-  padding: "12px",
-  borderRadius: 12,
+  padding: "16px",
+  borderRadius: 14,
   border: "none",
   background: "#1f7a4d",
   color: "white",
   fontWeight: 800,
   cursor: "pointer",
+  fontSize: 16,
+  minHeight: 52,
 };
 
 const pendingBadgeStyle: React.CSSProperties = {
