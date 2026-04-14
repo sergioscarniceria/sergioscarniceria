@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { getSupabaseClient } from "@/lib/supabase";
 
 const COLORS = {
   bg: "#f7f1e8",
@@ -20,26 +21,12 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-const adminModules = [
+// Solo admin
+const adminOnlyModules = [
   {
     title: "Dashboard ventas",
     description: "Tu negocio en una mirada, sin tanto rodeo.",
     href: "/admin/dashboard",
-  },
-  {
-    title: "Dashboard asistencia",
-    description: "Quien llega con ganas, se nota desde la entrada.",
-    href: "/admin/dashboard/asistencia",
-  },
-  {
-    title: "Admin clientes",
-    description: "Altas, control y orden comercial.",
-    href: "/admin/clientes",
-  },
-  {
-    title: "Admin productos",
-    description: "Ordena tu catálogo, precios y categorías sin moverle al código.",
-    href: "/admin/productos",
   },
   {
     title: "Proveedores / CxP",
@@ -56,19 +43,44 @@ const adminModules = [
     description: "Tus recetas con costo exacto por kilo, sin adivinar.",
     href: "/admin/recetario",
   },
+];
+
+// Admin + cajeras
+const adminModules = [
+  {
+    title: "Dashboard asistencia",
+    description: "Quien llega con ganas, se nota desde la entrada.",
+    href: "/admin/dashboard/asistencia",
+  },
+  {
+    title: "Admin clientes",
+    description: "Altas, control y orden comercial.",
+    href: "/admin/clientes",
+  },
+  {
+    title: "Admin productos",
+    description: "Ordena tu catálogo, precios y categorías sin moverle al código.",
+    href: "/admin/productos",
+  },
   {
     title: "Inventario",
     description: "Complementos y bodega, pieza por pieza bajo control.",
     href: "/admin/inventario/complementos",
   },
-];
-
-const operationModules = [
   {
     title: "Caja",
     description: "Donde cada peso cuenta y cada cobro queda claro.",
     href: "/admin/caja",
   },
+  {
+    title: "Cobranza",
+    description: "Cobrar tickets con identificación de cajera.",
+    href: "/cobranza",
+  },
+];
+
+// Todos (carniceros, cajeras, admin)
+const operationModules = [
   {
     title: "Checador",
     description: "La puntualidad también se cocina todos los días.",
@@ -197,10 +209,81 @@ const socialLinks = [
   },
 ];
 
+function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => void }) {
+  const supabase = getSupabaseClient();
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  async function checkPin() {
+    if (!pin.trim()) return;
+    setChecking(true);
+    setError("");
+
+    // Check app_pins (admin/cajera roles)
+    const { data: appPin } = await supabase
+      .from("app_pins")
+      .select("role")
+      .eq("pin", pin.trim())
+      .eq("is_active", true)
+      .single();
+
+    if (appPin) {
+      onSuccess(appPin.role, "");
+      setChecking(false);
+      return;
+    }
+
+    // Check employee_codes
+    const { data: empCode } = await supabase
+      .from("employee_codes")
+      .select("name, role")
+      .eq("code", pin.trim())
+      .eq("is_active", true)
+      .single();
+
+    if (empCode) {
+      const role = empCode.role === "cajera" ? "cajera" : "carnicero";
+      onSuccess(role, empCode.name);
+      setChecking(false);
+      return;
+    }
+
+    setError("PIN incorrecto");
+    setChecking(false);
+  }
+
+  return (
+    <div>
+      <input
+        value={pin}
+        onChange={(e) => { setPin(e.target.value); setError(""); }}
+        onKeyDown={(e) => e.key === "Enter" && checkPin()}
+        type="password"
+        placeholder="PIN"
+        autoFocus
+        style={{ padding: "12px 16px", borderRadius: 12, border: `1px solid ${COLORS.border}`, outline: "none", fontSize: 18, textAlign: "center", letterSpacing: 6, width: "100%", maxWidth: 200, marginBottom: 8, color: COLORS.text }}
+      />
+      {error && <div style={{ color: "#b42318", fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{error}</div>}
+      <button onClick={checkPin} disabled={checking} style={{ padding: "10px 24px", borderRadius: 12, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
+        {checking ? "..." : "Entrar"}
+      </button>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);
   const [showEmployeeMenu, setShowEmployeeMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [empRole, setEmpRole] = useState<string | null>(null); // "admin" | "cajera" | "carnicero"
+  const [empName, setEmpName] = useState("");
+
+  // Check if already logged in
+  useEffect(() => {
+    const role = typeof window !== "undefined" ? sessionStorage.getItem("pin_role") : null;
+    if (role) setEmpRole(role);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 60);
@@ -488,16 +571,32 @@ export default function HomePage() {
 
           {showEmployeeMenu && (
             <div style={employeeMenuStyle}>
-              <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13 }}>
-                Módulos internos
-              </div>
-              <div style={employeeGridStyle}>
-                {[...adminModules, ...operationModules].map((m) => (
-                  <Link key={m.href} href={m.href} style={employeeLinkStyle}>
-                    {m.title}
-                  </Link>
-                ))}
-              </div>
+              {empRole ? (
+                <>
+                  <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Módulos — {empRole === "admin" ? "Administrador" : empRole === "cajera" ? `Cajera${empName ? `: ${empName}` : ""}` : `Carnicero${empName ? `: ${empName}` : ""}`}</span>
+                    <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); }} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.muted, fontWeight: 700, cursor: "pointer", fontSize: 11 }}>Salir</button>
+                  </div>
+                  <div style={employeeGridStyle}>
+                    {empRole === "admin" && adminOnlyModules.map((m) => (
+                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
+                    ))}
+                    {(empRole === "admin" || empRole === "cajera") && adminModules.map((m) => (
+                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
+                    ))}
+                    {operationModules.map((m) => (
+                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div style={{ textAlign: "center", padding: "10px 0" }}>
+                  <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13 }}>
+                    Ingresa tu PIN para acceder
+                  </div>
+                  <PinEntry onSuccess={(role, name) => { setEmpRole(role); setEmpName(name); sessionStorage.setItem("pin_role", role); }} />
+                </div>
+              )}
             </div>
           )}
         </div>

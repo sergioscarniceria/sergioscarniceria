@@ -61,6 +61,9 @@ export default function InventarioBodegaPage() {
   const [movQty, setMovQty] = useState("");
   const [movNotes, setMovNotes] = useState("");
   const [movSaving, setMovSaving] = useState(false);
+  const [movAuthName, setMovAuthName] = useState("");
+  const [movAuthCode, setMovAuthCode] = useState("");
+  const [movAuthError, setMovAuthError] = useState("");
 
   // Edit min
   const [editMinId, setEditMinId] = useState<string | null>(null);
@@ -110,6 +113,20 @@ export default function InventarioBodegaPage() {
       alert("No hay suficiente stock"); return;
     }
 
+    if (modal.type === "salida") {
+      if (!movAuthName.trim() || !movAuthCode.trim()) {
+        setMovAuthError("Nombre y código son obligatorios para salidas");
+        return;
+      }
+      const { data: authCheck } = await supabase
+        .from("employee_codes")
+        .select("name")
+        .eq("code", movAuthCode.trim())
+        .eq("is_active", true)
+        .single();
+      if (!authCheck) { setMovAuthError("Código incorrecto"); return; }
+    }
+
     setMovSaving(true);
     const prev = modal.item.stock || 0;
     const newStock = modal.type === "entrada" ? prev + qty : prev - qty;
@@ -130,10 +147,12 @@ export default function InventarioBodegaPage() {
       new_stock: newStock,
       notes: movNotes.trim() || null,
       created_by: sessionStorage.getItem("pin_role") || "admin",
+      authorized_by: modal.type === "salida" ? movAuthName.trim() : null,
+      auth_code: modal.type === "salida" ? movAuthCode.trim() : null,
     });
 
     setModal(null);
-    setMovQty(""); setMovNotes("");
+    setMovQty(""); setMovNotes(""); setMovAuthName(""); setMovAuthCode(""); setMovAuthError("");
     setMovSaving(false);
     loadItems();
   }
@@ -408,7 +427,18 @@ export default function InventarioBodegaPage() {
             <input value={movQty} onChange={(e) => setMovQty(e.target.value)} type="number" min="1" placeholder="Ej: 50" style={{ ...inputStyle, marginBottom: 12 }} autoFocus />
 
             <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Nota (opcional)</label>
-            <input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Ej: Compra semanal" style={{ ...inputStyle, marginBottom: 16 }} />
+            <input value={movNotes} onChange={(e) => setMovNotes(e.target.value)} placeholder="Ej: Compra semanal" style={{ ...inputStyle, marginBottom: 12 }} />
+
+            {modal.type === "salida" && (
+              <div style={{ background: "rgba(180,35,24,0.06)", borderRadius: 12, padding: 12, marginBottom: 12, border: `1px solid rgba(180,35,24,0.15)` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 8 }}>Autorización requerida para salidas</div>
+                <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Nombre de quien retira</label>
+                <input value={movAuthName} onChange={(e) => { setMovAuthName(e.target.value); setMovAuthError(""); }} placeholder="Ej: Jessi" style={{ ...inputStyle, marginBottom: 8 }} />
+                <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Código de autorización</label>
+                <input value={movAuthCode} onChange={(e) => { setMovAuthCode(e.target.value); setMovAuthError(""); }} type="password" placeholder="Código" style={{ ...inputStyle, letterSpacing: 4 }} />
+                {movAuthError && <p style={{ color: C.danger, fontSize: 12, margin: "6px 0 0", fontWeight: 700 }}>{movAuthError}</p>}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setModal(null)} style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${C.border}`, background: "white", color: C.text, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>

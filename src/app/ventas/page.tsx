@@ -154,14 +154,33 @@ const [printTicketData, setPrintTicketData] = useState<{
   total: number;
 } | null>(null);
 
+// Empleado atendiendo
+const CARNICEROS = ["Manuel", "Ricardo", "Juanito", "Carlos", "Don Luis", "Sergio"];
+const [attendant, setAttendant] = useState("");
+
+// Ventas en espera (hold)
+type HeldSale = {
+  id: string;
+  employee_name: string;
+  items: Item[];
+  notes: string;
+  created_at: string;
+};
+const [heldSales, setHeldSales] = useState<HeldSale[]>([]);
+const [showHeld, setShowHeld] = useState(false);
+const [holdNote, setHoldNote] = useState("");
+const [showHoldModal, setShowHoldModal] = useState(false);
+
   useEffect(() => {
   loadProducts();
   loadCustomers();
   loadTickets();
+  loadHeldSales();
 
   const interval = setInterval(() => {
     loadTickets();
-  }, 3000);
+    loadHeldSales();
+  }, 5000);
 
   return () => clearInterval(interval);
 }, []);
@@ -230,6 +249,55 @@ async function loadCustomers() {
   }
 
   setCustomers((data as Customer[]) || []);
+}
+
+async function loadHeldSales() {
+  const { data } = await supabase
+    .from("held_sales")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(10);
+  setHeldSales((data as HeldSale[]) || []);
+}
+
+async function holdCurrentSale() {
+  if (items.length === 0) { alert("No hay productos para poner en espera"); return; }
+  if (!attendant) { alert("Selecciona quién está atendiendo"); return; }
+
+  const { error } = await supabase.from("held_sales").insert({
+    employee_name: attendant,
+    items: JSON.stringify(items),
+    notes: holdNote.trim() || null,
+  });
+
+  if (error) { alert("Error: " + error.message); return; }
+
+  setItems([]);
+  setHoldNote("");
+  setShowHoldModal(false);
+  loadHeldSales();
+}
+
+async function resumeHeldSale(sale: HeldSale) {
+  // If current cart has items, ask
+  if (items.length > 0) {
+    if (!confirm("Ya tienes productos en el carrito. ¿Quieres reemplazarlos con la venta en espera?")) return;
+  }
+
+  const parsedItems = typeof sale.items === "string" ? JSON.parse(sale.items) : sale.items;
+  setItems(parsedItems as Item[]);
+  setAttendant(sale.employee_name);
+
+  // Delete held sale
+  await supabase.from("held_sales").delete().eq("id", sale.id);
+  loadHeldSales();
+  setShowHeld(false);
+}
+
+async function deleteHeldSale(id: string) {
+  if (!confirm("¿Eliminar esta venta en espera?")) return;
+  await supabase.from("held_sales").delete().eq("id", id);
+  loadHeldSales();
 }
 
   const groupedCategories = useMemo(() => {
@@ -383,6 +451,7 @@ const { data: orderData, error: orderError } = await supabase
       source: "mostrador",
       payment_status: "pendiente",
       notes: null,
+      attendant_name: attendant || null,
     },
   ])
       .select()
@@ -488,9 +557,65 @@ const paidTickets = useMemo(() => {
         <div style={headerStyle}>
           <div>
             <h1 style={titleStyle}>Ventas Mostrador</h1>
-            <p style={subtitleStyle}>Agrega, pesa y cobra 🔥</p>
+            <p style={subtitleStyle}>{attendant ? `Atendiendo: ${attendant}` : "Selecciona quién atiende"}</p>
+          </div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+            {heldSales.length > 0 && (
+              <button onClick={() => setShowHeld(!showHeld)} style={{ padding: "8px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "rgba(166,106,16,0.10)", color: COLORS.warning, fontWeight: 700, cursor: "pointer", fontSize: 13, position: "relative" }}>
+                En espera ({heldSales.length})
+              </button>
+            )}
+            {items.length > 0 && (
+              <button onClick={() => setShowHoldModal(true)} style={{ padding: "8px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                Pausar venta
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Selector de empleado */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap", padding: "0 4px" }}>
+          {CARNICEROS.map((name) => (
+            <button key={name} onClick={() => setAttendant(name)} style={{
+              padding: "8px 14px", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 13,
+              border: attendant === name ? "none" : `1px solid ${COLORS.border}`,
+              background: attendant === name ? `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)` : "white",
+              color: attendant === name ? "white" : COLORS.text,
+            }}>
+              {name}
+            </button>
+          ))}
+        </div>
+
+        {/* Held sales panel */}
+        {showHeld && heldSales.length > 0 && (
+          <div style={{ background: "rgba(255,255,255,0.92)", borderRadius: 18, padding: 16, marginBottom: 14, border: `1px solid ${COLORS.border}`, boxShadow: COLORS.shadow }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <h3 style={{ margin: 0, color: COLORS.text, fontSize: 16 }}>Ventas en espera</h3>
+              <button onClick={() => setShowHeld(false)} style={{ border: "none", background: "transparent", color: COLORS.muted, fontWeight: 700, cursor: "pointer" }}>X</button>
+            </div>
+            {heldSales.map((sale) => {
+              const saleItems = typeof sale.items === "string" ? JSON.parse(sale.items) : sale.items;
+              const saleTotal = (saleItems as Item[]).reduce((acc: number, it: Item) => {
+                if (it.sale_type === "pieza" && it.is_fixed_price_piece) return acc + Number(it.quantity || 0) * Number(it.price || 0);
+                return acc + Number(it.kilos || 0) * Number(it.price || 0);
+              }, 0);
+              return (
+                <div key={sale.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                  <div>
+                    <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>{sale.employee_name} — {(saleItems as Item[]).length} productos</div>
+                    <div style={{ color: COLORS.muted, fontSize: 12 }}>${money(saleTotal)} {sale.notes ? `— ${sale.notes}` : ""}</div>
+                    <div style={{ color: COLORS.muted, fontSize: 11 }}>{new Date(sale.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => resumeHeldSale(sale)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "rgba(31,122,77,0.12)", color: COLORS.success, fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Continuar</button>
+                    <button onClick={() => deleteHeldSale(sale.id)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "rgba(180,35,24,0.10)", color: COLORS.danger, fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Eliminar</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div style={mainGridStyle}>
           <div style={productsPanelStyle}>
@@ -964,6 +1089,37 @@ const paidTickets = useMemo(() => {
               >
                 Cerrar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hold sale modal */}
+      {showHoldModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setShowHoldModal(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "rgba(255,255,255,0.95)", borderRadius: 22, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ margin: "0 0 12px", color: COLORS.text, fontSize: 18 }}>Poner venta en espera</h3>
+            <p style={{ margin: "0 0 12px", color: COLORS.muted, fontSize: 14 }}>{items.length} productos — {attendant || "Sin empleado"}</p>
+            {!attendant && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>¿Quién atiende?</label>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {CARNICEROS.map((n) => (
+                    <button key={n} onClick={() => setAttendant(n)} style={{
+                      padding: "6px 10px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer",
+                      border: attendant === n ? "none" : `1px solid ${COLORS.border}`,
+                      background: attendant === n ? COLORS.primary : "white",
+                      color: attendant === n ? "white" : COLORS.text,
+                    }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <label style={{ color: COLORS.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Nota (opcional)</label>
+            <input value={holdNote} onChange={(e) => setHoldNote(e.target.value)} placeholder="Ej: Cliente fue por más cosas" style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, outline: "none", fontSize: 15, color: COLORS.text, marginBottom: 16 }} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setShowHoldModal(false)} style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={holdCurrentSale} style={{ flex: 1, padding: "12px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.warning} 0%, #8a5500 100%)`, color: "white", fontWeight: 800, cursor: "pointer" }}>Poner en espera</button>
             </div>
           </div>
         </div>

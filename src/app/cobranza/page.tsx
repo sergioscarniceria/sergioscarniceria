@@ -157,6 +157,27 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [discountValue, setDiscountValue] = useState("");
   const [showPrintTicket, setShowPrintTicket] = useState(false);
 
+  // Identificación cajera
+  const [cashierName, setCashierName] = useState("");
+  const [cashierCode, setCashierCode] = useState("");
+  const [cashierVerified, setCashierVerified] = useState(false);
+  const [cashierError, setCashierError] = useState("");
+
+  async function verifyCashier() {
+    if (!cashierCode.trim()) { setCashierError("Ingresa tu código"); return; }
+    const { data } = await supabase
+      .from("employee_codes")
+      .select("name, code")
+      .eq("code", cashierCode.trim())
+      .eq("role", "cajera")
+      .eq("is_active", true)
+      .single();
+    if (!data) { setCashierError("Código incorrecto"); return; }
+    setCashierName(data.name);
+    setCashierVerified(true);
+    setCashierError("");
+  }
+
   // Scanner detection: el escáner USB escribe muy rápido (< 50ms entre chars)
   const scanBufferRef = useRef("");
   const scanTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -397,6 +418,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
           amount: Number(finalTotal.toFixed(2)),
           payment_method: method,
           reference_id: selectedTicket.id,
+          cashier_name: cashierName || null,
         },
       ]);
 
@@ -405,6 +427,41 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
       alert("Se marcó como pagado, pero falló el movimiento de caja");
       setSaving(false);
       return;
+    }
+
+    // Descontar inventario de complementos (productos por pieza)
+    if (selectedTicket.order_items) {
+      for (const item of selectedTicket.order_items) {
+        if (item.sale_type === "pieza" && (item as any).quantity) {
+          // Buscar producto
+          const { data: prod } = await supabase
+            .from("products")
+            .select("id, stock, category, fixed_piece_price")
+            .eq("name", item.product)
+            .single();
+          if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
+            const prevStock = prod.stock || 0;
+            const qty = Number((item as any).quantity || 0);
+            const newStock = Math.max(0, prevStock - qty);
+            await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
+            await supabase.from("inventory_movements").insert({
+              item_type: "complemento",
+              item_id: prod.id,
+              movement_type: "salida",
+              quantity: qty,
+              previous_stock: prevStock,
+              new_stock: newStock,
+              notes: `Venta ticket ${selectedTicket.id.slice(0, 6)}`,
+              created_by: cashierName || "cajera",
+            });
+          }
+        }
+      }
+    }
+
+    // Guardar nombre de cajera en la orden
+    if (cashierName) {
+      await supabase.from("orders").update({ cashier_name: cashierName }).eq("id", selectedTicket.id);
     }
 
     // Mostrar ticket imprimible
@@ -869,6 +926,33 @@ if (cashError) {
     );
   }
 
+  // Pantalla de verificación de cajera
+  if (!cashierVerified) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(180deg, #fbf8f3 0%, #f7f1e8 100%)`, fontFamily: "Arial, sans-serif" }}>
+        <div style={{ background: "rgba(255,255,255,0.92)", borderRadius: 22, padding: 32, maxWidth: 380, width: "90%", boxShadow: "0 10px 30px rgba(91,25,15,0.08)", border: `1px solid rgba(92,27,17,0.10)`, textAlign: "center" }}>
+          <img src="/logo.png" alt="Sergios" style={{ width: 80, marginBottom: 16 }} />
+          <h2 style={{ margin: "0 0 6px", color: COLORS.text }}>Identificación de cajera</h2>
+          <p style={{ margin: "0 0 20px", color: COLORS.muted, fontSize: 14 }}>Ingresa tu código para acceder a cobranza</p>
+          <input
+            value={cashierCode}
+            onChange={(e) => { setCashierCode(e.target.value); setCashierError(""); }}
+            onKeyDown={(e) => e.key === "Enter" && verifyCashier()}
+            type="password"
+            placeholder="Tu código"
+            autoFocus
+            style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `1px solid rgba(92,27,17,0.10)`, outline: "none", fontSize: 18, textAlign: "center", letterSpacing: 8, marginBottom: 12, background: "rgba(255,255,255,0.85)", color: COLORS.text }}
+          />
+          {cashierError && <p style={{ color: COLORS.danger, fontSize: 13, margin: "0 0 10px", fontWeight: 700 }}>{cashierError}</p>}
+          <button onClick={verifyCashier} style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+            Entrar
+          </button>
+          <Link href="/" style={{ display: "block", marginTop: 16, color: COLORS.muted, fontSize: 13, textDecoration: "none" }}>Volver al inicio</Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={pageStyle}>
       <div style={glowTopLeft} />
@@ -879,7 +963,7 @@ if (cashError) {
           <div>
             <h1 style={{ margin: 0, color: COLORS.text }}>Cobranza</h1>
             <p style={{ margin: "6px 0 0 0", color: COLORS.muted }}>
-              Tickets reales conectados a Supabase
+              Cajera: <strong>{cashierName}</strong>
             </p>
           </div>
 
