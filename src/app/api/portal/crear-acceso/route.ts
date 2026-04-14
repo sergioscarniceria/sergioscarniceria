@@ -30,53 +30,29 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Determine the email to use for auth
-    // If customer has email, use it. Otherwise generate from phone
-    const authEmail = email && email.trim()
-      ? email.trim().toLowerCase()
-      : phone && phone.trim()
-        ? `${phone.trim().replace(/\D/g, "")}@clientes.sergios.mx`
-        : null;
+    // Check if this customer already has portal access
+    const { data: existingProfile } = await supabase
+      .from("customer_profiles")
+      .select("id")
+      .eq("customer_id", customer_id)
+      .maybeSingle();
 
-    if (!authEmail) {
+    if (existingProfile) {
       return NextResponse.json(
-        { error: "El cliente necesita al menos un teléfono o correo" },
+        { error: "Este cliente ya tiene acceso al portal" },
         { status: 400 }
       );
     }
 
-    // Check if auth user already exists with this email
-    const { data: existingUsers } = await supabase.auth.admin.listUsers();
-    const existing = existingUsers?.users?.find(
-      (u: any) => u.email?.toLowerCase() === authEmail
-    );
-
-    if (existing) {
-      // Check if already linked to this customer
-      const { data: existingProfile } = await supabase
-        .from("customer_profiles")
-        .select("*")
-        .eq("id", existing.id)
-        .maybeSingle();
-
-      if (existingProfile?.customer_id === customer_id) {
-        return NextResponse.json(
-          { error: "Este cliente ya tiene acceso al portal" },
-          { status: 400 }
-        );
-      }
-
-      return NextResponse.json(
-        { error: `Ya existe una cuenta con el correo ${authEmail}` },
-        { status: 400 }
-      );
-    }
+    // Always use customer_id as auth email to guarantee uniqueness
+    // This allows multiple customers to share the same real email/phone
+    const authEmail = `${customer_id}@clientes.sergios.mx`;
 
     // Create auth user using admin API (doesn't affect current session)
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: authEmail,
       password,
-      email_confirm: true, // Auto-confirm so they can login immediately
+      email_confirm: true,
     });
 
     if (createError || !newUser?.user) {
@@ -87,14 +63,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create customer_profiles entry linking auth user to customer
+    // Store the real email and phone in customer_profiles for login lookup
+    const displayEmail = email && email.trim() ? email.trim().toLowerCase() : null;
+    const displayPhone = phone && phone.trim() ? phone.trim() : null;
+
     const { error: profileError } = await supabase.from("customer_profiles").upsert([
       {
         id: newUser.user.id,
         customer_id,
         full_name: customer_name,
-        phone: phone || null,
-        email: authEmail,
+        phone: displayPhone,
+        email: displayEmail,
         customer_type: "menudeo",
         role: "customer",
       },
@@ -102,7 +81,6 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error("Error creating profile:", profileError);
-      // Try to clean up the auth user
       await supabase.auth.admin.deleteUser(newUser.user.id);
       return NextResponse.json(
         { error: "Se creó el usuario pero falló el perfil. Intenta de nuevo." },
@@ -113,21 +91,31 @@ export async function POST(request: Request) {
     // Create loyalty account
     await supabase.from("loyalty_accounts").upsert([{ customer_id }]);
 
-    // Update customer email if they didn't have one
-    if (email && email.trim()) {
-      await supabase
-        .from("customers")
-        .update({ email: email.trim() })
-        .eq("id", customer_id);
+    // Save password and email in customers table for admin reference
+    const updateData: any = { portal_password: password };
+    if (displayEmail) {
+      updateData.email = displayEmail;
+    }
+    await supabase
+      .from("customers")
+      .update(updateData)
+      .eq("id", customer_id);
+
+    // Build login instructions
+    let loginInfo = "";
+    if (displayPhone) {
+      loginInfo = `El cliente entra con su teléfono (${displayPhone}) y contraseña: ${password}`;
+    } else if (displayEmail) {
+      loginInfo = `El cliente entra con su correo (${displayEmail}) y contraseña: ${password}`;
+    } else {
+      loginInfo = `Cuenta creada con contraseña: ${password}`;
     }
 
     return NextResponse.json({
       success: true,
       auth_email: authEmail,
       user_id: newUser.user.id,
-      message: authEmail.includes("@clientes.sergios.mx")
-        ? `Cuenta creada. El cliente inicia sesión con su teléfono (${phone}) y la contraseña que pusiste.`
-        : `Cuenta creada. El cliente inicia sesión con ${authEmail} y la contraseña que pusiste.`,
+      message: `Cuenta creada. ${loginInfo}`,
     });
   } catch (err: any) {
     console.error("Portal access error:", err);

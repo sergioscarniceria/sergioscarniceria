@@ -430,13 +430,34 @@ export default function ClientePage() {
 
       setSaving(true);
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      // Lookup auth email from real email via API
+      try {
+        const res = await fetch("/api/portal/buscar-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        });
 
-      if (error) {
-        setLoginError("Correo o contraseña incorrectos");
+        const result = await res.json();
+
+        if (!res.ok || !result.email) {
+          setLoginError("No encontramos una cuenta con ese correo. Verifica o usa teléfono.");
+          setSaving(false);
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({
+          email: result.email,
+          password,
+        });
+
+        if (error) {
+          setLoginError("Contraseña incorrecta");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setLoginError("Error de conexión");
         setSaving(false);
         return;
       }

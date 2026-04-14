@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Lookup the auth email for a customer by phone number
+// Lookup the auth email for a customer by phone or email
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { phone } = body;
+    const { phone, email } = body;
 
-    if (!phone || !phone.trim()) {
-      return NextResponse.json({ error: "Teléfono requerido" }, { status: 400 });
+    if ((!phone || !phone.trim()) && (!email || !email.trim())) {
+      return NextResponse.json({ error: "Teléfono o correo requerido" }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -17,34 +17,43 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Look up customer_profiles by phone
-    const { data: profile } = await supabase
-      .from("customer_profiles")
-      .select("email")
-      .eq("phone", phone.trim())
-      .maybeSingle();
+    let profile: any = null;
 
-    if (profile?.email) {
-      return NextResponse.json({ email: profile.email });
+    // Search by phone first
+    if (phone && phone.trim()) {
+      const { data } = await supabase
+        .from("customer_profiles")
+        .select("customer_id")
+        .eq("phone", phone.trim())
+        .maybeSingle();
+
+      profile = data;
     }
 
-    // Try generated email pattern
-    const cleanPhone = phone.trim().replace(/\D/g, "");
-    const generatedEmail = `${cleanPhone}@clientes.sergios.mx`;
+    // If not found by phone, try by email
+    if (!profile && email && email.trim()) {
+      const { data } = await supabase
+        .from("customer_profiles")
+        .select("customer_id")
+        .eq("email", email.trim().toLowerCase())
+        .maybeSingle();
 
-    // Check if this generated email exists in auth
-    const { data: users } = await supabase.auth.admin.listUsers();
-    const found = users?.users?.find(
-      (u: any) => u.email?.toLowerCase() === generatedEmail
-    );
-
-    if (found) {
-      return NextResponse.json({ email: generatedEmail });
+      profile = data;
     }
 
-    return NextResponse.json({ error: "No encontramos una cuenta con ese teléfono" }, { status: 404 });
+    if (!profile?.customer_id) {
+      return NextResponse.json(
+        { error: "No encontramos una cuenta con esos datos" },
+        { status: 404 }
+      );
+    }
+
+    // Auth email is always {customer_id}@clientes.sergios.mx
+    const authEmail = `${profile.customer_id}@clientes.sergios.mx`;
+
+    return NextResponse.json({ email: authEmail });
   } catch (err: any) {
-    console.error("Phone lookup error:", err);
+    console.error("Phone/email lookup error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }

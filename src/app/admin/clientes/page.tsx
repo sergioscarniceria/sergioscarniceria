@@ -16,6 +16,7 @@ type Customer = {
   credit_enabled?: boolean | null;
   credit_limit?: number | null;
   credit_days?: number | null;
+  portal_password?: string | null;
 };
 
 const COLORS = {
@@ -394,6 +395,22 @@ export default function AdminClientesPage() {
                     <span style={valueStyle}>{c.address || "Sin dirección"}</span>
                   </div>
                 </div>
+
+                {portalAccess[c.id] && c.portal_password && (
+                  <div style={portalCredentialsBoxStyle}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ color: "#355c7d", fontWeight: 700, fontSize: 13 }}>
+                        Acceso portal
+                      </span>
+                    </div>
+                    <div style={{ color: COLORS.text, fontSize: 14, marginTop: 6 }}>
+                      <b>Usuario:</b> {c.phone || c.email || "---"}
+                    </div>
+                    <div style={{ color: COLORS.text, fontSize: 14, marginTop: 2 }}>
+                      <b>Contraseña:</b> {c.portal_password}
+                    </div>
+                  </div>
+                )}
 
                 <div style={quickLinksWrapStyle}>
                   <button
@@ -1210,6 +1227,14 @@ const portalInfoBoxStyle: React.CSSProperties = {
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   marginBottom: 16,
+};
+
+const portalCredentialsBoxStyle: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(53, 92, 125, 0.06)",
+  border: "1px solid rgba(53, 92, 125, 0.12)",
+  marginTop: 12,
 };
 
 const portalPreviewBoxStyle: React.CSSProperties = {
