@@ -146,11 +146,14 @@ export default function ClientePage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [loginMethod, setLoginMethod] = useState<"phone" | "email">("phone");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [loginError, setLoginError] = useState("");
 
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -378,23 +381,65 @@ export default function ClientePage() {
   }
 
   async function login() {
-    if (!email || !password) {
-      alert("Escribe correo y contraseña");
-      return;
-    }
+    setLoginError("");
 
-    setSaving(true);
+    if (loginMethod === "phone") {
+      if (!loginPhone.trim() || !password) {
+        setLoginError("Escribe tu teléfono y contraseña");
+        return;
+      }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+      setSaving(true);
 
-    if (error) {
-      console.log(error);
-      alert("Error al iniciar sesión");
-      setSaving(false);
-      return;
+      // Lookup email from phone
+      try {
+        const res = await fetch("/api/portal/buscar-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: loginPhone.trim() }),
+        });
+
+        const result = await res.json();
+
+        if (!res.ok || !result.email) {
+          setLoginError("No encontramos una cuenta con ese teléfono. Verifica o usa correo.");
+          setSaving(false);
+          return;
+        }
+
+        const { error } = await supabase.auth.signInWithPassword({
+          email: result.email,
+          password,
+        });
+
+        if (error) {
+          setLoginError("Contraseña incorrecta");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setLoginError("Error de conexión");
+        setSaving(false);
+        return;
+      }
+    } else {
+      if (!email || !password) {
+        setLoginError("Escribe correo y contraseña");
+        return;
+      }
+
+      setSaving(true);
+
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setLoginError("Correo o contraseña incorrectos");
+        setSaving(false);
+        return;
+      }
     }
 
     await checkUser();
@@ -678,25 +723,27 @@ export default function ClientePage() {
                   margin: "0 auto 14px auto",
                 }}
               />
-              <h1 style={{ margin: 0, color: COLORS.text }}>Portal cliente</h1>
-              <p style={{ color: COLORS.muted, marginTop: 8 }}>
-                Haz tus pedidos de forma rápida y clara
+              <h1 style={{ margin: 0, color: COLORS.text, fontSize: 28 }}>
+                Bienvenido a Sergio{"'"}s
+              </h1>
+              <p style={{ color: COLORS.muted, marginTop: 8, fontSize: 15 }}>
+                Haz tus pedidos de carne fresca desde tu celular
               </p>
             </div>
 
             <div style={{ marginBottom: 18, display: "flex", gap: 10 }}>
               <button
-                onClick={() => setMode("login")}
+                onClick={() => { setMode("login"); setLoginError(""); }}
                 style={{
                   ...switchButtonStyle,
                   background: mode === "login" ? COLORS.primary : "#efe8df",
                   color: mode === "login" ? "white" : COLORS.text,
                 }}
               >
-                Login
+                Entrar
               </button>
               <button
-                onClick={() => setMode("register")}
+                onClick={() => { setMode("register"); setLoginError(""); }}
                 style={{
                   ...switchButtonStyle,
                   background: mode === "register" ? COLORS.primary : "#efe8df",
@@ -707,14 +754,55 @@ export default function ClientePage() {
               </button>
             </div>
 
+            {loginError && (
+              <div style={loginErrorStyle}>{loginError}</div>
+            )}
+
             {mode === "login" ? (
               <>
-                <input
-                  placeholder="Correo"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                  <button
+                    onClick={() => { setLoginMethod("phone"); setLoginError(""); }}
+                    style={{
+                      ...loginMethodButtonStyle,
+                      background: loginMethod === "phone" ? "rgba(123,34,24,0.08)" : "transparent",
+                      color: loginMethod === "phone" ? COLORS.primary : COLORS.muted,
+                      borderColor: loginMethod === "phone" ? COLORS.primary : COLORS.border,
+                    }}
+                  >
+                    Con teléfono
+                  </button>
+                  <button
+                    onClick={() => { setLoginMethod("email"); setLoginError(""); }}
+                    style={{
+                      ...loginMethodButtonStyle,
+                      background: loginMethod === "email" ? "rgba(123,34,24,0.08)" : "transparent",
+                      color: loginMethod === "email" ? COLORS.primary : COLORS.muted,
+                      borderColor: loginMethod === "email" ? COLORS.primary : COLORS.border,
+                    }}
+                  >
+                    Con correo
+                  </button>
+                </div>
+
+                {loginMethod === "phone" ? (
+                  <input
+                    placeholder="Tu número de teléfono"
+                    value={loginPhone}
+                    onChange={(e) => setLoginPhone(e.target.value)}
+                    style={inputStyle}
+                    type="tel"
+                  />
+                ) : (
+                  <input
+                    placeholder="Tu correo electrónico"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    style={inputStyle}
+                    type="email"
+                  />
+                )}
+
                 <input
                   placeholder="Contraseña"
                   type="password"
@@ -722,42 +810,61 @@ export default function ClientePage() {
                   onChange={(e) => setPassword(e.target.value)}
                   style={inputStyle}
                 />
-                <button onClick={login} style={{ ...primaryButtonStyle, width: "100%" }}>
+                <button
+                  onClick={login}
+                  disabled={saving}
+                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
+                >
                   {saving ? "Entrando..." : "Entrar"}
                 </button>
               </>
             ) : (
               <>
                 <input
-                  placeholder="Nombre"
+                  placeholder="Tu nombre"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   style={inputStyle}
                 />
                 <input
-                  placeholder="Teléfono"
+                  placeholder="Tu teléfono"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   style={inputStyle}
+                  type="tel"
                 />
                 <input
-                  placeholder="Correo"
+                  placeholder="Tu correo electrónico"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}
+                  type="email"
                 />
                 <input
-                  placeholder="Contraseña"
+                  placeholder="Crea una contraseña"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   style={inputStyle}
                 />
-                <button onClick={register} style={{ ...primaryButtonStyle, width: "100%" }}>
-                  {saving ? "Creando..." : "Crear cuenta"}
+                <button
+                  onClick={register}
+                  disabled={saving}
+                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
+                >
+                  {saving ? "Creando cuenta..." : "Crear mi cuenta"}
                 </button>
               </>
             )}
+
+            <div style={authPromoStyle}>
+              <div style={{ fontWeight: 700, color: COLORS.primary, marginBottom: 6 }}>
+                Pide desde tu celular
+              </div>
+              <div style={{ color: COLORS.muted, fontSize: 13, lineHeight: 1.5 }}>
+                Carne fresca, cortes especiales y complementos. Hacemos tu pedido y te avisamos cuando esté listo.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -783,11 +890,11 @@ export default function ClientePage() {
             />
 
             <div>
-              <h1 style={{ margin: 0, color: COLORS.text, fontSize: isMobile ? 28 : 34 }}>
-                Portal cliente
+              <h1 style={{ margin: 0, color: COLORS.text, fontSize: isMobile ? 26 : 32 }}>
+                Hola, bienvenido
               </h1>
-              <p style={{ color: COLORS.muted, margin: "6px 0 0 0" }}>
-                Pedido rápido y claro
+              <p style={{ color: COLORS.muted, margin: "4px 0 0 0", fontSize: 14 }}>
+                Pide tu carne fresca y te la preparamos
               </p>
             </div>
           </div>
@@ -796,9 +903,19 @@ export default function ClientePage() {
             <Link href="/" style={secondaryButtonStyle}>
               Inicio
             </Link>
-            <button onClick={logout} style={primaryButtonStyle}>
+            <button onClick={logout} style={secondaryButtonStyle as any}>
               Cerrar sesión
             </button>
+          </div>
+        </div>
+
+        {/* Promotional banner */}
+        <div style={promoBannerStyle}>
+          <div style={{ fontSize: isMobile ? 16 : 18, fontWeight: 800, color: COLORS.primary }}>
+            Carne fresca todos los días
+          </div>
+          <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+            Haz tu pedido ahora y lo tenemos listo para cuando lo necesites. Cortes al gusto, marinados y complementos.
           </div>
         </div>
 
@@ -1189,8 +1306,19 @@ export default function ClientePage() {
             ) : null}
 
             {!search.trim() && !showCatalog ? (
-              <div style={{ ...emptyBoxStyle, marginTop: 16 }}>
-                Escribe en buscar producto o presiona <b>Ver catálogo</b>.
+              <div style={catalogPromptStyle}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>
+                  Busca lo que necesitas
+                </div>
+                <div style={{ color: COLORS.muted, fontSize: 14, marginBottom: 14 }}>
+                  Escribe el nombre del corte o abre el catálogo completo para ver todos nuestros productos
+                </div>
+                <button
+                  onClick={() => setShowCatalog(true)}
+                  style={{ ...primaryButtonStyle, width: "100%" }}
+                >
+                  Ver todo el catálogo
+                </button>
               </div>
             ) : null}
           </div>
@@ -2032,4 +2160,52 @@ const metaPillStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
   fontSize: 13,
+};
+
+const loginErrorStyle: React.CSSProperties = {
+  padding: "12px 14px",
+  borderRadius: 14,
+  background: "rgba(180,35,24,0.08)",
+  border: "1px solid rgba(180,35,24,0.15)",
+  color: "#b42318",
+  fontSize: 14,
+  fontWeight: 600,
+  marginBottom: 14,
+};
+
+const loginMethodButtonStyle: React.CSSProperties = {
+  flex: 1,
+  padding: "10px 12px",
+  borderRadius: 12,
+  border: "1px solid",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 14,
+};
+
+const authPromoStyle: React.CSSProperties = {
+  marginTop: 20,
+  padding: 16,
+  borderRadius: 16,
+  background: "rgba(123, 34, 24, 0.04)",
+  border: "1px solid rgba(123, 34, 24, 0.08)",
+  textAlign: "center",
+};
+
+const promoBannerStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, rgba(123,34,24,0.06) 0%, rgba(217,201,163,0.18) 100%)",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 20,
+  padding: "18px 22px",
+  marginBottom: 20,
+  textAlign: "center",
+};
+
+const catalogPromptStyle: React.CSSProperties = {
+  marginTop: 16,
+  padding: 24,
+  borderRadius: 20,
+  background: "linear-gradient(135deg, rgba(123,34,24,0.04) 0%, rgba(217,201,163,0.12) 100%)",
+  border: `1px dashed ${COLORS.border}`,
+  textAlign: "center",
 };

@@ -49,6 +49,13 @@ export default function AdminClientesPage() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Portal access
+  const [portalCustomer, setPortalCustomer] = useState<Customer | null>(null);
+  const [portalPassword, setPortalPassword] = useState("");
+  const [portalEmail, setPortalEmail] = useState("");
+  const [portalSaving, setPortalSaving] = useState(false);
+  const [portalAccess, setPortalAccess] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     loadCustomers();
   }, []);
@@ -69,7 +76,69 @@ export default function AdminClientesPage() {
     }
 
     setCustomers((data as Customer[]) || []);
+
+    // Check which customers have portal access
+    const { data: profiles } = await supabase
+      .from("customer_profiles")
+      .select("customer_id");
+
+    if (profiles) {
+      const accessMap: Record<string, boolean> = {};
+      for (const p of profiles) {
+        if (p.customer_id) accessMap[p.customer_id] = true;
+      }
+      setPortalAccess(accessMap);
+    }
+
     setLoading(false);
+  }
+
+  async function createPortalAccess() {
+    if (!portalCustomer) return;
+    if (!portalPassword || portalPassword.length < 6) {
+      alert("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+    if (!portalCustomer.phone && !portalEmail.trim()) {
+      alert("El cliente necesita al menos un teléfono o correo para crear la cuenta");
+      return;
+    }
+
+    setPortalSaving(true);
+
+    try {
+      const res = await fetch("/api/portal/crear-acceso", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customer_id: portalCustomer.id,
+          customer_name: portalCustomer.name,
+          phone: portalCustomer.phone || "",
+          email: portalEmail.trim() || portalCustomer.email || "",
+          password: portalPassword,
+          secret: "sergios2026",
+        }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        alert(result.error || "Error al crear acceso");
+        setPortalSaving(false);
+        return;
+      }
+
+      alert(result.message);
+      setPortalAccess((prev) => ({ ...prev, [portalCustomer.id]: true }));
+      setPortalCustomer(null);
+      setPortalPassword("");
+      setPortalEmail("");
+    } catch (err) {
+      console.error(err);
+      alert("Error de conexión");
+    }
+
+    setPortalSaving(false);
   }
 
   function updateLocalCustomer(
@@ -299,6 +368,12 @@ export default function AdminClientesPage() {
                       ) : (
                         <div style={creditDisabledBadgeStyle}>Sin crédito</div>
                       )}
+
+                      {portalAccess[c.id] ? (
+                        <div style={portalActiveBadgeStyle}>Portal activo</div>
+                      ) : (
+                        <div style={portalInactiveBadgeStyle}>Sin portal</div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -327,6 +402,19 @@ export default function AdminClientesPage() {
                   >
                     Editar datos
                   </button>
+
+                  {!portalAccess[c.id] && (
+                    <button
+                      onClick={() => {
+                        setPortalCustomer({ ...c });
+                        setPortalEmail(c.email || "");
+                        setPortalPassword("");
+                      }}
+                      style={portalButtonStyle}
+                    >
+                      Crear acceso portal
+                    </button>
+                  )}
 
                   <Link
                     href={`/admin/cxc/nueva-nota?customer_id=${c.id}`}
@@ -462,6 +550,98 @@ export default function AdminClientesPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {portalCustomer && (
+          <div style={modalOverlayStyle}>
+            <div style={modalCardStyle}>
+              <h2 style={{ margin: "0 0 6px 0", color: COLORS.text }}>
+                Crear acceso al portal
+              </h2>
+              <p style={{ color: COLORS.muted, margin: "0 0 18px 0", fontSize: 14 }}>
+                El cliente podrá hacer pedidos desde su celular
+              </p>
+
+              <div style={portalInfoBoxStyle}>
+                <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18 }}>
+                  {portalCustomer.name}
+                </div>
+                <div style={{ color: COLORS.muted, marginTop: 4 }}>
+                  Tel: {portalCustomer.phone || "Sin teléfono"}
+                </div>
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>
+                  Correo electrónico (opcional)
+                </div>
+                <input
+                  value={portalEmail}
+                  onChange={(e) => setPortalEmail(e.target.value)}
+                  style={textInputStyle}
+                  placeholder="correo@ejemplo.com"
+                />
+                <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                  Si no tiene correo, el cliente entrará con su teléfono
+                </div>
+              </div>
+
+              <div style={editFieldBlockStyle}>
+                <div style={fieldLabelStyle}>Contraseña *</div>
+                <input
+                  type="text"
+                  value={portalPassword}
+                  onChange={(e) => setPortalPassword(e.target.value)}
+                  style={textInputStyle}
+                  placeholder="Mínimo 6 caracteres"
+                />
+                <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
+                  Ponle algo fácil de recordar para el cliente
+                </div>
+              </div>
+
+              <div style={portalPreviewBoxStyle}>
+                <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 6 }}>
+                  Datos de acceso:
+                </div>
+                <div style={{ color: COLORS.muted, fontSize: 14 }}>
+                  <b>Usuario:</b>{" "}
+                  {portalEmail.trim()
+                    ? portalEmail.trim()
+                    : portalCustomer.phone
+                      ? portalCustomer.phone
+                      : "Necesita teléfono o correo"}
+                </div>
+                <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
+                  <b>Contraseña:</b> {portalPassword || "---"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                <button
+                  onClick={createPortalAccess}
+                  disabled={portalSaving}
+                  style={{
+                    ...saveEditButtonStyle,
+                    opacity: portalSaving ? 0.65 : 1,
+                  }}
+                >
+                  {portalSaving ? "Creando..." : "Crear acceso"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    setPortalCustomer(null);
+                    setPortalPassword("");
+                    setPortalEmail("");
+                  }}
+                  style={cancelEditButtonStyle}
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -989,4 +1169,53 @@ const cancelEditButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 700,
+};
+
+const portalActiveBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(53, 92, 125, 0.12)",
+  color: "#355c7d",
+};
+
+const portalInactiveBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "6px 10px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 700,
+  background: "rgba(0,0,0,0.05)",
+  color: "#999",
+};
+
+const portalButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "8px 14px",
+  borderRadius: 12,
+  border: "none",
+  background: "rgba(53, 92, 125, 0.12)",
+  color: "#355c7d",
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: "pointer",
+};
+
+const portalInfoBoxStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  marginBottom: 16,
+};
+
+const portalPreviewBoxStyle: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 16,
+  background: "rgba(53, 92, 125, 0.06)",
+  border: "1px solid rgba(53, 92, 125, 0.15)",
+  marginTop: 12,
 };
