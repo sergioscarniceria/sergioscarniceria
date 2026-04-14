@@ -51,6 +51,11 @@ const adminModules = [
     description: "Contraseñas de acceso por rol.",
     href: "/admin/pins",
   },
+  {
+    title: "Recetario",
+    description: "Tus recetas con costo exacto por kilo, sin adivinar.",
+    href: "/admin/recetario",
+  },
 ];
 
 const operationModules = [
