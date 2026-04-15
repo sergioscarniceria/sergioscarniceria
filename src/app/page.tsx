@@ -22,97 +22,53 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-// Solo admin
-const adminOnlyModules = [
-  {
-    title: "Dashboard ventas",
-    description: "Tu negocio en una mirada, sin tanto rodeo.",
-    href: "/admin/dashboard",
+// ─── Módulos organizados por categoría ───
+const moduleCategories = {
+  admin: {
+    label: "Administración",
+    icon: "⚙️",
+    roles: ["admin"],
+    items: [
+      { title: "Dashboard ventas", icon: "📊", href: "/admin/dashboard", desc: "Resumen del negocio" },
+      { title: "Proveedores / CxP", icon: "🏭", href: "/admin/proveedores", desc: "Compras y pagos" },
+      { title: "Gestión de PINs", icon: "🔐", href: "/admin/pins", desc: "Accesos por rol" },
+    ],
   },
-  {
-    title: "Proveedores / CxP",
-    description: "Compras, deudas, pagos y rendimientos de tus proveedores.",
-    href: "/admin/proveedores",
+  gestion: {
+    label: "Gestión",
+    icon: "📋",
+    roles: ["admin", "cajera"],
+    items: [
+      { title: "Admin clientes", icon: "👥", href: "/admin/clientes", desc: "Altas y control" },
+      { title: "Admin productos", icon: "🥩", href: "/admin/productos", desc: "Catálogo y precios" },
+      { title: "Inventario", icon: "📦", href: "/admin/inventario/complementos", desc: "Bodega y complementos" },
+      { title: "Dashboard asistencia", icon: "📅", href: "/admin/dashboard/asistencia", desc: "Control de asistencia" },
+    ],
   },
-  {
-    title: "Gestión de PINs",
-    description: "Contraseñas de acceso por rol.",
-    href: "/admin/pins",
+  caja: {
+    label: "Caja y cobranza",
+    icon: "💰",
+    roles: ["admin", "cajera"],
+    items: [
+      { title: "Caja", icon: "💵", href: "/admin/caja", desc: "Flujo de efectivo" },
+      { title: "Cobranza", icon: "🧾", href: "/cobranza", desc: "Cobrar tickets" },
+      { title: "CxC", icon: "📒", href: "/admin/cxc", desc: "Cuentas por cobrar" },
+    ],
   },
-];
-
-// Admin + cajeras
-const adminModules = [
-  {
-    title: "Dashboard asistencia",
-    description: "Quien llega con ganas, se nota desde la entrada.",
-    href: "/admin/dashboard/asistencia",
+  operacion: {
+    label: "Operación diaria",
+    icon: "🔪",
+    roles: ["admin", "cajera", "carnicero"],
+    items: [
+      { title: "Pedidos", icon: "📝", href: "/pedidos", desc: "Captura de pedidos" },
+      { title: "Ventas Mostrador", icon: "🏪", href: "/ventas", desc: "Venta en tienda" },
+      { title: "Producción", icon: "🔥", href: "/produccion", desc: "Preparar pedidos" },
+      { title: "Repartidores", icon: "🚚", href: "/repartidores", desc: "Control de entregas" },
+      { title: "Checador", icon: "⏰", href: "/asistencia/checador", desc: "Checar asistencia" },
+      { title: "Recetario", icon: "📖", href: "/admin/recetario", desc: "Recetas con costos" },
+    ],
   },
-  {
-    title: "Admin clientes",
-    description: "Altas, control y orden comercial.",
-    href: "/admin/clientes",
-  },
-  {
-    title: "Admin productos",
-    description: "Ordena tu catálogo, precios y categorías sin moverle al código.",
-    href: "/admin/productos",
-  },
-  {
-    title: "Inventario",
-    description: "Complementos y bodega, pieza por pieza bajo control.",
-    href: "/admin/inventario/complementos",
-  },
-  {
-    title: "Caja",
-    description: "Donde cada peso cuenta y cada cobro queda claro.",
-    href: "/admin/caja",
-  },
-  {
-    title: "Cobranza",
-    description: "Cobrar tickets con identificación de cajera.",
-    href: "/cobranza",
-  },
-];
-
-// Todos (carniceros, cajeras, admin)
-const operationModules = [
-  {
-    title: "Checador",
-    description: "La puntualidad también se cocina todos los días.",
-    href: "/asistencia/checador",
-  },
-  {
-    title: "CxC",
-    description: "Cobrar bien también es vender mejor.",
-    href: "/admin/cxc",
-  },
-  {
-    title: "Pedidos",
-    description: "Deleita a tu paladar con lo que se merece.",
-    href: "/pedidos",
-  },
-  {
-    title: "Ventas Mostrador",
-    description: "Agrega, pesa y cobra sin soltar el ritmo del mostrador.",
-    href: "/ventas",
-  },
-  {
-    title: "Repartidores",
-    description: "En camino, entregado y sin perder detalle.",
-    href: "/repartidores",
-  },
-  {
-    title: "Recetario",
-    description: "Tus recetas con costo exacto por kilo, sin adivinar.",
-    href: "/admin/recetario",
-  },
-  {
-    title: "Producción",
-    description: "Pasión por el trabajo bien hecho, corte por corte.",
-    href: "/produccion",
-  },
-];
+};
 
 const recipes = [
   {
@@ -267,6 +223,55 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
       <button onClick={checkPin} disabled={checking} style={{ padding: "10px 24px", borderRadius: 12, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 14 }}>
         {checking ? "..." : "Entrar"}
       </button>
+    </div>
+  );
+}
+
+function QuickStats() {
+  const supabase = getSupabaseClient();
+  const [stats, setStats] = useState<{ pedidosHoy: number; ventasHoy: number; pendientes: number; enCamino: number } | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const { data } = await supabase
+        .from("orders")
+        .select("id, status, delivery_status, order_items(kilos, price)")
+        .gte("created_at", `${todayStr}T00:00:00`);
+
+      const orders = data || [];
+      const ventasHoy = orders.reduce((acc: number, o: any) => {
+        return acc + (o.order_items || []).reduce((s: number, i: any) => s + (i.kilos || 0) * (i.price || 0), 0);
+      }, 0);
+      const pendientes = orders.filter((o: any) => o.status === "nuevo" || o.status === "proceso").length;
+      const enCamino = orders.filter((o: any) => o.delivery_status === "en_camino").length;
+
+      setStats({ pedidosHoy: orders.length, ventasHoy, pendientes, enCamino });
+    }
+    load();
+  }, []);
+
+  if (!stats) return null;
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+      <div style={quickStatCardStyle}>
+        <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>Pedidos hoy</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.text }}>{stats.pedidosHoy}</div>
+      </div>
+      <div style={quickStatCardStyle}>
+        <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>Ventas hoy</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.primary }}>${stats.ventasHoy.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+      </div>
+      <div style={quickStatCardStyle}>
+        <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>En producción</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: stats.pendientes > 0 ? COLORS.warning : COLORS.success }}>{stats.pendientes}</div>
+      </div>
+      <div style={quickStatCardStyle}>
+        <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>En camino</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: stats.enCamino > 0 ? COLORS.info : COLORS.muted }}>{stats.enCamino}</div>
+      </div>
     </div>
   );
 }
@@ -559,9 +564,9 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Acceso rápido al checador + panel empleados */}
-        <div style={employeeAccessStyle}>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+        {/* ─── Centro de operaciones ─── */}
+        <div style={operationsHubStyle}>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: showEmployeeMenu ? 0 : 0 }}>
             <Link
               href="/asistencia/checador"
               style={{
@@ -580,39 +585,77 @@ export default function HomePage() {
             </Link>
             <button
               onClick={() => setShowEmployeeMenu(!showEmployeeMenu)}
-              style={employeeButtonStyle}
+              style={{
+                padding: "12px 24px",
+                borderRadius: 14,
+                border: "none",
+                background: showEmployeeMenu ? COLORS.primary : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+                color: "white",
+                cursor: "pointer",
+                fontWeight: 700,
+                fontSize: 14,
+                boxShadow: "0 4px 12px rgba(123, 34, 24, 0.15)",
+              }}
             >
-              {showEmployeeMenu ? "Cerrar panel" : "Acceso empleados"}
+              {showEmployeeMenu ? "Cerrar panel" : "Centro de operaciones"}
             </button>
           </div>
 
           {showEmployeeMenu && (
-            <div style={employeeMenuStyle}>
+            <div style={operationsPanelStyle}>
               {empRole ? (
                 <>
-                  <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span>Módulos — {empRole === "admin" ? "Administrador" : empRole === "cajera" ? `Cajera${empName ? `: ${empName}` : ""}` : `Carnicero${empName ? `: ${empName}` : ""}`}</span>
+                  {/* Header con rol y stats */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: 18 }}>
+                        {empRole === "admin" ? "A" : empRole === "cajera" ? "C" : "K"}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 16 }}>
+                          {empRole === "admin" ? "Administrador" : empRole === "cajera" ? "Cajera" : "Carnicero"}
+                          {empName && <span style={{ fontWeight: 600, color: COLORS.muted }}> — {empName}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: COLORS.muted }}>Centro de operaciones</div>
+                      </div>
                       <NotificationBell />
                     </div>
-                    <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); }} style={{ padding: "4px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.muted, fontWeight: 700, cursor: "pointer", fontSize: 11 }}>Salir</button>
+                    <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); }} style={{ padding: "8px 16px", borderRadius: 10, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.muted, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>Cerrar sesión</button>
                   </div>
-                  <div style={employeeGridStyle}>
-                    {empRole === "admin" && adminOnlyModules.map((m) => (
-                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
-                    ))}
-                    {(empRole === "admin" || empRole === "cajera") && adminModules.map((m) => (
-                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
-                    ))}
-                    {operationModules.map((m) => (
-                      <Link key={m.href} href={m.href} style={employeeLinkStyle}>{m.title}</Link>
-                    ))}
-                  </div>
+
+                  {/* Mini stats - solo admin y cajeras */}
+                  {(empRole === "admin" || empRole === "cajera") && <QuickStats />}
+
+                  {/* Módulos por categoría */}
+                  {Object.entries(moduleCategories).map(([key, cat]) => {
+                    if (!cat.roles.includes(empRole!)) return null;
+                    return (
+                      <div key={key} style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.muted, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                          <span>{cat.icon}</span> {cat.label}
+                        </div>
+                        <div style={moduleGridStyle}>
+                          {cat.items.map((m) => (
+                            <Link key={m.href} href={m.href} style={moduleLinkStyle}>
+                              <span style={{ fontSize: 22 }}>{m.icon}</span>
+                              <div>
+                                <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>{m.title}</div>
+                                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>{m.desc}</div>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </>
               ) : (
-                <div style={{ textAlign: "center", padding: "10px 0" }}>
-                  <div style={{ marginBottom: 10, fontWeight: 700, color: COLORS.muted, fontSize: 13 }}>
-                    Ingresa tu PIN para acceder
+                <div style={{ textAlign: "center", padding: "20px 0" }}>
+                  <div style={{ marginBottom: 14, fontWeight: 700, color: COLORS.text, fontSize: 16 }}>
+                    Centro de operaciones
+                  </div>
+                  <div style={{ marginBottom: 14, color: COLORS.muted, fontSize: 14 }}>
+                    Ingresa tu PIN para acceder a los módulos del sistema
                   </div>
                   <PinEntry onSuccess={(role, name) => { setEmpRole(role); setEmpName(name); sessionStorage.setItem("pin_role", role); }} />
                 </div>
@@ -1058,51 +1101,49 @@ const mapContainerStyle: React.CSSProperties = {
   minHeight: 280,
 };
 
-/* Employee access */
-const employeeAccessStyle: React.CSSProperties = {
+/* Operations hub */
+const operationsHubStyle: React.CSSProperties = {
   textAlign: "center",
   padding: "20px 0",
 };
 
-const employeeButtonStyle: React.CSSProperties = {
-  padding: "10px 20px",
-  borderRadius: 12,
-  border: `1px solid ${COLORS.border}`,
-  background: "rgba(255,255,255,0.6)",
-  color: COLORS.muted,
-  cursor: "pointer",
-  fontWeight: 600,
-  fontSize: 13,
-};
-
-const employeeMenuStyle: React.CSSProperties = {
+const operationsPanelStyle: React.CSSProperties = {
   marginTop: 14,
-  padding: 18,
-  borderRadius: 22,
-  background: COLORS.card,
+  padding: 22,
+  borderRadius: 24,
+  background: "rgba(255,255,255,0.92)",
   border: `1px solid ${COLORS.border}`,
-  boxShadow: COLORS.shadow,
-  maxWidth: 800,
+  boxShadow: "0 12px 40px rgba(91, 25, 15, 0.10)",
+  maxWidth: 960,
   marginLeft: "auto",
   marginRight: "auto",
+  textAlign: "left",
 };
 
-const employeeGridStyle: React.CSSProperties = {
+const moduleGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
   gap: 8,
 };
 
-const employeeLinkStyle: React.CSSProperties = {
-  display: "block",
-  padding: "10px 14px",
-  borderRadius: 12,
+const moduleLinkStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "12px 14px",
+  borderRadius: 14,
   background: COLORS.bgSoft,
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
   textDecoration: "none",
-  fontWeight: 600,
-  fontSize: 14,
+  transition: "all 0.15s ease",
+};
+
+const quickStatCardStyle: React.CSSProperties = {
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 14,
+  padding: "10px 14px",
   textAlign: "center",
 };
 
