@@ -80,6 +80,20 @@ function formatMinutes(mins: number | null) {
   return `${h}h ${m}m`;
 }
 
+const DEFAULT_DRIVERS = ["Pablo", "Beto", "Don Luis", "Juanito", "Manuel"];
+
+function loadDriversList(): string[] {
+  try {
+    const stored = localStorage.getItem("repartidores_list");
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return DEFAULT_DRIVERS;
+}
+
+function saveDriversList(list: string[]) {
+  try { localStorage.setItem("repartidores_list", JSON.stringify(list)); } catch {}
+}
+
 const NO_ENTREGA_REASONS = [
   "No estaba el cliente",
   "Dirección incorrecta",
@@ -98,6 +112,9 @@ export default function RepartidoresPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [driverName, setDriverName] = useState("");
+  const [drivers, setDrivers] = useState<string[]>(DEFAULT_DRIVERS);
+  const [showAddDriver, setShowAddDriver] = useState(false);
+  const [newDriverName, setNewDriverName] = useState("");
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [clockTick, setClockTick] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("todos");
@@ -107,6 +124,11 @@ export default function RepartidoresPage() {
   const [noEntregaId, setNoEntregaId] = useState<string | null>(null);
   const [noEntregaReason, setNoEntregaReason] = useState("");
   const [noEntregaCustom, setNoEntregaCustom] = useState("");
+
+  // Load drivers from localStorage
+  useEffect(() => {
+    setDrivers(loadDriversList());
+  }, []);
 
   // Auto-refresh every 15 seconds
   useEffect(() => {
@@ -331,35 +353,86 @@ export default function RepartidoresPage() {
         {/* Driver bar */}
         <div style={{ background: C.cardStrong, border: `1px solid ${C.border}`, borderRadius: 22, padding: 16, boxShadow: C.shadow, marginBottom: 16 }}>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <div style={{ flex: "1 1 200px" }}>
-              <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Repartidor activo</div>
-              <input
-                placeholder="Nombre del repartidor"
-                value={driverName}
-                onChange={(e) => setDriverName(e.target.value)}
-                style={inputSt}
-              />
-            </div>
-            {allDrivers.length > 0 && (
-              <div style={{ flex: "2 1 300px" }}>
-                <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Selección rápida</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {allDrivers.map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => setDriverName(d)}
-                      style={{
-                        padding: "8px 14px", borderRadius: 12, border: driverName === d ? "none" : `1px solid ${C.border}`,
-                        background: driverName === d ? `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)` : "white",
-                        color: driverName === d ? "white" : C.text, fontWeight: 700, cursor: "pointer", fontSize: 13,
+            <div style={{ flex: "2 1 300px" }}>
+              <div style={{ color: C.muted, fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Repartidor</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                {drivers.map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setDriverName(d)}
+                    style={{
+                      padding: "8px 14px", borderRadius: 12, border: driverName === d ? "none" : `1px solid ${C.border}`,
+                      background: driverName === d ? `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)` : "white",
+                      color: driverName === d ? "white" : C.text, fontWeight: 700, cursor: "pointer", fontSize: 13,
+                    }}
+                  >
+                    {d}
+                    {driverName === d && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!confirm(`¿Eliminar a ${d} de la lista de repartidores?`)) return;
+                          const updated = drivers.filter((x) => x !== d);
+                          setDrivers(updated);
+                          saveDriversList(updated);
+                          if (driverName === d) setDriverName("");
+                        }}
+                        style={{ marginLeft: 8, fontSize: 11, opacity: 0.8 }}
+                      >
+                        ✕
+                      </span>
+                    )}
+                  </button>
+                ))}
+                {showAddDriver ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <input
+                      placeholder="Nombre"
+                      value={newDriverName}
+                      onChange={(e) => setNewDriverName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newDriverName.trim()) {
+                          const updated = [...drivers, newDriverName.trim()];
+                          setDrivers(updated);
+                          saveDriversList(updated);
+                          setNewDriverName("");
+                          setShowAddDriver(false);
+                        }
                       }}
+                      autoFocus
+                      style={{ ...inputSt, padding: "8px 12px", width: 120, fontSize: 13 }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (newDriverName.trim()) {
+                          const updated = [...drivers, newDriverName.trim()];
+                          setDrivers(updated);
+                          saveDriversList(updated);
+                          setNewDriverName("");
+                        }
+                        setShowAddDriver(false);
+                      }}
+                      style={{ padding: "8px 12px", borderRadius: 12, border: "none", background: C.success, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
                     >
-                      {d}
+                      OK
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => { setShowAddDriver(false); setNewDriverName(""); }}
+                      style={{ padding: "8px 10px", borderRadius: 12, border: `1px solid ${C.border}`, background: "white", color: C.text, cursor: "pointer", fontSize: 13 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowAddDriver(true)}
+                    style={{ padding: "8px 14px", borderRadius: 12, border: `1px dashed ${C.border}`, background: "transparent", color: C.muted, fontWeight: 700, cursor: "pointer", fontSize: 13 }}
+                  >
+                    + Nuevo
+                  </button>
+                )}
               </div>
-            )}
+            </div>
             <button onClick={() => loadOrders(false)} disabled={refreshing} style={{ ...btnSec, alignSelf: "flex-end" }}>
               {refreshing ? "..." : "Actualizar"}
             </button>

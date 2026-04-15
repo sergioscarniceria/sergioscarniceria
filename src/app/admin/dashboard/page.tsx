@@ -27,6 +27,10 @@ type Order = {
   butcher_name?: string | null;
   created_at?: string;
   order_items?: OrderItem[];
+  delivery_status?: string | null;
+  delivery_driver?: string | null;
+  delivery_started_at?: string | null;
+  delivered_at?: string | null;
 };
 
 type ProductStats = {
@@ -208,6 +212,52 @@ export default function AdminDashboardPage() {
       }, 0),
     [orders]
   );
+
+  // ─── Delivery KPIs ──────────────────────────────────────
+  const deliveryStats = useMemo(() => {
+    const withDelivery = orders.filter((o) => o.delivery_status);
+    const entregados = withDelivery.filter((o) => o.delivery_status === "entregado");
+    const enCamino = withDelivery.filter((o) => o.delivery_status === "en_camino");
+    const noEntregados = withDelivery.filter((o) => o.delivery_status === "no_entregado");
+    const pendientes = orders.filter((o) => o.status === "terminado" && (!o.delivery_status || o.delivery_status === "pendiente"));
+
+    // Tiempo promedio de entrega (minutos)
+    const times = entregados
+      .map((o) => {
+        if (!o.delivery_started_at || !o.delivered_at) return null;
+        const diff = new Date(o.delivered_at).getTime() - new Date(o.delivery_started_at).getTime();
+        return diff > 0 ? Math.round(diff / 60000) : null;
+      })
+      .filter((t): t is number => t !== null);
+    const avgMinutes = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : null;
+
+    // Tasa de entrega exitosa
+    const totalFinished = entregados.length + noEntregados.length;
+    const successRate = totalFinished > 0 ? Math.round((entregados.length / totalFinished) * 100) : null;
+
+    // Entregas por repartidor
+    const byDriver: Record<string, { entregados: number; noEntregados: number }> = {};
+    for (const o of withDelivery) {
+      const d = o.delivery_driver || "Sin asignar";
+      if (!byDriver[d]) byDriver[d] = { entregados: 0, noEntregados: 0 };
+      if (o.delivery_status === "entregado") byDriver[d].entregados++;
+      if (o.delivery_status === "no_entregado") byDriver[d].noEntregados++;
+    }
+    const driverRanking = Object.entries(byDriver)
+      .map(([name, stats]) => ({ name, ...stats, total: stats.entregados + stats.noEntregados }))
+      .sort((a, b) => b.entregados - a.entregados);
+
+    return {
+      total: withDelivery.length,
+      entregados: entregados.length,
+      enCamino: enCamino.length,
+      noEntregados: noEntregados.length,
+      pendientes: pendientes.length,
+      avgMinutes,
+      successRate,
+      driverRanking,
+    };
+  }, [orders]);
 
   const topCustomers = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -400,6 +450,69 @@ export default function AdminDashboardPage() {
             <div style={heroValueStyle}>${salesThisYear.toFixed(2)}</div>
           </div>
         </div>
+
+        {/* ─── Entregas KPIs ─── */}
+        {deliveryStats.total > 0 && (
+          <>
+            <div style={{ marginBottom: 8, marginTop: 8 }}>
+              <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Entregas</h2>
+              <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 14 }}>Métricas de reparto en el rango seleccionado</p>
+            </div>
+            <div style={statsGridStyle}>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Entregados</div>
+                <div style={{ ...heroValueStyle, color: COLORS.success }}>{deliveryStats.entregados}</div>
+              </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>En camino</div>
+                <div style={{ ...heroValueStyle, color: COLORS.warning }}>{deliveryStats.enCamino}</div>
+              </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>No entregados</div>
+                <div style={{ ...heroValueStyle, color: COLORS.danger }}>{deliveryStats.noEntregados}</div>
+              </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Pendientes</div>
+                <div style={heroValueStyle}>{deliveryStats.pendientes}</div>
+              </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Tiempo promedio</div>
+                <div style={heroValueStyle}>
+                  {deliveryStats.avgMinutes !== null
+                    ? deliveryStats.avgMinutes < 60
+                      ? `${deliveryStats.avgMinutes} min`
+                      : `${Math.floor(deliveryStats.avgMinutes / 60)}h ${deliveryStats.avgMinutes % 60}m`
+                    : "—"}
+                </div>
+              </div>
+              <div style={heroCardStyle}>
+                <div style={smallLabelStyle}>Tasa de éxito</div>
+                <div style={{ ...heroValueStyle, color: deliveryStats.successRate !== null && deliveryStats.successRate >= 90 ? COLORS.success : COLORS.warning }}>
+                  {deliveryStats.successRate !== null ? `${deliveryStats.successRate}%` : "—"}
+                </div>
+              </div>
+            </div>
+
+            {deliveryStats.driverRanking.length > 0 && (
+              <div style={{ ...panelStyle, marginBottom: 18 }}>
+                <h2 style={panelTitleStyle}>Entregas por repartidor</h2>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {deliveryStats.driverRanking.map((d) => (
+                    <div key={d.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 14, background: COLORS.bgSoft, border: `1px solid ${COLORS.border}` }}>
+                      <div style={{ fontWeight: 700, color: COLORS.text }}>{d.name}</div>
+                      <div style={{ display: "flex", gap: 12, fontSize: 14 }}>
+                        <span style={{ color: COLORS.success, fontWeight: 700 }}>{d.entregados} entregados</span>
+                        {d.noEntregados > 0 && (
+                          <span style={{ color: COLORS.danger, fontWeight: 700 }}>{d.noEntregados} fallidos</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
 
         <div style={panelStyle}>
           <h2 style={panelTitleStyle}>Ventas por día</h2>
