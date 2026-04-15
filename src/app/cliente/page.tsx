@@ -18,6 +18,7 @@ type CartItem = {
   name: string;
   price: number;
   kilos: number;
+  sale_type: "kg" | "pieza";
 };
 
 type OrderItem = {
@@ -725,9 +726,31 @@ export default function ClientePage() {
     alert("Dirección guardada");
   }
 
-  function addProduct(product: Product, mode: "kg" | "half" | "money" | "custom") {
-    let kilos = 1;
+  function addProduct(product: Product, mode: "kg" | "half" | "money" | "custom" | "pieza") {
+    const piece = isPieceProduct(product);
     const price = getPrice(product);
+
+    if (piece || mode === "pieza") {
+      // Producto por pieza: siempre cantidad entera
+      let qty = 1;
+      if (mode === "custom") {
+        const qtyText = prompt(`¿Cuántas piezas de ${product.name}?`);
+        if (!qtyText) return;
+        const parsed = Math.round(Number(qtyText));
+        if (!parsed || parsed <= 0) {
+          alert("Escribe una cantidad válida (ej: 3)");
+          return;
+        }
+        qty = parsed;
+      }
+      setCart((prev) => [
+        ...prev,
+        { name: product.name, price, kilos: qty, sale_type: "pieza" as const },
+      ]);
+      return;
+    }
+
+    let kilos = 1;
 
     if (mode === "half") kilos = 0.5;
 
@@ -756,11 +779,7 @@ export default function ClientePage() {
 
     setCart((prev) => [
       ...prev,
-      {
-        name: product.name,
-        price,
-        kilos,
-      },
+      { name: product.name, price, kilos, sale_type: "kg" as const },
     ]);
   }
 
@@ -770,17 +789,25 @@ export default function ClientePage() {
 
   function cartTotal() {
     return cart.reduce((acc, item) => {
+      if (item.sale_type === "pieza") {
+        return acc + Number(item.price || 0) * Number(item.kilos || 0); // kilos = quantity for pieces
+      }
       return acc + Number(item.price || 0) * Number(item.kilos || 0);
     }, 0);
   }
 
   function repeatOrder(order: Order) {
     const previousItems =
-      (order.order_items || []).map((item) => ({
-        name: item.product,
-        kilos: Number(item.kilos || 0),
-        price: Number(item.price || 0),
-      })) || [];
+      (order.order_items || []).map((item) => {
+        const matchedProduct = products.find((p) => p.name === item.product);
+        const piece = matchedProduct ? isPieceProduct(matchedProduct) : false;
+        return {
+          name: item.product,
+          kilos: Number(item.kilos || 0),
+          price: Number(item.price || 0),
+          sale_type: (piece ? "pieza" : "kg") as "kg" | "pieza",
+        };
+      }) || [];
 
     if (previousItems.length === 0) {
       alert("Ese pedido no tiene artículos");
@@ -815,11 +842,15 @@ export default function ClientePage() {
       );
 
       if (match) {
-        const kilos = Number((ing.kgPerPerson * servings).toFixed(3));
+        const piece = isPieceProduct(match);
+        const qty = piece
+          ? Math.max(1, Math.round(ing.kgPerPerson * servings))
+          : Number((ing.kgPerPerson * servings).toFixed(3));
         newItems.push({
           name: match.name,
-          price: isPieceProduct(match) ? Number(match.fixed_piece_price) : getPrice(match),
-          kilos,
+          price: piece ? Number(match.fixed_piece_price) : getPrice(match),
+          kilos: qty,
+          sale_type: piece ? "pieza" : "kg",
         });
       } else {
         notFound.push(ing.name);
@@ -921,6 +952,9 @@ export default function ClientePage() {
       product: p.name,
       kilos: p.kilos,
       price: p.price,
+      sale_type: p.sale_type || "kg",
+      is_fixed_price_piece: p.sale_type === "pieza",
+      quantity: p.sale_type === "pieza" ? p.kilos : null,
     }));
 
     const { error: itemsError } = await supabase.from("order_items").insert(items);
@@ -1504,7 +1538,7 @@ export default function ClientePage() {
                       <>
                         {cart.map((c, i) => {
                           const matchedProduct = products.find((p) => p.name === c.name);
-                          const isPiece = matchedProduct ? isPieceProduct(matchedProduct) : false;
+                          const isPiece = c.sale_type === "pieza";
                           const emoji = getCategoryEmoji(matchedProduct?.category);
                           return (
                           <div key={i} style={cartRowStyle}>
@@ -2695,7 +2729,7 @@ function CartPanel({
         <>
           {cart.map((c, i) => {
             const mp = products.find((p) => p.name === c.name);
-            const isPiece = mp ? isPieceProduct(mp) : false;
+            const isPiece = c.sale_type === "pieza";
             const emoji = getCategoryEmoji(mp?.category);
             return (
             <div key={i} style={cartRowStyle}>

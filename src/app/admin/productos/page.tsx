@@ -48,11 +48,13 @@ export default function AdminProductosPage() {
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [filterCategory, setFilterCategory] = useState<string>("todas");
 
 const [name, setName] = useState("");
 const [price, setPrice] = useState("");
 const [category, setCategory] = useState("Complementos");
 const [fixedPiecePrice, setFixedPiecePrice] = useState("");
+const [saleType, setSaleType] = useState<"kg" | "pieza">("kg");
 const [isActive, setIsActive] = useState(true);
 const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
 
@@ -85,6 +87,7 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   setPrice("");
   setCategory("Complementos");
   setFixedPiecePrice("");
+  setSaleType("kg");
   setIsActive(true);
   setIsExcludedFromDiscount(false);
   setSaving(false);
@@ -93,15 +96,20 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
  function startEdit(product: Product) {
   setEditingId(product.id);
   setName(product.name || "");
-  setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
   setCategory(product.category || "Complementos");
-  setFixedPiecePrice(
-    product.fixed_piece_price !== null && product.fixed_piece_price !== undefined
-      ? String(product.fixed_piece_price)
-      : ""
-  );
   setIsActive(Boolean(product.is_active));
   setIsExcludedFromDiscount(Boolean(product.is_excluded_from_discount));
+
+  // Detectar tipo de venta
+  const isPiece = product.fixed_piece_price != null && product.fixed_piece_price > 0;
+  setSaleType(isPiece ? "pieza" : "kg");
+  if (isPiece) {
+    setFixedPiecePrice(String(product.fixed_piece_price));
+    setPrice("");
+  } else {
+    setPrice(product.price !== null && product.price !== undefined ? String(product.price) : "");
+    setFixedPiecePrice("");
+  }
 
   window.scrollTo({
     top: 0,
@@ -111,38 +119,33 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
 
   async function saveProduct() {
   const cleanName = name.trim();
-  const cleanPrice = Number(price);
-  const cleanFixedPiecePrice =
-    fixedPiecePrice.trim() === "" ? null : Number(fixedPiecePrice);
 
   if (!cleanName) {
     alert("Escribe el nombre del producto");
     return;
   }
 
-  if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 0) {
-    alert("Escribe un precio válido por kg");
-    return;
-  }
-
-  if (
-    cleanFixedPiecePrice !== null &&
-    (Number.isNaN(cleanFixedPiecePrice) || cleanFixedPiecePrice < 0)
-  ) {
-    alert("Escribe un precio fijo por pieza válido");
-    return;
+  if (saleType === "kg") {
+    const cleanPrice = Number(price);
+    if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 0) {
+      alert("Escribe un precio válido por kg");
+      return;
+    }
+  } else {
+    const cleanPiece = Number(fixedPiecePrice);
+    if (fixedPiecePrice === "" || Number.isNaN(cleanPiece) || cleanPiece <= 0) {
+      alert("Escribe un precio válido por pieza");
+      return;
+    }
   }
 
   setSaving(true);
 
   const payload = {
     name: cleanName,
-    price: Number(cleanPrice.toFixed(2)),
+    price: saleType === "kg" ? Number(Number(price).toFixed(2)) : 0,
     category: category.trim() || "Complementos",
-    fixed_piece_price:
-      cleanFixedPiecePrice === null
-        ? null
-        : Number(cleanFixedPiecePrice.toFixed(2)),
+    fixed_piece_price: saleType === "pieza" ? Number(Number(fixedPiecePrice).toFixed(2)) : null,
     is_active: isActive,
     is_excluded_from_discount: isExcludedFromDiscount,
   };
@@ -215,17 +218,23 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   }
 
   const filteredProducts = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return products;
+    let filtered = products;
 
-    return products.filter((p) => {
-  return (
-    (p.name || "").toLowerCase().includes(q) ||
-    String(p.price ?? "").toLowerCase().includes(q) ||
-    (p.category || "").toLowerCase().includes(q)
-  );
-});
-  }, [products, search]);
+    if (filterCategory !== "todas") {
+      filtered = filtered.filter((p) => (p.category || "Complementos") === filterCategory);
+    }
+
+    const q = search.toLowerCase().trim();
+    if (q) {
+      filtered = filtered.filter((p) =>
+        (p.name || "").toLowerCase().includes(q) ||
+        String(p.price ?? "").toLowerCase().includes(q) ||
+        (p.category || "").toLowerCase().includes(q)
+      );
+    }
+
+    return filtered;
+  }, [products, search, filterCategory]);
 
   const summary = useMemo(() => {
     const active = products.filter((p) => p.is_active).length;
@@ -324,19 +333,6 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   </div>
 
   <div>
-    <div style={fieldLabelStyle}>Precio por kg</div>
-    <input
-      placeholder="Ejemplo: 289"
-      type="number"
-      step="0.01"
-      min="0"
-      value={price}
-      onChange={(e) => setPrice(e.target.value)}
-      style={inputStyle}
-    />
-  </div>
-
-  <div>
     <div style={fieldLabelStyle}>Categoría</div>
     <select
       value={category}
@@ -352,17 +348,49 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   </div>
 
   <div>
-    <div style={fieldLabelStyle}>Precio fijo por pieza</div>
-    <input
-      placeholder="Déjalo vacío si se cobra normal"
-      type="number"
-      step="0.01"
-      min="0"
-      value={fixedPiecePrice}
-      onChange={(e) => setFixedPiecePrice(e.target.value)}
+    <div style={fieldLabelStyle}>Tipo de venta</div>
+    <select
+      value={saleType}
+      onChange={(e) => {
+        const val = e.target.value as "kg" | "pieza";
+        setSaleType(val);
+        if (val === "pieza") { setPrice(""); }
+        else { setFixedPiecePrice(""); }
+      }}
       style={inputStyle}
-    />
+    >
+      <option value="kg">Por kilo</option>
+      <option value="pieza">Por pieza (precio fijo)</option>
+    </select>
   </div>
+
+  {saleType === "kg" ? (
+    <div>
+      <div style={fieldLabelStyle}>Precio por kg</div>
+      <input
+        placeholder="Ejemplo: 289"
+        type="number"
+        step="0.01"
+        min="0"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        style={inputStyle}
+      />
+    </div>
+  ) : (
+    <div>
+      <div style={fieldLabelStyle}>Precio por pieza</div>
+      <input
+        placeholder="Ejemplo: 45"
+        type="number"
+        step="0.01"
+        min="0"
+        value={fixedPiecePrice}
+        onChange={(e) => setFixedPiecePrice(e.target.value)}
+        style={inputStyle}
+      />
+    </div>
+  )}
 </div>
 
           <div style={checksWrapStyle}>
@@ -425,6 +453,27 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
             style={inputStyle}
           />
 
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+            {["todas", ...CATEGORY_OPTIONS].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFilterCategory(cat)}
+                style={{
+                  padding: "6px 14px",
+                  borderRadius: 20,
+                  border: `1px solid ${filterCategory === cat ? COLORS.primary : COLORS.border}`,
+                  background: filterCategory === cat ? COLORS.primary : "white",
+                  color: filterCategory === cat ? "white" : COLORS.text,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                {cat === "todas" ? "Todas" : cat}
+              </button>
+            ))}
+          </div>
+
           {filteredProducts.length === 0 ? (
             <div style={emptyBoxStyle}>No hay productos para mostrar</div>
           ) : (
@@ -437,14 +486,15 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   <div style={productCategoryStyle}>
     {product.category || "Complementos"}
   </div>
-  <div style={productPriceStyle}>
-    ${Number(product.price || 0).toFixed(2)} / kg
-  </div>
-  {product.fixed_piece_price !== null && product.fixed_piece_price !== undefined ? (
+  {product.fixed_piece_price != null && product.fixed_piece_price > 0 ? (
     <div style={productFixedPiecePriceStyle}>
-      ${Number(product.fixed_piece_price).toFixed(2)} por pieza
+      ${Number(product.fixed_piece_price).toFixed(2)} / pieza
     </div>
-  ) : null}
+  ) : (
+    <div style={productPriceStyle}>
+      ${Number(product.price || 0).toFixed(2)} / kg
+    </div>
+  )}
 </div>
 
                     <div style={badgeColumnStyle}>
