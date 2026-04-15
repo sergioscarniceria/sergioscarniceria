@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import QrScanner from "@/components/QrScanner";
 
 type TabMode = "ticket" | "manual";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -156,6 +157,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [showPrintTicket, setShowPrintTicket] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
 
   // Identificación cajera
   const [cashierName, setCashierName] = useState("");
@@ -184,7 +186,28 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   const handleScannerInput = useCallback(async (scannedText: string) => {
     const trimmed = scannedText.trim();
-    if (!trimmed || trimmed.length < 6) return;
+    if (!trimmed || trimmed.length < 4) return;
+
+    // Detectar QR de cliente: formato "CLI-<uuid>"
+    const clientMatch = trimmed.match(/^CLI-([0-9a-f-]{36})$/i);
+    if (clientMatch) {
+      const custId = clientMatch[1].toLowerCase();
+      // Filtrar tickets del cliente
+      const customerTickets = tickets.filter(
+        (t) => t.customer_id?.toLowerCase() === custId && t.payment_status !== "pagado" && t.payment_status !== "cancelado"
+      );
+      if (customerTickets.length === 1) {
+        openTicket(customerTickets[0].id);
+      } else if (customerTickets.length > 1) {
+        // Mostrar tickets filtrados por cliente
+        setTicketSearch(custId.slice(0, 8));
+      } else {
+        // Buscar nombre del cliente para mostrar mensaje
+        const cust = customers.find((c) => c.id?.toLowerCase() === custId);
+        setTicketSearch(cust ? cust.name : custId.slice(0, 8));
+      }
+      return;
+    }
 
     // Buscar ticket con el texto escaneado
     const { full, short: shortCode } = extractTicketId(trimmed);
@@ -209,7 +232,13 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     if (found) {
       setTicketSearch("");
     }
-  }, [tickets]);
+  }, [tickets, customers]);
+
+  // Handler para cámara QR
+  function handleQrScan(data: string) {
+    setShowQrScanner(false);
+    handleScannerInput(data);
+  }
 
   useEffect(() => {
     loadData();
@@ -1013,8 +1042,9 @@ if (cashError) {
                   </div>
                 </div>
 
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input
-  placeholder="Escanea QR, folio TK-xxx, ID o nombre de cliente"
+  placeholder="Escanea QR, folio TK-xxx, ID o nombre"
   value={ticketSearch}
   onChange={(e) => {
     const val = e.target.value;
@@ -1073,8 +1103,26 @@ if (cashError) {
       }
     }
   }}
-  style={inputStyle}
+  style={{ ...inputStyle, flex: 1 }}
 />
+                <button
+                  onClick={() => setShowQrScanner(true)}
+                  title="Escanear QR con cámara"
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 12,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.primary,
+                    color: "white",
+                    fontWeight: 800,
+                    fontSize: 18,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  📷
+                </button>
+                </div>
                 <div style={{ marginTop: 14 }}>
                   <div style={miniTitleStyle}>Pendientes recientes</div>
 
@@ -1277,6 +1325,14 @@ if (cashError) {
                     >
                       Cancelar ticket
                     </button>
+
+                    {/* Modal escáner QR */}
+                    {showQrScanner && (
+                      <QrScanner
+                        onScan={handleQrScan}
+                        onClose={() => setShowQrScanner(false)}
+                      />
+                    )}
 
                     {/* Modal ticket imprimible */}
                     {showPrintTicket && selectedTicket && (
