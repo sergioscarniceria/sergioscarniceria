@@ -64,6 +64,10 @@ export default function AdminDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Inventory data
+  const [bodegaItems, setBodegaItems] = useState<{ name: string; stock: number; cost: number; unit: string }[]>([]);
+  const [complementos, setComplementos] = useState<{ name: string; stock: number; purchase_price: number }[]>([]);
+
   const today = new Date();
   const todayStr = toDateInputValue(today);
   const firstDayMonthStr = toDateInputValue(
@@ -106,6 +110,23 @@ export default function AdminDashboardPage() {
     }
 
     setOrders((data as Order[]) || []);
+
+    // Load inventory data
+    const { data: bodData } = await supabase
+      .from("bodega_items")
+      .select("name, stock, cost, unit")
+      .eq("is_active", true);
+    setBodegaItems((bodData as any[]) || []);
+
+    const { data: prodData } = await supabase
+      .from("products")
+      .select("name, stock, purchase_price, fixed_piece_price, category")
+      .eq("is_active", true);
+    const compData = (prodData || []).filter(
+      (p: any) => p.category === "Complementos" || (p.fixed_piece_price !== null && p.fixed_piece_price > 0)
+    );
+    setComplementos(compData as any[]);
+
     setLoading(false);
   }
 
@@ -212,6 +233,18 @@ export default function AdminDashboardPage() {
       }, 0),
     [orders]
   );
+
+  // ─── Inventory Value ─────────────────────────────────────
+  const inventoryStats = useMemo(() => {
+    const bodegaValue = bodegaItems.reduce((acc, i) => acc + (i.stock || 0) * (i.cost || 0), 0);
+    const complementosValue = complementos.reduce((acc, p) => acc + (p.stock || 0) * (p.purchase_price || 0), 0);
+    const totalValue = bodegaValue + complementosValue;
+    const bodegaCount = bodegaItems.length;
+    const complementosCount = complementos.length;
+    const bodegaLow = bodegaItems.filter((i: any) => (i.min_stock || 0) > 0 && (i.stock || 0) <= (i.min_stock || 0)).length;
+    const complementosLow = complementos.filter((p: any) => (p.min_stock || 0) > 0 && (p.stock || 0) <= (p.min_stock || 0)).length;
+    return { bodegaValue, complementosValue, totalValue, bodegaCount, complementosCount, bodegaLow, complementosLow };
+  }, [bodegaItems, complementos]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -513,6 +546,28 @@ export default function AdminDashboardPage() {
             )}
           </>
         )}
+
+        {/* ─── Inventario KPIs ─── */}
+        <div style={{ marginBottom: 8, marginTop: 8 }}>
+          <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Inventario</h2>
+          <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 14 }}>Valor del inventario en bodega y complementos</p>
+        </div>
+        <div style={statsGridStyle}>
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Valor total inventario</div>
+            <div style={{ ...heroValueStyle, color: COLORS.primary }}>${inventoryStats.totalValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          </div>
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Bodega (insumos)</div>
+            <div style={heroValueStyle}>${inventoryStats.bodegaValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style={heroMetaStyle}>{inventoryStats.bodegaCount} items</div>
+          </div>
+          <div style={heroCardStyle}>
+            <div style={smallLabelStyle}>Complementos</div>
+            <div style={heroValueStyle}>${inventoryStats.complementosValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style={heroMetaStyle}>{inventoryStats.complementosCount} items</div>
+          </div>
+        </div>
 
         <div style={panelStyle}>
           <h2 style={panelTitleStyle}>Ventas por día</h2>

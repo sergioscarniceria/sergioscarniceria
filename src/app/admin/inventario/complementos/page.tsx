@@ -10,6 +10,7 @@ type Product = {
   price: number;
   category: string | null;
   fixed_piece_price: number | null;
+  purchase_price: number;
   stock: number;
   min_stock: number;
   is_active: boolean;
@@ -60,6 +61,10 @@ export default function InventarioComplementosPage() {
   const [editMinId, setEditMinId] = useState<string | null>(null);
   const [editMinVal, setEditMinVal] = useState("");
 
+  // Edit purchase price
+  const [editPriceId, setEditPriceId] = useState<string | null>(null);
+  const [editPriceVal, setEditPriceVal] = useState("");
+
   // History
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
@@ -70,7 +75,7 @@ export default function InventarioComplementosPage() {
     setLoading(true);
     const { data } = await supabase
       .from("products")
-      .select("id, name, price, category, fixed_piece_price, stock, min_stock, is_active")
+      .select("id, name, price, category, fixed_piece_price, purchase_price, stock, min_stock, is_active")
       .eq("is_active", true)
       .order("name");
     // Filter to complementos (by piece)
@@ -144,6 +149,13 @@ export default function InventarioComplementosPage() {
     loadProducts();
   }
 
+  async function savePurchasePrice(productId: string) {
+    const val = parseFloat(editPriceVal) || 0;
+    await supabase.from("products").update({ purchase_price: val }).eq("id", productId);
+    setEditPriceId(null);
+    loadProducts();
+  }
+
   async function loadHistory(productId: string) {
     setHistoryId(productId);
     const { data } = await supabase
@@ -165,6 +177,7 @@ export default function InventarioComplementosPage() {
 
   const lowCount = products.filter((p) => (p.min_stock || 0) > 0 && (p.stock || 0) <= (p.min_stock || 0)).length;
   const zeroCount = products.filter((p) => (p.stock || 0) === 0).length;
+  const inventoryValue = products.reduce((acc, p) => acc + (p.stock || 0) * (p.purchase_price || 0), 0);
 
   const inputStyle: React.CSSProperties = {
     padding: "10px 14px", borderRadius: 12, border: `1px solid ${C.border}`,
@@ -196,7 +209,7 @@ export default function InventarioComplementosPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow }}>
             <div style={{ color: C.muted, fontSize: 12 }}>Total items</div>
             <div style={{ color: C.text, fontSize: 26, fontWeight: 800 }}>{products.length}</div>
@@ -208,6 +221,10 @@ export default function InventarioComplementosPage() {
           <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow, cursor: "pointer" }} onClick={() => setFilterStock(filterStock === "zero" ? "all" : "zero")}>
             <div style={{ color: C.muted, fontSize: 12 }}>Sin stock</div>
             <div style={{ color: zeroCount > 0 ? C.danger : C.success, fontSize: 26, fontWeight: 800 }}>{zeroCount}</div>
+          </div>
+          <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow }}>
+            <div style={{ color: C.muted, fontSize: 12 }}>Valor inventario</div>
+            <div style={{ color: C.primary, fontSize: 22, fontWeight: 800 }}>${money(inventoryValue)}</div>
           </div>
         </div>
 
@@ -247,7 +264,19 @@ export default function InventarioComplementosPage() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, color: C.text, fontSize: 16 }}>{p.name}</div>
                       <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
-                        Precio: ${money(p.fixed_piece_price || p.price)} por pieza
+                        Venta: ${money(p.fixed_piece_price || p.price)} / pieza
+                      </div>
+                      <div style={{ color: C.muted, fontSize: 12, marginTop: 2, cursor: "pointer" }} onClick={() => { setEditPriceId(p.id); setEditPriceVal(String(p.purchase_price || 0)); }}>
+                        {editPriceId === p.id ? (
+                          <div style={{ display: "flex", gap: 4, alignItems: "center" }} onClick={(e) => e.stopPropagation()}>
+                            <span style={{ fontWeight: 700 }}>Compra: $</span>
+                            <input value={editPriceVal} onChange={(e) => setEditPriceVal(e.target.value)} type="number" step="0.5" min="0" style={{ width: 80, padding: "4px 6px", borderRadius: 8, border: `1px solid ${C.border}`, textAlign: "center", fontSize: 13 }} autoFocus onKeyDown={(e) => e.key === "Enter" && savePurchasePrice(p.id)} />
+                            <button onClick={() => savePurchasePrice(p.id)} style={{ padding: "4px 8px", borderRadius: 8, border: "none", background: C.success, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>OK</button>
+                            <button onClick={() => setEditPriceId(null)} style={{ padding: "4px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: "white", color: C.muted, fontWeight: 700, cursor: "pointer", fontSize: 12 }}>X</button>
+                          </div>
+                        ) : (
+                          <span>Compra: ${money(p.purchase_price || 0)} / pieza <span style={{ fontSize: 10, color: C.primary }}>editar</span></span>
+                        )}
                       </div>
                     </div>
 

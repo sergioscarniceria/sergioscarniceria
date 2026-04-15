@@ -191,6 +191,7 @@ export default function InventarioBodegaPage() {
 
   const lowCount = items.filter((i) => (i.min_stock || 0) > 0 && (i.stock || 0) <= (i.min_stock || 0)).length;
   const zeroCount = items.filter((i) => (i.stock || 0) === 0).length;
+  const inventoryValue = items.reduce((acc, i) => acc + (i.stock || 0) * (i.cost || 0), 0);
 
   const inputStyle: React.CSSProperties = {
     padding: "10px 14px", borderRadius: 12, border: `1px solid ${C.border}`,
@@ -227,7 +228,7 @@ export default function InventarioBodegaPage() {
         </div>
 
         {/* Stats */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow }}>
             <div style={{ color: C.muted, fontSize: 12 }}>Total insumos</div>
             <div style={{ color: C.text, fontSize: 26, fontWeight: 800 }}>{items.length}</div>
@@ -239,6 +240,10 @@ export default function InventarioBodegaPage() {
           <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow, cursor: "pointer" }} onClick={() => setFilterStock(filterStock === "zero" ? "all" : "zero")}>
             <div style={{ color: C.muted, fontSize: 12 }}>Sin stock</div>
             <div style={{ color: zeroCount > 0 ? C.danger : C.success, fontSize: 26, fontWeight: 800 }}>{zeroCount}</div>
+          </div>
+          <div style={{ background: C.cardStrong, borderRadius: 16, padding: 14, border: `1px solid ${C.border}`, boxShadow: C.shadow }}>
+            <div style={{ color: C.muted, fontSize: 12 }}>Valor inventario</div>
+            <div style={{ color: C.primary, fontSize: 22, fontWeight: 800 }}>${money(inventoryValue)}</div>
           </div>
         </div>
 
