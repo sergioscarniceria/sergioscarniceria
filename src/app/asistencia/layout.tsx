@@ -7,9 +7,9 @@ export default function AsistenciaLayout({
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin"]}
-      title="Asistencia"
-      subtitle="Solo administradores"
+      allowedRoles={["admin", "cajera", "carnicero"]}
+      title="Checador"
+      subtitle="Ingresa tu PIN para registrar asistencia"
     >
       {children}
     </AccessGate>

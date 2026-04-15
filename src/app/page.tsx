@@ -561,14 +561,32 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Botón discreto para empleados */}
+        {/* Acceso rápido al checador + panel empleados */}
         <div style={employeeAccessStyle}>
-          <button
-            onClick={() => setShowEmployeeMenu(!showEmployeeMenu)}
-            style={employeeButtonStyle}
-          >
-            {showEmployeeMenu ? "Cerrar panel" : "Acceso empleados"}
-          </button>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link
+              href="/asistencia/checador"
+              style={{
+                display: "inline-block",
+                padding: "12px 20px",
+                borderRadius: 14,
+                background: "rgba(31, 122, 77, 0.10)",
+                color: "#1f7a4d",
+                textDecoration: "none",
+                fontWeight: 700,
+                fontSize: 14,
+                border: "1px solid rgba(31, 122, 77, 0.15)",
+              }}
+            >
+              Checador de asistencia
+            </Link>
+            <button
+              onClick={() => setShowEmployeeMenu(!showEmployeeMenu)}
+              style={employeeButtonStyle}
+            >
+              {showEmployeeMenu ? "Cerrar panel" : "Acceso empleados"}
+            </button>
+          </div>
 
           {showEmployeeMenu && (
             <div style={employeeMenuStyle}>
