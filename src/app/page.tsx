@@ -39,11 +39,6 @@ const adminOnlyModules = [
     description: "Contraseñas de acceso por rol.",
     href: "/admin/pins",
   },
-  {
-    title: "Recetario",
-    description: "Tus recetas con costo exacto por kilo, sin adivinar.",
-    href: "/admin/recetario",
-  },
 ];
 
 // Admin + cajeras
@@ -106,6 +101,11 @@ const operationModules = [
     title: "Repartidores",
     description: "En camino, entregado y sin perder detalle.",
     href: "/repartidores",
+  },
+  {
+    title: "Recetario",
+    description: "Tus recetas con costo exacto por kilo, sin adivinar.",
+    href: "/admin/recetario",
   },
   {
     title: "Producción",
