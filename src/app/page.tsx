@@ -226,7 +226,6 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
       .from("app_pins")
       .select("role")
       .eq("pin", pin.trim())
-      .eq("is_active", true)
       .single();
 
     if (appPin) {
@@ -240,7 +239,6 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
       .from("employee_codes")
       .select("name, role")
       .eq("code", pin.trim())
-      .eq("is_active", true)
       .single();
 
     if (empCode) {
