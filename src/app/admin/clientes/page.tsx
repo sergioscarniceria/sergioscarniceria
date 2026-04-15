@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { exportToExcel } from "@/lib/exportExcel";
 
 type Customer = {
   id: string;
@@ -356,6 +357,28 @@ export default function AdminClientesPage() {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                const headers = ["Nombre", "Teléfono", "Correo", "Negocio", "Dirección", "Tipo", "Crédito activo", "Límite crédito", "Días crédito", "Portal activo"];
+                const rows = customers.map((c) => [
+                  c.name,
+                  c.phone || "",
+                  c.email || "",
+                  c.business_name || "",
+                  c.address || "",
+                  c.customer_type || "menudeo",
+                  c.credit_enabled ? "Sí" : "No",
+                  c.credit_limit ?? "",
+                  c.credit_days ?? "",
+                  portalAccess[c.id] ? "Sí" : "No",
+                ]);
+                const fecha = new Date().toISOString().slice(0, 10);
+                exportToExcel(`clientes_${fecha}`, "Clientes", headers, rows as any);
+              }}
+              style={secondaryButtonStyle}
+            >
+              Exportar Excel
+            </button>
             <Link href="/" style={secondaryButtonStyle}>
               Inicio
             </Link>

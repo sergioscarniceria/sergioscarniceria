@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { exportToExcel } from "@/lib/exportExcel";
 
 type Product = {
   id: string;
@@ -257,6 +258,24 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                const headers = ["Nombre", "Categoría", "Precio/kg", "Precio/pza", "Activo", "Excluido de descuento"];
+                const rows = products.map((p) => [
+                  p.name,
+                  p.category || "",
+                  p.price ?? "",
+                  p.fixed_piece_price ?? "",
+                  p.is_active ? "Sí" : "No",
+                  p.is_excluded_from_discount ? "Sí" : "No",
+                ]);
+                const fecha = new Date().toISOString().slice(0, 10);
+                exportToExcel(`productos_${fecha}`, "Productos", headers, rows as any);
+              }}
+              style={secondaryButtonStyle}
+            >
+              Exportar Excel
+            </button>
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
