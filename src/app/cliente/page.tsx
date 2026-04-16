@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import CustomerCard from "@/components/CustomerCard";
 
 type Product = {
   id: string;
@@ -453,6 +454,7 @@ export default function ClientePage() {
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loginError, setLoginError] = useState("");
+  const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; customerId: string } | null>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [topSellerNames, setTopSellerNames] = useState<string[]>([]);
@@ -755,13 +757,15 @@ export default function ClientePage() {
 
     await supabase.from("loyalty_accounts").upsert([{ customer_id: customer.id }]);
 
-    alert("Cuenta creada. Ahora inicia sesión.");
+    // Mostrar tarjeta de cliente con sus datos
+    setNewCardData({
+      name,
+      phone,
+      email,
+      password,
+      customerId: customer.id,
+    });
 
-    setName("");
-    setPhone("");
-    setEmail("");
-    setPassword("");
-    setMode("login");
     setSaving(false);
   }
 
@@ -1544,6 +1548,23 @@ export default function ClientePage() {
 
   return (
     <div style={pageStyle}>
+      {newCardData && (
+        <CustomerCard
+          name={newCardData.name}
+          phone={newCardData.phone}
+          email={newCardData.email}
+          password={newCardData.password}
+          customerId={newCardData.customerId}
+          onClose={() => {
+            setNewCardData(null);
+            setName("");
+            setPhone("");
+            setEmail("");
+            setPassword("");
+            setMode("login");
+          }}
+        />
+      )}
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 

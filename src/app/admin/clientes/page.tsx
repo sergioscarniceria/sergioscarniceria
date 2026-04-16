@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { exportToExcel } from "@/lib/exportExcel";
+import CustomerCard from "@/components/CustomerCard";
 
 type Customer = {
   id: string;
@@ -546,7 +547,7 @@ export default function AdminClientesPage() {
                     onClick={() => setQrCustomer({ ...c })}
                     style={miniEditButtonStyle}
                   >
-                    Ver QR
+                    Ver tarjeta
                   </button>
                 </div>
 
@@ -665,59 +666,16 @@ export default function AdminClientesPage() {
           </div>
         )}
 
-        {/* Modal QR cliente */}
+        {/* Modal Tarjeta de cliente */}
         {qrCustomer && (
-          <div style={modalOverlayStyle}>
-            <div style={{ ...modalCardStyle, textAlign: "center" as const }}>
-              <h2 style={{ margin: "0 0 6px 0", color: COLORS.text }}>
-                QR de {qrCustomer.name}
-              </h2>
-              <p style={{ color: COLORS.muted, margin: "0 0 16px 0", fontSize: 13 }}>
-                Escanea este código en Cobranza para ver los tickets pendientes de este cliente
-              </p>
-              <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent("CLI-" + qrCustomer.id)}`}
-                alt="QR cliente"
-                style={{ width: 180, height: 180, margin: "0 auto 12px auto", display: "block", borderRadius: 8 }}
-              />
-              <p style={{ color: COLORS.muted, fontSize: 12, fontFamily: "monospace" }}>
-                CLI-{qrCustomer.id.slice(0, 8)}...
-              </p>
-              <button
-                onClick={() => {
-                  const printWin = window.open("", "_blank", "width=300,height=400");
-                  if (printWin) {
-                    printWin.document.write(`<html><head><title>QR ${qrCustomer.name}</title><style>body{font-family:sans-serif;text-align:center;padding:20px}h2{margin:0 0 4px}p{color:#666;font-size:13px}</style></head><body>`);
-                    printWin.document.write(`<h2>${qrCustomer.name}</h2>`);
-                    printWin.document.write(`<p>${qrCustomer.phone || ""}</p>`);
-                    printWin.document.write(`<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent("CLI-" + qrCustomer.id)}" style="width:180px;height:180px;margin:16px auto"/>`);
-                    printWin.document.write(`<p style="font-family:monospace;font-size:11px">CLI-${qrCustomer.id.slice(0, 8)}</p>`);
-                    printWin.document.write("</body></html>");
-                    printWin.document.close();
-                    printWin.onload = () => printWin.print();
-                  }
-                }}
-                style={{
-                  padding: "10px 20px", borderRadius: 12, border: "none",
-                  background: COLORS.primary, color: "white", fontWeight: 700,
-                  cursor: "pointer", fontSize: 14, marginBottom: 8,
-                }}
-              >
-                Imprimir QR
-              </button>
-              <br />
-              <button
-                onClick={() => setQrCustomer(null)}
-                style={{
-                  padding: "8px 20px", borderRadius: 12, border: `1px solid ${COLORS.border}`,
-                  background: "white", color: COLORS.text, fontWeight: 600,
-                  cursor: "pointer", fontSize: 14, marginTop: 4,
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
+          <CustomerCard
+            name={qrCustomer.name}
+            phone={qrCustomer.phone}
+            email={qrCustomer.email}
+            password={qrCustomer.portal_password}
+            customerId={qrCustomer.id}
+            onClose={() => setQrCustomer(null)}
+          />
         )}
 
         {passwordCustomer && (
