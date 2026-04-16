@@ -24,6 +24,7 @@ type Order = {
   status: string;
   notes: string;
   payment_status?: string | null;
+  payment_method?: string | null;
   butcher_name?: string | null;
   prepared_by?: string | null;
   created_at?: string;
@@ -262,6 +263,11 @@ export default function ProduccionPage() {
 
   if (order.status !== "nuevo") {
     alert("Solo se pueden eliminar pedidos nuevos.");
+    return;
+  }
+
+  if ((order as any).payment_status === "pagado") {
+    alert("No se puede eliminar un pedido que ya fue pagado.");
     return;
   }
 
@@ -598,7 +604,13 @@ function Section({
     marginTop: 8,
   }}
 >
-  pago: {o.payment_status || "pendiente"}
+  {o.payment_status === "pagado" && o.payment_method === "mercado_pago"
+    ? "💳 Pagado con tarjeta"
+    : o.payment_status === "pagado"
+    ? "✓ Pagado"
+    : o.payment_status === "credito" || o.payment_status === "credito_autorizado"
+    ? "Crédito"
+    : "Pendiente de pago"}
 </div>
                 </div>
 

@@ -19,6 +19,7 @@ type Order = {
   notes?: string | null;
   created_at?: string | null;
   payment_status?: string | null;
+  payment_method?: string | null;
   customers?: { phone?: string | null; address?: string | null } | null;
 };
 
@@ -151,7 +152,7 @@ export default function RepartidoresPage() {
       .select(`
         id, customer_name, status, delivery_status, delivery_started_at,
         delivered_at, delivery_address, delivery_driver, delivery_date,
-        delivery_notes, notes, created_at, payment_status,
+        delivery_notes, notes, created_at, payment_status, payment_method,
         customers ( phone, address )
       `)
       .order("created_at", { ascending: false });
@@ -224,6 +225,18 @@ export default function RepartidoresPage() {
       delivery_driver: null,
       delivery_notes: null,
     }).eq("id", order.id);
+    setSavingId(null);
+    await loadOrders(false);
+  }
+
+  async function markAsPaid(order: Order) {
+    if (!confirm(`¿Confirmar que el pedido de ${order.customer_name} ya fue pagado (Mercado Pago)?`)) return;
+    setSavingId(order.id);
+    const { error } = await supabase.from("orders").update({
+      payment_status: "pagado",
+      payment_method: "mercado_pago",
+    }).eq("id", order.id);
+    if (error) { alert("Error al marcar como pagado"); console.log(error); }
     setSavingId(null);
     await loadOrders(false);
   }
@@ -497,8 +510,22 @@ export default function RepartidoresPage() {
                         <Badge text={o.delivery_status || "pendiente"} color={
                           isOnWay ? C.warning : isDone ? C.success : isFailed ? C.danger : C.info
                         } />
-                        {o.payment_status && (
-                          <Badge text={`pago: ${o.payment_status}`} color={o.payment_status === "pagado" ? C.success : C.warning} />
+                        {o.payment_status === "pagado" ? (
+                          <span style={{
+                            display: "inline-block", padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 800,
+                            background: "rgba(31,122,77,0.18)", color: C.success,
+                          }}>
+                            💳 Pagado con tarjeta
+                          </span>
+                        ) : o.payment_status === "credito" || o.payment_status === "credito_autorizado" ? (
+                          <Badge text="Crédito" color={C.warning} />
+                        ) : (
+                          <span style={{
+                            display: "inline-block", padding: "4px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+                            background: "rgba(180,35,24,0.08)", color: C.danger,
+                          }}>
+                            Pendiente de pago
+                          </span>
                         )}
                       </div>
                     </div>
@@ -581,6 +608,12 @@ export default function RepartidoresPage() {
                       <button onClick={() => returnToPending(o)} disabled={savingId === o.id}
                         style={{ ...btnAction("rgba(53,92,125,0.12)", C.info), opacity: savingId === o.id ? 0.6 : 1 }}>
                         Regresar a pendiente
+                      </button>
+                    )}
+                    {o.payment_status !== "pagado" && (
+                      <button onClick={() => markAsPaid(o)} disabled={savingId === o.id}
+                        style={{ ...btnAction("rgba(31,122,77,0.12)", C.success), opacity: savingId === o.id ? 0.6 : 1 }}>
+                        💳 Marcar como pagado
                       </button>
                     )}
                   </div>

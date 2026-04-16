@@ -25,6 +25,8 @@ type Order = {
   created_at?: string;
   butcher_name?: string | null;
   delivery_date?: string | null;
+  payment_status?: string | null;
+  payment_method?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -118,6 +120,11 @@ const [changingId, setChangingId] = useState<string | null>(null);
       return;
     }
 
+    if (order.payment_status === "pagado") {
+      alert("No se puede eliminar un pedido que ya fue pagado.");
+      return;
+    }
+
     const firstConfirm = window.confirm(
       `¿Seguro que quieres eliminar el pedido de ${order.customer_name}?`
     );
@@ -154,6 +161,28 @@ const [changingId, setChangingId] = useState<string | null>(null);
       alert("No se pudo eliminar el pedido.");
       setChangingId(null);
       return;
+    }
+
+    setChangingId(null);
+    loadOrders();
+  }
+
+  async function markAsPaid(id: string) {
+    const supabase = getSupabaseClient();
+    if (!confirm("¿Confirmar que este pedido ya fue pagado (Mercado Pago)?")) return;
+
+    setChangingId(id);
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "pagado",
+        payment_method: "mercado_pago",
+      })
+      .eq("id", id);
+
+    if (error) {
+      alert("Error al marcar como pagado: " + error.message);
+      console.log(error);
     }
 
     setChangingId(null);
@@ -249,6 +278,47 @@ const [changingId, setChangingId] = useState<string | null>(null);
             >
               {o.status}
             </div>
+
+            {o.payment_status === "pagado" ? (
+              <div style={{
+                display: "inline-block",
+                padding: "6px 12px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 800,
+                background: "rgba(31,122,77,0.15)",
+                color: COLORS.success,
+                marginTop: 6,
+              }}>
+                {o.payment_method === "mercado_pago" ? "💳 Pagado con tarjeta" : "✓ Pagado"}
+              </div>
+            ) : o.payment_status === "credito" || o.payment_status === "credito_autorizado" ? (
+              <div style={{
+                display: "inline-block",
+                padding: "6px 12px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 800,
+                background: "rgba(166,106,16,0.12)",
+                color: COLORS.warning,
+                marginTop: 6,
+              }}>
+                Crédito
+              </div>
+            ) : (
+              <div style={{
+                display: "inline-block",
+                padding: "6px 12px",
+                borderRadius: 999,
+                fontSize: 12,
+                fontWeight: 700,
+                background: "rgba(180,35,24,0.08)",
+                color: COLORS.danger,
+                marginTop: 6,
+              }}>
+                Pendiente de pago
+              </div>
+            )}
           </div>
 
           <div style={totalBadgeStyle}>
@@ -320,25 +390,45 @@ const [changingId, setChangingId] = useState<string | null>(null);
           </div>
         ) : null}
                 <div style={cardActionsStyle}>
+          {o.payment_status !== "pagado" && (
+            <button
+              onClick={() => markAsPaid(o.id)}
+              disabled={changingId === o.id}
+              style={{
+                padding: "12px 14px",
+                borderRadius: 14,
+                border: "none",
+                fontWeight: 700,
+                background: "rgba(31,122,77,0.12)",
+                color: COLORS.success,
+                cursor: changingId === o.id ? "not-allowed" : "pointer",
+                opacity: changingId === o.id ? 0.6 : 1,
+              }}
+            >
+              {changingId === o.id ? "Guardando..." : "💳 Marcar como pagado"}
+            </button>
+          )}
           <button
             onClick={() => deleteOrder(o.id)}
-            disabled={changingId === o.id || o.status !== "nuevo"}
+            disabled={changingId === o.id || o.status !== "nuevo" || o.payment_status === "pagado"}
             style={{
               ...dangerButtonStyle,
               background:
-                o.status === "nuevo"
+                o.status === "nuevo" && o.payment_status !== "pagado"
                   ? "rgba(180,35,24,0.10)"
                   : "rgba(122,90,82,0.10)",
-              color: o.status === "nuevo" ? COLORS.danger : COLORS.muted,
+              color: o.status === "nuevo" && o.payment_status !== "pagado" ? COLORS.danger : COLORS.muted,
               cursor:
-                changingId === o.id || o.status !== "nuevo"
+                changingId === o.id || o.status !== "nuevo" || o.payment_status === "pagado"
                   ? "not-allowed"
                   : "pointer",
               opacity:
-                changingId === o.id || o.status !== "nuevo" ? 0.6 : 1,
+                changingId === o.id || o.status !== "nuevo" || o.payment_status === "pagado" ? 0.6 : 1,
             }}
             title={
-              o.status !== "nuevo"
+              o.payment_status === "pagado"
+                ? "No se puede eliminar un pedido pagado"
+                : o.status !== "nuevo"
                 ? "Solo se pueden eliminar pedidos nuevos"
                 : "Eliminar pedido"
             }
