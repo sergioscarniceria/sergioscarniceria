@@ -98,6 +98,7 @@ export default function AdminCxcPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState("todos");
+  const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -208,30 +209,6 @@ export default function AdminCxcPage() {
       );
     });
   }, [customerSummaries, customerFilter, search]);
-
-  const filteredOpenNotes = useMemo(() => {
-    const q = search.toLowerCase().trim();
-
-    return openNotes.filter((note) => {
-      const customerMatches =
-        customerFilter === "todos" ||
-        (customerFilter === "con_saldo" && Number(note.balance_due || 0) > 0) ||
-        (customerFilter === "vencidos" && isOverdue(note)) ||
-        (customerFilter === "credito_activo" &&
-          customers.some((c) => c.id === note.customer_id && c.credit_enabled));
-
-      if (!customerMatches) return false;
-
-      if (!q) return true;
-
-      return (
-        (note.customer_name || "").toLowerCase().includes(q) ||
-        (note.note_number || "").toLowerCase().includes(q) ||
-        (note.source_type || "").toLowerCase().includes(q) ||
-        (note.notes || "").toLowerCase().includes(q)
-      );
-    });
-  }, [openNotes, search, customerFilter, customers]);
 
   const stats = useMemo(() => {
     const totalDue = openNotes.reduce(
@@ -369,122 +346,142 @@ export default function AdminCxcPage() {
           </div>
         </div>
 
-        <div style={doubleGridStyle}>
-          <div style={panelStyle}>
-            <h2 style={panelTitleStyle}>Clientes con crédito / saldo</h2>
+        <div style={panelStyle}>
+          <h2 style={panelTitleStyle}>Clientes con crédito / saldo</h2>
 
-            {filteredCustomers.length === 0 ? (
-              <div style={emptyBoxStyle}>No hay clientes para mostrar</div>
-            ) : (
-              filteredCustomers.map((customer) => (
+          {filteredCustomers.length === 0 ? (
+            <div style={emptyBoxStyle}>No hay clientes para mostrar</div>
+          ) : (
+            filteredCustomers.map((customer) => {
+              const isExpanded = expandedCustomer === customer.customer_id;
+              const customerNotes = notes
+                .filter((n) => n.customer_id === customer.customer_id && Number(n.balance_due || 0) > 0)
+                .sort((a, b) => (a.due_date || a.note_date).localeCompare(b.due_date || b.note_date));
+
+              return (
                 <div key={customer.customer_id} style={customerRowStyle}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={customerNameStyle}>{customer.customer_name}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={customerNameStyle}>{customer.customer_name}</div>
 
-                    <div style={customerMetaWrapStyle}>
-                      <span style={metaPillStyle}>
-                        Saldo: <b>${customer.total_due.toFixed(2)}</b>
-                      </span>
+                      <div style={customerMetaWrapStyle}>
+                        <span style={metaPillStyle}>
+                          Saldo: <b>${customer.total_due.toFixed(2)}</b>
+                        </span>
 
-                      <span style={metaPillStyle}>
-                        Notas abiertas: <b>{customer.open_notes}</b>
-                      </span>
+                        <span style={metaPillStyle}>
+                          Notas abiertas: <b>{customer.open_notes}</b>
+                        </span>
 
-                      <span style={metaPillStyle}>
-                        Crédito: <b>{customer.credit_enabled ? "Sí" : "No"}</b>
-                      </span>
+                        <span style={metaPillStyle}>
+                          Crédito: <b>{customer.credit_enabled ? "Sí" : "No"}</b>
+                        </span>
 
-                      <span style={metaPillStyle}>
-                        Días crédito: <b>{customer.credit_days}</b>
-                      </span>
+                        <span style={metaPillStyle}>
+                          Días crédito: <b>{customer.credit_days}</b>
+                        </span>
 
-                      <span style={metaPillStyle}>
-                        Límite: <b>${customer.credit_limit.toFixed(2)}</b>
-                      </span>
-                    </div>
-
-                    {customer.phone ? (
-                      <div style={metaTextStyle}>Tel: {customer.phone}</div>
-                    ) : null}
-
-                    {customer.email ? (
-                      <div style={metaTextStyle}>Correo: {customer.email}</div>
-                    ) : null}
-
-                    {customer.overdue_due > 0 ? (
-                      <div style={dangerTextStyle}>
-                        Vencido: ${customer.overdue_due.toFixed(2)}
+                        <span style={metaPillStyle}>
+                          Límite: <b>${customer.credit_limit.toFixed(2)}</b>
+                        </span>
                       </div>
-                    ) : null}
+
+                      {customer.phone ? (
+                        <div style={metaTextStyle}>Tel: {customer.phone}</div>
+                      ) : null}
+
+                      {customer.email ? (
+                        <div style={metaTextStyle}>Correo: {customer.email}</div>
+                      ) : null}
+
+                      {customer.overdue_due > 0 ? (
+                        <div style={dangerTextStyle}>
+                          Vencido: ${customer.overdue_due.toFixed(2)}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {customer.open_notes > 0 && (
+                      <button
+                        onClick={() => setExpandedCustomer(isExpanded ? null : customer.customer_id)}
+                        style={{
+                          padding: "10px 16px",
+                          borderRadius: 12,
+                          border: `1px solid ${COLORS.border}`,
+                          background: isExpanded ? COLORS.primary : "white",
+                          color: isExpanded ? "white" : COLORS.text,
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          fontSize: 13,
+                          flexShrink: 0,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {isExpanded ? "Ocultar notas ▴" : `Ver ${customer.open_notes} ${customer.open_notes === 1 ? "nota" : "notas"} ▾`}
+                      </button>
+                    )}
                   </div>
+
+                  {isExpanded && customerNotes.length > 0 && (
+                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px dashed ${COLORS.border}`, display: "grid", gap: 10 }}>
+                      {customerNotes.map((note) => (
+                        <div key={note.id} style={{ ...noteCardStyle, marginBottom: 0, background: COLORS.bgSoft }}>
+                          <div style={noteHeaderStyle}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ ...customerNameStyle, fontSize: 15 }}>
+                                {note.note_number || "Sin folio"}
+                              </div>
+                              <div style={noteNumberStyle}>{note.source_type}</div>
+                            </div>
+
+                            <div
+                              style={{
+                                ...statusBadgeStyle,
+                                ...noteStatusStyle(note),
+                              }}
+                            >
+                              {Number(note.balance_due || 0) <= 0
+                                ? "pagada"
+                                : isOverdue(note)
+                                ? "vencida"
+                                : "pendiente"}
+                            </div>
+                          </div>
+
+                          <div style={noteMetaGridStyle}>
+                            <div style={metaPillStyle}>
+                              Fecha: <b>{formatDate(note.note_date)}</b>
+                            </div>
+                            <div style={metaPillStyle}>
+                              Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
+                            </div>
+                            <div style={metaPillStyle}>
+                              Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                            </div>
+                            <div style={metaPillStyle}>
+                              Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                            </div>
+                          </div>
+
+                          {Number(note.discount_amount || 0) > 0 ? (
+                            <div style={metaTextStyle}>
+                              Descuento aplicado: ${Number(note.discount_amount || 0).toFixed(2)}
+                            </div>
+                          ) : null}
+
+                          {note.notes ? (
+                            <div style={notesStyle}>
+                              <b>Notas:</b> {note.notes}
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))
-            )}
-          </div>
-
-          <div style={panelStyle}>
-            <h2 style={panelTitleStyle}>Notas abiertas</h2>
-
-            {filteredOpenNotes.length === 0 ? (
-              <div style={emptyBoxStyle}>No hay notas abiertas</div>
-            ) : (
-              filteredOpenNotes.map((note) => (
-                <div key={note.id} style={noteCardStyle}>
-                  <div style={noteHeaderStyle}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={customerNameStyle}>{note.customer_name}</div>
-                      <div style={noteNumberStyle}>
-                        {note.note_number || "Sin folio"} · {note.source_type}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        ...statusBadgeStyle,
-                        ...noteStatusStyle(note),
-                      }}
-                    >
-                      {Number(note.balance_due || 0) <= 0
-                        ? "pagada"
-                        : isOverdue(note)
-                        ? "vencida"
-                        : note.status}
-                    </div>
-                  </div>
-
-                  <div style={noteMetaGridStyle}>
-                    <div style={metaPillStyle}>
-                      Fecha: <b>{formatDate(note.note_date)}</b>
-                    </div>
-
-                    <div style={metaPillStyle}>
-                      Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
-                    </div>
-
-                    <div style={metaPillStyle}>
-                      Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
-                    </div>
-
-                    <div style={metaPillStyle}>
-                      Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
-                    </div>
-                  </div>
-
-                  {Number(note.discount_amount || 0) > 0 ? (
-                    <div style={metaTextStyle}>
-                      Descuento aplicado: ${Number(note.discount_amount || 0).toFixed(2)}
-                    </div>
-                  ) : null}
-
-                  {note.notes ? (
-                    <div style={notesStyle}>
-                      <b>Notas:</b> {note.notes}
-                    </div>
-                  ) : null}
-                </div>
-              ))
-            )}
-          </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
