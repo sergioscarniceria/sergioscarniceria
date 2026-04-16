@@ -42,6 +42,22 @@ type CashClosure = {
   total_card?: number | null;
   total_transfer?: number | null;
   total_general?: number | null;
+  // Denominaciones (Fase 1)
+  bills_1000?: number | null;
+  bills_500?: number | null;
+  bills_200?: number | null;
+  bills_100?: number | null;
+  bills_50?: number | null;
+  bills_20?: number | null;
+  coins_20?: number | null;
+  coins_10?: number | null;
+  coins_5?: number | null;
+  coins_2?: number | null;
+  coins_1?: number | null;
+  coins_050?: number | null;
+  total_expenses?: number | null;
+  initial_amount?: number | null;
+  closed_by?: string | null;
 };
 
 type CashOpening = {
@@ -188,6 +204,8 @@ export default function CajaPage() {
   // Closure form
   const [countedCash, setCountedCash] = useState("");
   const [closureNotes, setClosureNotes] = useState("");
+  const [closureDenoms, setClosureDenoms] = useState<Record<string, string>>({});
+  const [useDenoms, setUseDenoms] = useState(true); // modo conteo por denominaciones (default)
 
   // Opening form
   const [denomDrafts, setDenomDrafts] = useState<Record<string, string>>({});
@@ -240,6 +258,15 @@ export default function CajaPage() {
     if (c) {
       setCountedCash(String(Number(c.counted_cash || 0)));
       setClosureNotes(c.notes || "");
+      // Precargar denominaciones si existen
+      const drafts: Record<string, string> = {};
+      let anyDenom = false;
+      for (const d of DENOMINATIONS) {
+        const val = Number((c as any)[d.key] || 0);
+        if (val > 0) { drafts[d.key] = String(val); anyDenom = true; }
+      }
+      setClosureDenoms(drafts);
+      setUseDenoms(anyDenom || true);
     }
   }, [today]);
 
@@ -488,6 +515,22 @@ export default function CajaPage() {
     return total;
   }, [denomDrafts]);
 
+  // ─── Closure denominations total ───────────────────────────
+  const closureDenomTotal = useMemo(() => {
+    let total = 0;
+    for (const d of DENOMINATIONS) {
+      total += Number(closureDenoms[d.key] || 0) * d.value;
+    }
+    return total;
+  }, [closureDenoms]);
+
+  // Si está activo el modo denominaciones, countedCash se sincroniza automáticamente
+  useEffect(() => {
+    if (useDenoms) {
+      setCountedCash(String(Number(closureDenomTotal.toFixed(2))));
+    }
+  }, [closureDenomTotal, useDenoms]);
+
   // ─── Actions ───────────────────────────────────────────────
   async function saveOpening() {
     setSaving(true);
@@ -551,7 +594,12 @@ export default function CajaPage() {
     }
     setSaving(true);
 
-    const payload = {
+    const closedBy = (() => {
+      try { return sessionStorage.getItem("pin_name") || sessionStorage.getItem("pin_role") || null; }
+      catch { return null; }
+    })();
+
+    const payload: any = {
       closure_date: today,
       expected_cash: Number(stats.efectivoEsperado.toFixed(2)),
       counted_cash: Number(counted.toFixed(2)),
@@ -562,14 +610,21 @@ export default function CajaPage() {
       total_card: Number(stats.totalTarjeta.toFixed(2)),
       total_transfer: Number(stats.totalTransferencia.toFixed(2)),
       total_general: Number(stats.totalGeneral.toFixed(2)),
+      total_expenses: Number(stats.totalGastos.toFixed(2)),
+      initial_amount: Number(stats.fondoInicial.toFixed(2)),
+      closed_by: closedBy,
     };
+    // Denominaciones del cierre (si el usuario las capturó)
+    for (const d of DENOMINATIONS) {
+      payload[d.key] = Number(closureDenoms[d.key] || 0);
+    }
 
     if (todayClosure?.id) {
       const { error } = await supabase.from("cash_closures").update(payload).eq("id", todayClosure.id);
-      if (error) { alert("Error al actualizar cierre"); setSaving(false); return; }
+      if (error) { alert("Error al actualizar cierre"); console.log(error); setSaving(false); return; }
     } else {
       const { error } = await supabase.from("cash_closures").insert([payload]);
-      if (error) { alert("Error al guardar cierre"); setSaving(false); return; }
+      if (error) { alert("Error al guardar cierre"); console.log(error); setSaving(false); return; }
     }
 
     alert("Cierre de caja guardado");
@@ -632,6 +687,16 @@ export default function CajaPage() {
 
   return (
     <div style={pageStyle}>
+      {/* Estilos de impresión — oculta todo menos #ticket-cierre-print */}
+      <style jsx global>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #ticket-cierre-print, #ticket-cierre-print * { visibility: visible !important; }
+          #ticket-cierre-print { position: absolute !important; left: 0; top: 0; width: 100%; padding: 20px; }
+          @page { size: 80mm auto; margin: 6mm; }
+        }
+      `}</style>
+
       <div style={glowTL} />
       <div style={glowTR} />
 
@@ -696,6 +761,49 @@ export default function CajaPage() {
         {/* ═══ TAB: RESUMEN ═══ */}
         {tab === "resumen" && (
           <>
+            {/* Arqueo en vivo — solo si el rango es hoy */}
+            {dateFrom === today && dateTo === today && (
+              <div style={{
+                marginBottom: 18,
+                padding: 18,
+                borderRadius: 22,
+                background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
+                boxShadow: "0 10px 24px rgba(91, 25, 15, 0.18)",
+                color: "white",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 13, opacity: 0.85 }}>⚡ Arqueo en vivo</div>
+                    <div style={{ fontSize: 14, fontWeight: 700 }}>Efectivo que debe haber en caja ahora</div>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.75 }}>
+                    {todayClosure ? `Cierre guardado · diferencia ${Number(todayClosure.difference || 0) >= 0 ? "+" : ""}$${money(todayClosure.difference)}` : "Sin cierre aún"}
+                  </div>
+                </div>
+                <div style={{ fontSize: 46, fontWeight: 800, lineHeight: 1, marginBottom: 12 }}>
+                  ${money(stats.efectivoEsperado)}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, fontSize: 13 }}>
+                  <div style={{ background: "rgba(255,255,255,0.15)", padding: "8px 12px", borderRadius: 12 }}>
+                    <div style={{ opacity: 0.75, fontSize: 11 }}>Fondo inicial</div>
+                    <div style={{ fontWeight: 800 }}>${money(stats.fondoInicial)}</div>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.15)", padding: "8px 12px", borderRadius: 12 }}>
+                    <div style={{ opacity: 0.75, fontSize: 11 }}>+ Ingresos efectivo</div>
+                    <div style={{ fontWeight: 800 }}>${money(stats.totalEfectivoIngreso)}</div>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.15)", padding: "8px 12px", borderRadius: 12 }}>
+                    <div style={{ opacity: 0.75, fontSize: 11 }}>− Gastos</div>
+                    <div style={{ fontWeight: 800 }}>−${money(stats.totalGastos)}</div>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.22)", padding: "8px 12px", borderRadius: 12 }}>
+                    <div style={{ opacity: 0.75, fontSize: 11 }}>{stats.ticketCount} ticket{stats.ticketCount === 1 ? "" : "s"}</div>
+                    <div style={{ fontWeight: 800 }}>prom. ${money(stats.ticketPromedio)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Hero cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 18 }}>
               <HeroCard label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} meta={todayOpening ? "Registrado hoy" : "Sin apertura"} accent />
@@ -913,7 +1021,7 @@ export default function CajaPage() {
 
         {/* ═══ TAB: CIERRE ═══ */}
         {tab === "cierre" && (
-          <Panel title="Cierre de caja" subtitle="Captura lo contado físicamente y compara contra sistema">
+          <Panel title="Cierre de caja" subtitle="Cuenta billete por billete y compara contra sistema">
             <div style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 18, padding: 14, display: "grid", gap: 10, marginBottom: 14 }}>
               <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
               <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
@@ -930,19 +1038,91 @@ export default function CajaPage() {
               />
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 14 }}>
-              <div>
-                <div style={fieldLabel}>Efectivo contado</div>
-                <input type="number" step="0.01" min="0" value={countedCash} onChange={(e) => setCountedCash(e.target.value)} style={inputSt} placeholder="0.00" />
-              </div>
+            {/* Selector de modo */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button onClick={() => setUseDenoms(true)} style={{
+                flex: 1, padding: "10px 14px", borderRadius: 12,
+                border: `1px solid ${useDenoms ? C.primary : C.border}`,
+                background: useDenoms ? C.primary : "white",
+                color: useDenoms ? "white" : C.text,
+                fontWeight: 700, fontSize: 14, cursor: "pointer",
+              }}>Contar billetes y monedas</button>
+              <button onClick={() => setUseDenoms(false)} style={{
+                flex: 1, padding: "10px 14px", borderRadius: 12,
+                border: `1px solid ${!useDenoms ? C.primary : C.border}`,
+                background: !useDenoms ? C.primary : "white",
+                color: !useDenoms ? "white" : C.text,
+                fontWeight: 700, fontSize: 14, cursor: "pointer",
+              }}>Capturar total manual</button>
             </div>
+
+            {useDenoms ? (
+              <>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 4 }}>Billetes</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                    {DENOMINATIONS.filter((d) => d.key.startsWith("bills")).map((d) => (
+                      <div key={d.key} style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12 }}>
+                        <div style={{ color: C.muted, fontSize: 12, marginBottom: 4 }}>{d.label}</div>
+                        <input
+                          type="number" min="0"
+                          value={closureDenoms[d.key] || ""}
+                          onChange={(e) => setClosureDenoms((p) => ({ ...p, [d.key]: e.target.value }))}
+                          placeholder="0"
+                          style={{ ...inputSt, padding: 10, fontSize: 16, fontWeight: 700 }}
+                        />
+                        <div style={{ color: C.text, fontSize: 12, marginTop: 4, fontWeight: 700 }}>
+                          = ${money(Number(closureDenoms[d.key] || 0) * d.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 4 }}>Monedas</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                    {DENOMINATIONS.filter((d) => d.key.startsWith("coins")).map((d) => (
+                      <div key={d.key} style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12 }}>
+                        <div style={{ color: C.muted, fontSize: 12, marginBottom: 4 }}>{d.label}</div>
+                        <input
+                          type="number" min="0"
+                          value={closureDenoms[d.key] || ""}
+                          onChange={(e) => setClosureDenoms((p) => ({ ...p, [d.key]: e.target.value }))}
+                          placeholder="0"
+                          style={{ ...inputSt, padding: 10, fontSize: 16, fontWeight: 700 }}
+                        />
+                        <div style={{ color: C.text, fontSize: 12, marginTop: 4, fontWeight: 700 }}>
+                          = ${money(Number(closureDenoms[d.key] || 0) * d.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: 16, borderRadius: 18, background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, marginBottom: 14 }}>
+                  <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Total contado</div>
+                  <div style={{ color: "white", fontSize: 34, fontWeight: 800 }}>${money(closureDenomTotal)}</div>
+                </div>
+              </>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, marginBottom: 14 }}>
+                <div>
+                  <div style={fieldLabel}>Efectivo contado</div>
+                  <input type="number" step="0.01" min="0" value={countedCash} onChange={(e) => setCountedCash(e.target.value)} style={inputSt} placeholder="0.00" />
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom: 14 }}>
               <div style={fieldLabel}>Notas del cierre</div>
               <textarea value={closureNotes} onChange={(e) => setClosureNotes(e.target.value)} style={textareaSt} placeholder="Observaciones, faltantes, sobrantes..." />
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
+              {todayClosure && (
+                <button onClick={() => window.print()} style={btnSec}>
+                  🖨️ Imprimir ticket de cierre
+                </button>
+              )}
               <button onClick={saveClosure} disabled={saving} style={btnPri}>
                 {saving ? "Guardando..." : todayClosure ? "Actualizar cierre" : "Guardar cierre"}
               </button>
@@ -952,7 +1132,7 @@ export default function CajaPage() {
               <div style={{ marginTop: 16, padding: 14, borderRadius: 18, background: "rgba(31,122,77,0.10)", border: `1px solid ${C.border}` }}>
                 <div style={{ fontWeight: 800, color: C.text, marginBottom: 8 }}>Último cierre guardado hoy</div>
                 <div style={{ color: C.muted, fontSize: 14 }}>Esperado: <b>${money(todayClosure.expected_cash)}</b> — Contado: <b>${money(todayClosure.counted_cash)}</b> — Diferencia: <b>${money(todayClosure.difference)}</b></div>
-                <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Guardado: {fmtDateTime(todayClosure.created_at)}</div>
+                <div style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Guardado: {fmtDateTime(todayClosure.created_at)}{todayClosure.closed_by ? ` · Por ${todayClosure.closed_by}` : ""}</div>
               </div>
             )}
           </Panel>
@@ -1155,6 +1335,95 @@ export default function CajaPage() {
               <button onClick={() => setCancelMovement(null)} style={{ ...btnSec, flex: 1 }}>
                 Volver
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ TICKET DE CIERRE IMPRIMIBLE ═══ */}
+      {todayClosure && (
+        <div id="ticket-cierre-print" style={{ display: "none" }}>
+          <div style={{ fontFamily: "monospace", color: "#000", fontSize: 12, lineHeight: 1.4 }}>
+            <div style={{ textAlign: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>SERGIO&apos;S CARNICERÍA</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>CIERRE DE CAJA</div>
+              <div style={{ fontSize: 11 }}>{fmtDate(todayClosure.closure_date)}</div>
+              <div style={{ fontSize: 10 }}>Impreso: {new Date().toLocaleString("es-MX")}</div>
+              {todayClosure.closed_by && <div style={{ fontSize: 10 }}>Cerró: {todayClosure.closed_by}</div>}
+            </div>
+
+            <div style={{ borderTop: "1px dashed #000", borderBottom: "1px dashed #000", padding: "6px 0", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Fondo inicial:</span><span>${money(todayClosure.initial_amount ?? stats.fondoInicial)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Ventas:</span><span>${money(todayClosure.total_sales)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Cobros CxC:</span><span>${money(todayClosure.total_cxc)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Gastos:</span><span>-${money(todayClosure.total_expenses ?? stats.totalGastos)}</span>
+              </div>
+            </div>
+
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>POR MÉTODO DE PAGO:</div>
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Efectivo (ventas+CxC):</span><span>${money(stats.totalEfectivoIngreso)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Tarjeta:</span><span>${money(todayClosure.total_card)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Transferencia:</span><span>${money(todayClosure.total_transfer)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "1px dashed #000", paddingTop: 3, marginTop: 3 }}>
+                <span>TOTAL GENERAL:</span><span>${money(todayClosure.total_general)}</span>
+              </div>
+            </div>
+
+            {/* Denominaciones */}
+            {DENOMINATIONS.some((d) => Number((todayClosure as any)[d.key] || 0) > 0) && (
+              <>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>DESGLOSE EFECTIVO CONTADO:</div>
+                <div style={{ marginBottom: 8 }}>
+                  {DENOMINATIONS.map((d) => {
+                    const cant = Number((todayClosure as any)[d.key] || 0);
+                    if (cant === 0) return null;
+                    return (
+                      <div key={d.key} style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>{d.label} × {cant}</span><span>${money(cant * d.value)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div style={{ borderTop: "2px solid #000", paddingTop: 6, marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                <span>Efectivo esperado:</span><span>${money(todayClosure.expected_cash)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
+                <span>Efectivo contado:</span><span>${money(todayClosure.counted_cash)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 14, marginTop: 4 }}>
+                <span>DIFERENCIA:</span><span>{Number(todayClosure.difference || 0) >= 0 ? "+" : ""}${money(todayClosure.difference)}</span>
+              </div>
+            </div>
+
+            {todayClosure.notes && (
+              <div style={{ borderTop: "1px dashed #000", paddingTop: 6, marginBottom: 6, fontStyle: "italic", fontSize: 11 }}>
+                Notas: {todayClosure.notes}
+              </div>
+            )}
+
+            <div style={{ textAlign: "center", marginTop: 14, fontSize: 10 }}>
+              _______________________<br />
+              Firma cajera<br /><br />
+              _______________________<br />
+              Firma supervisor
             </div>
           </div>
         </div>
