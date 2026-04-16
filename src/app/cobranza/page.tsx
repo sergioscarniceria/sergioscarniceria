@@ -4,7 +4,7 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import QrScanner from "@/components/QrScanner";
-import { smartPrintTicket, openCashDrawer, type TicketData } from "@/lib/printer";
+import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 
 type TabMode = "ticket" | "manual";
@@ -638,6 +638,31 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
       return;
     }
 
+    // Imprimir 2 tickets con pagaré integrado
+    const creditTicket: TicketData = {
+      folio: ticketFolio(selectedTicket.id),
+      customerName: customer.name,
+      attendant: null,
+      cashier: null,
+      items: (selectedTicket.order_items || []).map((item) => ({
+        product: item.product,
+        kilos: item.kilos,
+        price: item.price,
+        quantity: null,
+        sale_type: item.sale_type,
+        is_fixed_price_piece: false,
+        prepared_kilos: item.prepared_kilos,
+      })),
+      subtotal: total,
+      total: total,
+      paymentMethod: "credito",
+      qrData: selectedTicket.id,
+      type: "cobro",
+      dueDate: dueDate,
+      creditDays: Number(customer.credit_days || 7),
+    };
+    smartPrintCreditTicket(creditTicket);
+
     alert("Ticket enviado a crédito");
     setSelectedTicket(null);
     await loadData();
@@ -843,6 +868,31 @@ async function saveManualCredit() {
     setSaving(false);
     return;
   }
+
+  // Imprimir 2 tickets con pagaré integrado
+  const creditTicket: TicketData = {
+    folio: ticketFolio(orderData.id),
+    customerName: cleanCustomerName,
+    attendant: null,
+    cashier: cashierName || null,
+    items: manualLines.map((ln) => ({
+      product: ln.product.trim(),
+      kilos: Number(ln.kilos || 0),
+      price: Number(ln.price || 0),
+      quantity: null,
+      sale_type: "kg",
+      is_fixed_price_piece: false,
+      prepared_kilos: null,
+    })),
+    subtotal: manualTotal,
+    total: manualTotal,
+    paymentMethod: "credito",
+    qrData: orderData.id,
+    type: "cobro",
+    dueDate: dueDate,
+    creditDays: Number(selected.credit_days || 7),
+  };
+  smartPrintCreditTicket(creditTicket);
 
   alert("Venta mandada a crédito correctamente");
   clearManualSale();

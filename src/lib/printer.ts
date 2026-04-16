@@ -240,6 +240,9 @@ export type TicketData = {
   qrData?: string;
   notes?: string | null;
   type?: "venta" | "pedido" | "cobro";
+  // Crédito / Pagaré
+  dueDate?: string | null;
+  creditDays?: number | null;
 };
 
 function money(n: number): string {
@@ -596,4 +599,300 @@ export async function smartPrintTicket(ticket: TicketData): Promise<void> {
 
   // Si no hay impresora conectada o falló, usar browser print
   browserPrintTicket(ticket);
+}
+
+// ============ Ticket de Crédito con Pagaré integrado ============
+
+/**
+ * Construye bytes ESC/POS para un ticket de crédito.
+ * Incluye el ticket normal + sección de pagaré con líneas de firma.
+ * Se imprime 2 veces: una para el negocio, una para el cliente.
+ */
+function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIENTE"): number[] {
+  const b: number[] = [];
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+
+  // Initialize
+  b.push(...CMD.INIT);
+
+  // ── Encabezado ──
+  b.push(...CMD.ALIGN_CENTER);
+  b.push(...CMD.DOUBLE_SIZE);
+  b.push(...line("SERGIO'S"));
+  b.push(...CMD.NORMAL_SIZE);
+  b.push(...CMD.BOLD_ON);
+  b.push(...line("CARNICERIA"));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...line(""));
+
+  // Copia
+  b.push(...CMD.BOLD_ON);
+  b.push(...line(`--- CREDITO (${copy}) ---`));
+  b.push(...CMD.BOLD_OFF);
+
+  // Folio + fecha
+  b.push(...CMD.ALIGN_LEFT);
+  b.push(...separatorLine("="));
+  b.push(...CMD.BOLD_ON);
+  b.push(...twoColumns("TICKET:", ticket.folio));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...twoColumns("Fecha:", `${dateStr} ${timeStr}`));
+
+  if (ticket.customerName) {
+    b.push(...twoColumns("Cliente:", ticket.customerName));
+  }
+  if (ticket.attendant) {
+    b.push(...twoColumns("Atendio:", ticket.attendant));
+  }
+  if (ticket.cashier) {
+    b.push(...twoColumns("Cajera:", ticket.cashier));
+  }
+
+  b.push(...separatorLine("="));
+  b.push(...line(""));
+
+  // ── Productos ──
+  b.push(...CMD.BOLD_ON);
+  b.push(...twoColumns("PRODUCTO", "IMPORTE"));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...separatorLine("-"));
+
+  for (const item of ticket.items) {
+    const total = itemTotal(item);
+    b.push(...line(item.product));
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      const qty = Number(item.quantity) || 0;
+      const price = Number(item.price) || 0;
+      b.push(...twoColumns(`  ${qty} pza x $${money(price)}`, `$${money(total)}`));
+    } else {
+      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      const price = Number(item.price) || 0;
+      b.push(...twoColumns(`  ${kg.toFixed(3)}kg x $${money(price)}`, `$${money(total)}`));
+    }
+  }
+
+  b.push(...separatorLine("-"));
+
+  // ── Total ──
+  b.push(...CMD.BOLD_ON);
+  b.push(...CMD.TALL_SIZE);
+  b.push(...twoColumns("TOTAL:", `$${money(ticket.total)}`));
+  b.push(...CMD.NORMAL_SIZE);
+  b.push(...CMD.BOLD_OFF);
+  b.push(...twoColumns("Metodo:", "CREDITO"));
+
+  if (ticket.dueDate) {
+    b.push(...twoColumns("Vence:", ticket.dueDate));
+  }
+
+  b.push(...line(""));
+
+  // ── PAGARÉ ──
+  b.push(...separatorLine("="));
+  b.push(...CMD.ALIGN_CENTER);
+  b.push(...CMD.BOLD_ON);
+  b.push(...CMD.WIDE_SIZE);
+  b.push(...line("PAGARE"));
+  b.push(...CMD.NORMAL_SIZE);
+  b.push(...CMD.BOLD_OFF);
+  b.push(...separatorLine("="));
+  b.push(...CMD.ALIGN_LEFT);
+  b.push(...line(""));
+  b.push(...line(`Debo y pagare incondicionalmente`));
+  b.push(...line(`a la orden de:`));
+  b.push(...line(""));
+  b.push(...CMD.BOLD_ON);
+  b.push(...line("SERGIO VEGA MARIN"));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...line(""));
+  b.push(...line(`La cantidad de:`));
+  b.push(...CMD.BOLD_ON);
+  b.push(...CMD.TALL_SIZE);
+  b.push(...line(`$${money(ticket.total)} MXN`));
+  b.push(...CMD.NORMAL_SIZE);
+  b.push(...CMD.BOLD_OFF);
+  b.push(...line(""));
+  b.push(...line(`Por concepto de: Compra de productos`));
+  b.push(...line(`carnicos a credito.`));
+  b.push(...line(""));
+  b.push(...twoColumns("Fecha:", `${dateStr}`));
+  if (ticket.dueDate) {
+    b.push(...twoColumns("Fecha de pago:", ticket.dueDate));
+  }
+  b.push(...line(""));
+  b.push(...separatorLine("-"));
+  b.push(...line(""));
+  b.push(...CMD.ALIGN_CENTER);
+  b.push(...line(""));
+  b.push(...line("________________________________"));
+  b.push(...CMD.BOLD_ON);
+  b.push(...line("Firma del deudor"));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...line(""));
+  b.push(...line(`Nombre: ${ticket.customerName || "___________________"}`));
+  b.push(...line(""));
+  b.push(...CMD.ALIGN_LEFT);
+  b.push(...separatorLine("="));
+
+  // QR
+  if (ticket.qrData) {
+    b.push(...CMD.ALIGN_CENTER);
+    b.push(...qrCode(ticket.qrData, 4));
+    b.push(...line(""));
+    b.push(...CMD.ALIGN_LEFT);
+  }
+
+  // Footer
+  b.push(...CMD.ALIGN_CENTER);
+  b.push(...line("sergioscarniceria.com"));
+  b.push(...line(`Copia: ${copy}`));
+  b.push(...CMD.ALIGN_LEFT);
+
+  // Feed + Cut
+  b.push(...CMD.FEED_LINES(4));
+  b.push(...CMD.CUT_PAPER);
+
+  return b;
+}
+
+/**
+ * Imprime 2 tickets de crédito con pagaré: uno para el negocio y otro para el cliente.
+ * ESC/POS version.
+ */
+async function printCreditTicketESCPOS(ticket: TicketData): Promise<boolean> {
+  const printer = getPrinter();
+  if (!printer.isConnected) {
+    const connected = await printer.connect();
+    if (!connected) return false;
+  }
+
+  // Copia 1: NEGOCIO
+  const bytes1 = buildCreditTicketWithPagare(ticket, "NEGOCIO");
+  const ok1 = await printer.sendBytes(bytes1);
+  if (!ok1) return false;
+
+  // Pequeña pausa entre copias
+  await new Promise((r) => setTimeout(r, 500));
+
+  // Copia 2: CLIENTE
+  const bytes2 = buildCreditTicketWithPagare(ticket, "CLIENTE");
+  return printer.sendBytes(bytes2);
+}
+
+/**
+ * Fallback browser: imprime ticket de crédito con pagaré integrado (2 copias en una página).
+ */
+function browserPrintCreditTicket(ticket: TicketData): void {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("es-MX");
+  const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+
+  let itemsHtml = "";
+  for (const item of ticket.items) {
+    const total = itemTotal(item);
+    let detail = "";
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      detail = `${item.quantity} pza x $${money(Number(item.price) || 0)}`;
+    } else {
+      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      detail = `${kg.toFixed(3)}kg x $${money(Number(item.price) || 0)}`;
+    }
+    itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;
+  }
+
+  const qrHtml = ticket.qrData
+    ? `<div style="text-align:center;margin:6px 0"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(ticket.qrData)}" style="width:100px;height:100px"/></div>`
+    : "";
+
+  function copyBlock(label: string) {
+    return `
+      <div class="copy">
+        <h1>SERGIO'S CARNICERIA</h1>
+        <div class="credit-label">CREDITO (${label})</div>
+        <div class="sep"></div>
+        <table>
+          <tr><td><strong>${ticket.folio}</strong></td><td style="text-align:right">${dateStr} ${timeStr}</td></tr>
+          ${ticket.customerName ? `<tr><td colspan="2">Cliente: ${ticket.customerName}</td></tr>` : ""}
+          ${ticket.attendant ? `<tr><td colspan="2">Atendio: ${ticket.attendant}</td></tr>` : ""}
+        </table>
+        <div class="sep"></div>
+        <table>${itemsHtml}</table>
+        <div class="sep"></div>
+        <table>
+          <tr class="total"><td>TOTAL</td><td style="text-align:right">$${money(ticket.total)}</td></tr>
+          <tr><td>Metodo</td><td style="text-align:right">CREDITO</td></tr>
+          ${ticket.dueDate ? `<tr><td>Vence</td><td style="text-align:right">${ticket.dueDate}</td></tr>` : ""}
+        </table>
+
+        <div class="sep-double"></div>
+        <div class="pagare-title">PAGARE</div>
+        <div class="sep-double"></div>
+        <p>Debo y pagaré incondicionalmente a la orden de:</p>
+        <p class="acreedor">SERGIO VEGA MARIN</p>
+        <p>La cantidad de:</p>
+        <p class="monto">$${money(ticket.total)} MXN</p>
+        <p>Por concepto de: Compra de productos cárnicos a crédito.</p>
+        <p>Fecha: ${dateStr}${ticket.dueDate ? ` &nbsp;|&nbsp; Fecha de pago: ${ticket.dueDate}` : ""}</p>
+        <div class="firma">
+          <div class="firma-linea"></div>
+          <strong>Firma del deudor</strong><br>
+          Nombre: ${ticket.customerName || "___________________"}
+        </div>
+        ${qrHtml}
+        <div class="sep"></div>
+        <div class="footer">sergioscarniceria.com &bull; Copia: ${label}</div>
+      </div>
+    `;
+  }
+
+  const html = `<!DOCTYPE html><html><head><title>Credito ${ticket.folio}</title>
+<style>
+  @page{size:80mm auto;margin:0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Courier New',monospace;font-size:11px;width:80mm;padding:3mm}
+  .copy{page-break-after:always;padding-bottom:4mm}
+  .copy:last-child{page-break-after:auto}
+  h1{font-size:16px;text-align:center;margin-bottom:4px}
+  .credit-label{text-align:center;font-weight:700;font-size:13px;margin:4px 0;padding:4px;background:#f0f0f0;border-radius:4px}
+  .sep{border-top:1px dashed #000;margin:5px 0}
+  .sep-double{border-top:2px solid #000;margin:6px 0}
+  table{width:100%;border-collapse:collapse}
+  td{padding:2px 0;vertical-align:top}
+  .total{font-size:15px;font-weight:700}
+  .pagare-title{text-align:center;font-size:16px;font-weight:900;letter-spacing:3px}
+  .acreedor{font-weight:700;font-size:13px;margin:4px 0}
+  .monto{font-size:16px;font-weight:900;margin:4px 0}
+  .firma{text-align:center;margin:16px 0 8px}
+  .firma-linea{width:70%;margin:0 auto 4px;border-bottom:1px solid #000;height:30px}
+  .footer{text-align:center;font-size:9px;margin-top:6px}
+  p{margin:3px 0}
+  small{color:#555}
+</style></head><body>
+  ${copyBlock("NEGOCIO")}
+  ${copyBlock("CLIENTE")}
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=350,height=800");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    setTimeout(() => win.print(), 400);
+  }
+}
+
+/**
+ * Smart print para tickets de crédito con pagaré.
+ * Imprime 2 copias (negocio + cliente), cada una con pagaré integrado.
+ */
+export async function smartPrintCreditTicket(ticket: TicketData): Promise<void> {
+  const printer = getPrinter();
+
+  if (printer.isConnected) {
+    const success = await printCreditTicketESCPOS(ticket);
+    if (success) return;
+  }
+
+  browserPrintCreditTicket(ticket);
 }
