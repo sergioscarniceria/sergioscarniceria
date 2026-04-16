@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { smartPrintTicket, type TicketData } from "@/lib/printer";
+import PrinterButton from "@/components/PrinterButton";
 
 type Item = {
   id: string;
@@ -556,6 +558,7 @@ const paidTickets = useMemo(() => {
 
   return (
     <div style={pageStyle}>
+      <PrinterButton />
       <div style={shellStyle}>
         <div style={headerStyle}>
           <div>
@@ -1045,40 +1048,24 @@ const paidTickets = useMemo(() => {
               <button
                 onClick={() => {
                   const d = printTicketData;
-                  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(d.orderId)}`;
-                  const itemsHtml = d.items.map((item) => {
-                    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-                      return `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;border-bottom:1px dashed #ddd"><span>${item.product} x${item.quantity}</span><span>$${money(Number(item.quantity || 0) * Number(item.price || 0))}</span></div>`;
-                    }
-                    return `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;border-bottom:1px dashed #ddd"><span>${item.product} ${Number(item.kilos).toFixed(3)}kg</span><span>$${money(Number(item.kilos || 0) * Number(item.price || 0))}</span></div>`;
-                  }).join("");
-
-                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ticket ${d.folio}</title><style>@page{margin:0;size:80mm auto}body{font-family:Arial,sans-serif;width:72mm;margin:0 auto;padding:4mm 0;color:#222}*{box-sizing:border-box}</style></head><body>
-                    <div style="text-align:center">
-                      <img src="${window.location.origin}/logo.png" style="width:60px;height:60px;border-radius:10px" />
-                      <div style="font-weight:800;font-size:15px;margin:6px 0 2px">SERGIO'S CARNICERÍA</div>
-                      <div style="font-size:11px;color:#888">sergioscarniceria.com</div>
-                      <hr style="border:none;border-top:1px solid #ccc;margin:8px 0">
-                      <div style="font-size:20px;font-weight:800;color:#7b2218">${d.folio}</div>
-                      <div style="font-size:12px;color:#666;margin:4px 0">${d.customerName} — ${new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</div>
-                    </div>
-                    <div style="margin:8px 0">${itemsHtml}</div>
-                    <div style="text-align:right;font-size:16px;font-weight:800;margin:8px 0;color:#7b2218">TOTAL: $${money(d.total)}</div>
-                    <div style="text-align:center;margin:10px 0">
-                      <img src="${qrUrl}" style="width:140px;height:140px" />
-                      <div style="font-size:10px;color:#999;margin-top:4px">Presenta este código en caja</div>
-                    </div>
-                    <div style="text-align:center;font-size:11px;color:#aaa;margin-top:8px">¡Gracias por su preferencia!</div>
-                  </body></html>`;
-
-                  const win = window.open("", "_blank", "width=400,height=600");
-                  if (win) {
-                    win.document.write(html);
-                    win.document.close();
-                    win.onload = () => {
-                      setTimeout(() => win.print(), 300);
-                    };
-                  }
+                  const ticketForPrint: TicketData = {
+                    folio: d.folio,
+                    customerName: d.customerName,
+                    attendant: (d as any).attendant || attendant || null,
+                    items: d.items.map((item: any) => ({
+                      product: item.product,
+                      kilos: item.kilos,
+                      price: item.price,
+                      quantity: item.quantity,
+                      sale_type: item.sale_type,
+                      is_fixed_price_piece: item.is_fixed_price_piece,
+                    })),
+                    subtotal: d.total,
+                    total: d.total,
+                    qrData: d.orderId,
+                    type: "venta",
+                  };
+                  smartPrintTicket(ticketForPrint);
                 }}
                 style={{
                   flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
+import { printCashCut, type CashCutData } from "@/lib/printer";
+import PrinterButton from "@/components/PrinterButton";
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {

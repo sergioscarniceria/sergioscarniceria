@@ -4,6 +4,8 @@ import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import QrScanner from "@/components/QrScanner";
+import { smartPrintTicket, openCashDrawer, type TicketData } from "@/lib/printer";
+import PrinterButton from "@/components/PrinterButton";
 
 type TabMode = "ticket" | "manual";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -987,6 +989,7 @@ if (cashError) {
 
   return (
     <div style={pageStyle}>
+      <PrinterButton />
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 
@@ -1344,31 +1347,30 @@ if (cashError) {
                           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
                             <button
                               onClick={() => {
-                                const el = document.getElementById("printable-ticket");
-                                if (el) {
-                                  const win = window.open("", "_blank", "width=400,height=600");
-                                  if (win) {
-                                    // Reemplazar src relativo por absoluto para el logo
-                                    let html = el.innerHTML;
-                                    html = html.replace(
-                                      /src="\/logo\.png"/g,
-                                      `src="${window.location.origin}/logo.png"`
-                                    );
-                                    win.document.write(`<html><head><title>Ticket</title><style>
-                                      body { font-family: monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 10px; }
-                                      .center { text-align: center; }
-                                      img { display: block; margin: 0 auto 4px auto; }
-                                      .line { border-top: 1px dashed #000; margin: 6px 0; }
-                                      .row { display: flex; justify-content: space-between; margin: 2px 0; }
-                                      @media print { button { display: none; } }
-                                    </style></head><body>`);
-                                    win.document.write(html);
-                                    win.document.write("</body></html>");
-                                    win.document.close();
-                                    // Esperar a que cargue el logo antes de imprimir
-                                    win.onload = () => win.print();
-                                  }
-                                }
+                                if (!selectedTicket) return;
+                                const disc = calcDiscount(ticketTotal(selectedTicket));
+                                const ticketForPrint: TicketData = {
+                                  folio: ticketFolio(selectedTicket.id),
+                                  customerName: selectedTicket.customer_name,
+                                  cashier: cashierName || null,
+                                  items: (selectedTicket.order_items || []).map((item: any) => ({
+                                    product: item.product,
+                                    kilos: item.kilos,
+                                    price: item.price,
+                                    quantity: item.quantity,
+                                    sale_type: item.sale_type,
+                                    is_fixed_price_piece: item.is_fixed_price_piece,
+                                    prepared_kilos: item.prepared_kilos,
+                                  })),
+                                  subtotal: ticketTotal(selectedTicket),
+                                  discount: disc,
+                                  total: ticketFinalTotal(selectedTicket),
+                                  qrData: selectedTicket.id,
+                                  type: "cobro",
+                                };
+                                smartPrintTicket(ticketForPrint);
+                                // Abrir cajón si está conectada la impresora
+                                openCashDrawer().catch(() => {});
                               }}
                               style={successButtonStyle}
                             >
