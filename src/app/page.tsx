@@ -42,6 +42,7 @@ const moduleCategories = {
       { title: "Admin clientes", icon: "👥", href: "/admin/clientes", desc: "Altas y control" },
       { title: "Admin productos", icon: "🥩", href: "/admin/productos", desc: "Catálogo y precios" },
       { title: "Inventario", icon: "📦", href: "/admin/inventario/complementos", desc: "Bodega y complementos" },
+      { title: "Compras", icon: "🛒", href: "/admin/inventario/compras", desc: "Órdenes a proveedores" },
       { title: "Dashboard asistencia", icon: "📅", href: "/admin/dashboard/asistencia", desc: "Control de asistencia" },
     ],
   },
@@ -227,35 +228,56 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
   );
 }
 
-function QuickStats() {
+function QuickStats({ showInventory = false }: { showInventory?: boolean }) {
   const supabase = getSupabaseClient();
-  const [stats, setStats] = useState<{ pedidosHoy: number; ventasHoy: number; pendientes: number; enCamino: number } | null>(null);
+  const [stats, setStats] = useState<{ pedidosHoy: number; ventasHoy: number; pendientes: number; enCamino: number; inventoryValue: number } | null>(null);
 
   useEffect(() => {
     async function load() {
       const today = new Date();
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const { data } = await supabase
+
+      const ordersPromise = supabase
         .from("orders")
         .select("id, status, delivery_status, order_items(kilos, price)")
         .gte("created_at", `${todayStr}T00:00:00`);
 
-      const orders = data || [];
+      const bodegaPromise = showInventory
+        ? supabase.from("bodega_items").select("stock, cost").eq("is_active", true)
+        : Promise.resolve({ data: [] as any[] });
+
+      const complementosPromise = showInventory
+        ? supabase.from("products").select("stock, purchase_price, category, fixed_piece_price").eq("is_active", true)
+        : Promise.resolve({ data: [] as any[] });
+
+      const [{ data: ordersData }, { data: bodegaData }, { data: productsData }] = await Promise.all([
+        ordersPromise,
+        bodegaPromise,
+        complementosPromise,
+      ]);
+
+      const orders = ordersData || [];
       const ventasHoy = orders.reduce((acc: number, o: any) => {
         return acc + (o.order_items || []).reduce((s: number, i: any) => s + (i.kilos || 0) * (i.price || 0), 0);
       }, 0);
       const pendientes = orders.filter((o: any) => o.status === "nuevo" || o.status === "proceso").length;
       const enCamino = orders.filter((o: any) => o.delivery_status === "en_camino").length;
 
-      setStats({ pedidosHoy: orders.length, ventasHoy, pendientes, enCamino });
+      const bodegaValue = (bodegaData || []).reduce((acc: number, i: any) => acc + (Number(i.stock) || 0) * (Number(i.cost) || 0), 0);
+      const complementos = (productsData || []).filter((p: any) => p.category === "Complementos" || (p.fixed_piece_price !== null && Number(p.fixed_piece_price) > 0));
+      const complementosValue = complementos.reduce((acc: number, p: any) => acc + (Number(p.stock) || 0) * (Number(p.purchase_price) || 0), 0);
+      const inventoryValue = bodegaValue + complementosValue;
+
+      setStats({ pedidosHoy: orders.length, ventasHoy, pendientes, enCamino, inventoryValue });
     }
     load();
-  }, []);
+  }, [showInventory]);
 
   if (!stats) return null;
 
+  const cols = showInventory ? 5 : 4;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 16 }}>
       <div style={quickStatCardStyle}>
         <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>Pedidos hoy</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.text }}>{stats.pedidosHoy}</div>
@@ -272,6 +294,12 @@ function QuickStats() {
         <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>En camino</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: stats.enCamino > 0 ? COLORS.info : COLORS.muted }}>{stats.enCamino}</div>
       </div>
+      {showInventory && (
+        <div style={quickStatCardStyle}>
+          <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>Valor inventario</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.primary }}>${stats.inventoryValue.toLocaleString("es-MX", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -624,7 +652,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Mini stats - solo admin y cajeras */}
-                  {(empRole === "admin" || empRole === "cajera") && <QuickStats />}
+                  {(empRole === "admin" || empRole === "cajera") && <QuickStats showInventory={empRole === "admin"} />}
 
                   {/* Módulos por categoría */}
                   {Object.entries(moduleCategories).map(([key, cat]) => {
