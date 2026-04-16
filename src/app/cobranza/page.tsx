@@ -270,7 +270,12 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     }
 
     const pending = ((ticketsData as Ticket[]) || []).filter((ticket) => {
-      return ticket.payment_status !== "pagado" && ticket.payment_status !== "cancelado";
+      return (
+        ticket.payment_status !== "pagado" &&
+        ticket.payment_status !== "cancelado" &&
+        ticket.payment_status !== "credito_autorizado" &&
+        ticket.payment_status !== "credito"
+      );
     });
 
     setTickets(pending);
