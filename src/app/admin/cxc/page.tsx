@@ -31,6 +31,16 @@ type CxcNote = {
   created_at?: string | null;
 };
 
+type CxcNoteItem = {
+  id: string;
+  cxc_note_id: string;
+  product: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  line_total: number;
+};
+
 type CustomerSummary = {
   customer_id: string;
   customer_name: string;
@@ -99,6 +109,8 @@ export default function AdminCxcPage() {
   const [search, setSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState("todos");
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
+  const [noteItemsMap, setNoteItemsMap] = useState<Record<string, CxcNoteItem[]>>({});
+  const [loadingItems, setLoadingItems] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -135,6 +147,48 @@ export default function AdminCxcPage() {
     setCustomers((customersData as Customer[]) || []);
     setNotes((notesData as CxcNote[]) || []);
     setLoading(false);
+  }
+
+  async function loadItemsForCustomer(customerId: string) {
+    const customerNoteIds = notes
+      .filter((n) => n.customer_id === customerId && Number(n.balance_due || 0) > 0)
+      .map((n) => n.id);
+
+    if (customerNoteIds.length === 0) return;
+
+    const missing = customerNoteIds.filter((id) => !noteItemsMap[id]);
+    if (missing.length === 0) return;
+
+    setLoadingItems(customerId);
+    const { data, error } = await supabase
+      .from("cxc_note_items")
+      .select("*")
+      .in("cxc_note_id", missing);
+
+    if (error) {
+      console.log(error);
+      setLoadingItems(null);
+      return;
+    }
+
+    const grouped: Record<string, CxcNoteItem[]> = {};
+    for (const id of missing) grouped[id] = [];
+    for (const row of (data as CxcNoteItem[]) || []) {
+      if (!grouped[row.cxc_note_id]) grouped[row.cxc_note_id] = [];
+      grouped[row.cxc_note_id].push(row);
+    }
+
+    setNoteItemsMap((prev) => ({ ...prev, ...grouped }));
+    setLoadingItems(null);
+  }
+
+  function toggleExpand(customerId: string) {
+    if (expandedCustomer === customerId) {
+      setExpandedCustomer(null);
+    } else {
+      setExpandedCustomer(customerId);
+      loadItemsForCustomer(customerId);
+    }
   }
 
   const customerSummaries = useMemo(() => {
@@ -403,7 +457,7 @@ export default function AdminCxcPage() {
 
                     {customer.open_notes > 0 && (
                       <button
-                        onClick={() => setExpandedCustomer(isExpanded ? null : customer.customer_id)}
+                        onClick={() => toggleExpand(customer.customer_id)}
                         style={{
                           padding: "10px 16px",
                           borderRadius: 12,
@@ -468,6 +522,46 @@ export default function AdminCxcPage() {
                               Descuento aplicado: ${Number(note.discount_amount || 0).toFixed(2)}
                             </div>
                           ) : null}
+
+                          {(() => {
+                            const items = noteItemsMap[note.id];
+                            if (items === undefined) {
+                              return (
+                                <div style={{ ...metaTextStyle, fontStyle: "italic" }}>
+                                  {loadingItems === customer.customer_id ? "Cargando artículos..." : ""}
+                                </div>
+                              );
+                            }
+                            if (items.length === 0) {
+                              return (
+                                <div style={{ ...metaTextStyle, fontStyle: "italic" }}>
+                                  Sin artículos registrados en esta nota
+                                </div>
+                              );
+                            }
+                            return (
+                              <div style={itemsBoxStyle}>
+                                <div style={itemsTitleStyle}>Artículos ({items.length})</div>
+                                <div style={{ display: "grid", gap: 6 }}>
+                                  {items.map((it) => (
+                                    <div key={it.id} style={itemRowStyle}>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ color: COLORS.text, fontWeight: 700, fontSize: 14 }}>
+                                          {it.product}
+                                        </div>
+                                        <div style={{ color: COLORS.muted, fontSize: 12 }}>
+                                          {Number(it.quantity || 0)} {it.unit} × ${Number(it.price || 0).toFixed(2)}
+                                        </div>
+                                      </div>
+                                      <div style={{ color: COLORS.text, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
+                                        ${Number(it.line_total || 0).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {note.notes ? (
                             <div style={notesStyle}>
@@ -732,6 +826,34 @@ const notesStyle: React.CSSProperties = {
   background: "rgba(255,255,255,0.7)",
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
+};
+
+const itemsBoxStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: 12,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.7)",
+  border: `1px solid ${COLORS.border}`,
+};
+
+const itemsTitleStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 12,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  marginBottom: 8,
+};
+
+const itemRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 10px",
+  borderRadius: 10,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
