@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import * as XLSX from "xlsx";
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {
@@ -231,6 +232,18 @@ export default function CajaPage() {
 
   // Cancelled view
   const [showCancelled, setShowCancelled] = useState(false);
+
+  // Fase 2 — Filtros de turno/cajera
+  const [filterCashier, setFilterCashier] = useState<string>("__all__");
+  const [filterTimeFrom, setFilterTimeFrom] = useState<string>(""); // "HH:MM"
+  const [filterTimeTo, setFilterTimeTo] = useState<string>("");
+  const [showPartialTicket, setShowPartialTicket] = useState(false);
+
+  useEffect(() => {
+    const onAfter = () => setShowPartialTicket(false);
+    window.addEventListener("afterprint", onAfter);
+    return () => window.removeEventListener("afterprint", onAfter);
+  }, []);
 
   // ─── Loaders ───────────────────────────────────────────────
   const loadMovements = useCallback(async () => {
@@ -475,6 +488,61 @@ export default function CajaPage() {
     };
   }, [movements, expenses, todayOpening]);
 
+  // Fase 2 — Lista de cajeras únicas que han movido caja en el rango
+  const cashiersInRange = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of movements) {
+      if (m.cashier_name && m.cashier_name.trim()) set.add(m.cashier_name.trim());
+    }
+    return Array.from(set).sort();
+  }, [movements]);
+
+  // Fase 2 — Movimientos filtrados por turno (cajera + horas)
+  const turnMovements = useMemo(() => {
+    return movements.filter((m) => {
+      if (m.is_cancelled) return false;
+      if (filterCashier !== "__all__" && (m.cashier_name || "") !== filterCashier) return false;
+      if (filterTimeFrom || filterTimeTo) {
+        if (!m.created_at) return false;
+        const d = new Date(m.created_at);
+        const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        if (filterTimeFrom && hhmm < filterTimeFrom) return false;
+        if (filterTimeTo && hhmm > filterTimeTo) return false;
+      }
+      return true;
+    });
+  }, [movements, filterCashier, filterTimeFrom, filterTimeTo]);
+
+  // Stats del turno filtrado (para corte parcial)
+  const turnStats = useMemo(() => {
+    const sum = (arr: Movement[], method?: string) =>
+      arr.filter((m) => !method || m.payment_method === method).reduce((a, m) => a + Number(m.amount || 0), 0);
+    const ventas = turnMovements.filter((m) => m.type === "venta");
+    const cxc = turnMovements.filter((m) => m.type === "cxc_pago");
+    const ventasEfectivo = sum(ventas, "efectivo");
+    const ventasTarjeta = sum(ventas, "tarjeta");
+    const ventasTransferencia = sum(ventas, "transferencia");
+    const cxcEfectivo = sum(cxc, "efectivo");
+    const cxcTarjeta = sum(cxc, "tarjeta");
+    const cxcTransferencia = sum(cxc, "transferencia");
+    const totalEfectivo = ventasEfectivo + cxcEfectivo;
+    const totalTarjeta = ventasTarjeta + cxcTarjeta;
+    const totalTransferencia = ventasTransferencia + cxcTransferencia;
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia;
+    const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia;
+    const total = totalEfectivo + totalTarjeta + totalTransferencia;
+    return {
+      count: turnMovements.length,
+      ventas: ventas.length,
+      totalVentas, totalCxc,
+      totalEfectivo, totalTarjeta, totalTransferencia, total,
+      ventasEfectivo, ventasTarjeta, ventasTransferencia,
+      cxcEfectivo, cxcTarjeta, cxcTransferencia,
+    };
+  }, [turnMovements]);
+
+  const hasTurnFilter = filterCashier !== "__all__" || filterTimeFrom !== "" || filterTimeTo !== "";
+
   // Week report data
   const weekReport = useMemo(() => {
     const days: Record<string, { ventas: number; cxc: number; efectivo: number; tarjeta: number; transferencia: number; count: number }> = {};
@@ -632,30 +700,40 @@ export default function CajaPage() {
     setSaving(false);
   }
 
-  function exportCSV() {
-    const rows = [["Fecha", "Tipo", "Método", "Monto", "Origen", "Referencia"]];
+  function buildExportRows() {
+    const rows: (string | number)[][] = [
+      ["Fecha", "Tipo", "Método", "Monto", "Cajera", "Origen", "Referencia", "Cancelado"],
+    ];
     for (const m of movements) {
       rows.push([
         fmtDateTime(m.created_at),
         typeName(m.type),
         methodName(m.payment_method),
-        String(Number(m.amount || 0).toFixed(2)),
+        Number(Number(m.amount || 0).toFixed(2)),
+        m.cashier_name || "",
         m.source || "",
         m.reference_id?.slice(0, 8) || "",
+        m.is_cancelled ? "Sí" : "",
       ]);
     }
-    // Add expenses
     for (const e of expenses) {
       rows.push([
         fmtDateTime(e.created_at),
         "Gasto",
         "Efectivo",
-        `-${Number(e.amount || 0).toFixed(2)}`,
+        Number(-Math.abs(Number(e.amount || 0)).toFixed(2)),
+        "",
         e.category,
         e.concept,
+        "",
       ]);
     }
-    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    return rows;
+  }
+
+  function exportCSV() {
+    const rows = buildExportRows();
+    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -663,6 +741,45 @@ export default function CajaPage() {
     a.download = `caja_${dateFrom}_${dateTo}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportXLSX() {
+    const rows = buildExportRows();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Anchos de columna razonables
+    (ws as any)["!cols"] = [
+      { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+      { wch: 14 }, { wch: 16 }, { wch: 12 }, { wch: 10 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Movimientos");
+
+    // Hoja de resumen
+    const resumen = [
+      ["Caja — Resumen del rango"],
+      ["Del", dateFrom, "al", dateTo],
+      [],
+      ["Métrica", "Monto"],
+      ["Fondo inicial", Number(stats.fondoInicial.toFixed(2))],
+      ["Ventas efectivo", Number(stats.ventasEfectivo.toFixed(2))],
+      ["Ventas tarjeta", Number(stats.ventasTarjeta.toFixed(2))],
+      ["Ventas transferencia", Number(stats.ventasTransferencia.toFixed(2))],
+      ["Total ventas", Number(stats.totalVentas.toFixed(2))],
+      ["Cobros CxC efectivo", Number(stats.cxcEfectivo.toFixed(2))],
+      ["Cobros CxC tarjeta", Number(stats.cxcTarjeta.toFixed(2))],
+      ["Cobros CxC transferencia", Number(stats.cxcTransferencia.toFixed(2))],
+      ["Total CxC", Number(stats.totalCxc.toFixed(2))],
+      ["Gastos del día", Number(stats.totalGastos.toFixed(2))],
+      ["Efectivo esperado", Number(stats.efectivoEsperado.toFixed(2))],
+      ["Total general", Number(stats.totalGeneral.toFixed(2))],
+      ["Tickets", stats.ticketCount],
+      ["Ticket promedio", Number(stats.ticketPromedio.toFixed(2))],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(resumen);
+    (ws2 as any)["!cols"] = [{ wch: 30 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Resumen");
+
+    XLSX.writeFile(wb, `caja_${dateFrom}_${dateTo}.xlsx`);
   }
 
   // ─── Render ────────────────────────────────────────────────
@@ -687,12 +804,12 @@ export default function CajaPage() {
 
   return (
     <div style={pageStyle}>
-      {/* Estilos de impresión — oculta todo menos #ticket-cierre-print */}
+      {/* Estilos de impresión — oculta todo menos el ticket activo */}
       <style jsx global>{`
         @media print {
           body * { visibility: hidden !important; }
-          #ticket-cierre-print, #ticket-cierre-print * { visibility: visible !important; }
-          #ticket-cierre-print { position: absolute !important; left: 0; top: 0; width: 100%; padding: 20px; }
+          .ticket-print-active, .ticket-print-active * { visibility: visible !important; }
+          .ticket-print-active { position: absolute !important; left: 0; top: 0; width: 100%; padding: 20px; }
           @page { size: 80mm auto; margin: 6mm; }
         }
       `}</style>
@@ -803,6 +920,67 @@ export default function CajaPage() {
                 </div>
               </div>
             )}
+
+            {/* Filtro por turno/cajera */}
+            <div style={{
+              marginBottom: 18, padding: 14, borderRadius: 18,
+              background: C.cardStrong, border: `1px solid ${C.border}`, boxShadow: C.shadow,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ fontWeight: 800, color: C.text, fontSize: 15 }}>🕑 Corte por turno / cajera</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={exportXLSX} style={{ ...btnSec, background: "rgba(31,122,77,0.12)", color: C.success }}>📊 Exportar Excel</button>
+                  <button onClick={exportCSV} style={btnSec}>📄 CSV</button>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+                <div>
+                  <div style={fieldLabel}>Cajera</div>
+                  <select value={filterCashier} onChange={(e) => setFilterCashier(e.target.value)} style={inputSt}>
+                    <option value="__all__">Todas las cajeras</option>
+                    {cashiersInRange.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div style={fieldLabel}>Desde (hora)</div>
+                  <input type="time" value={filterTimeFrom} onChange={(e) => setFilterTimeFrom(e.target.value)} style={inputSt} />
+                </div>
+                <div>
+                  <div style={fieldLabel}>Hasta (hora)</div>
+                  <input type="time" value={filterTimeTo} onChange={(e) => setFilterTimeTo(e.target.value)} style={inputSt} />
+                </div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                  <button
+                    onClick={() => { setFilterCashier("__all__"); setFilterTimeFrom(""); setFilterTimeTo(""); }}
+                    style={{ ...btnSec, flex: 1 }}
+                    disabled={!hasTurnFilter}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+              {hasTurnFilter && (
+                <div style={{ marginTop: 12, padding: 12, borderRadius: 14, background: C.bgSoft, border: `1px solid ${C.border}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, color: C.muted }}>
+                      <b style={{ color: C.text }}>{turnStats.count} movimiento{turnStats.count === 1 ? "" : "s"}</b> · {turnStats.ventas} venta{turnStats.ventas === 1 ? "" : "s"} · Total: <b style={{ color: C.text }}>${money(turnStats.total)}</b>
+                    </div>
+                    <button onClick={() => { setShowPartialTicket(true); setTimeout(() => window.print(), 50); }} style={btnPri}>
+                      🖨️ Corte parcial e imprimir
+                    </button>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8, fontSize: 12 }}>
+                    <DetailCell label="Efectivo" value={`$${money(turnStats.totalEfectivo)}`} />
+                    <DetailCell label="Tarjeta" value={`$${money(turnStats.totalTarjeta)}`} />
+                    <DetailCell label="Transfer." value={`$${money(turnStats.totalTransferencia)}`} />
+                    <DetailCell label="Ventas" value={`$${money(turnStats.totalVentas)}`} />
+                    <DetailCell label="CxC" value={`$${money(turnStats.totalCxc)}`} />
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Hero cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 18 }}>
@@ -1342,7 +1520,7 @@ export default function CajaPage() {
 
       {/* ═══ TICKET DE CIERRE IMPRIMIBLE ═══ */}
       {todayClosure && (
-        <div id="ticket-cierre-print" style={{ display: "none" }}>
+        <div id="ticket-cierre-print" className={showPartialTicket ? "" : "ticket-print-active"} style={{ display: "none" }}>
           <div style={{ fontFamily: "monospace", color: "#000", fontSize: 12, lineHeight: 1.4 }}>
             <div style={{ textAlign: "center", marginBottom: 10 }}>
               <div style={{ fontSize: 18, fontWeight: 800 }}>SERGIO&apos;S CARNICERÍA</div>
@@ -1418,6 +1596,79 @@ export default function CajaPage() {
                 Notas: {todayClosure.notes}
               </div>
             )}
+
+            <div style={{ textAlign: "center", marginTop: 14, fontSize: 10 }}>
+              _______________________<br />
+              Firma cajera<br /><br />
+              _______________________<br />
+              Firma supervisor
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ TICKET DE CORTE PARCIAL (POR TURNO/CAJERA) ═══ */}
+      {showPartialTicket && hasTurnFilter && (
+        <div id="ticket-turno-print" className="ticket-print-active" style={{ display: "none" }}>
+          <div style={{ fontFamily: "monospace", color: "#000", fontSize: 12, lineHeight: 1.4 }}>
+            <div style={{ textAlign: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 18, fontWeight: 800 }}>SERGIO&apos;S CARNICERÍA</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 4 }}>CORTE PARCIAL</div>
+              <div style={{ fontSize: 11 }}>{fmtDate(dateFrom)}{dateFrom !== dateTo ? ` — ${fmtDate(dateTo)}` : ""}</div>
+              <div style={{ fontSize: 10 }}>Impreso: {new Date().toLocaleString("es-MX")}</div>
+            </div>
+
+            <div style={{ borderTop: "1px dashed #000", borderBottom: "1px dashed #000", padding: "6px 0", marginBottom: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Cajera:</span><span><b>{filterCashier === "__all__" ? "Todas" : filterCashier}</b></span>
+              </div>
+              {(filterTimeFrom || filterTimeTo) && (
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <span>Horario:</span><span>{filterTimeFrom || "—"} a {filterTimeTo || "—"}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Movimientos:</span><span>{turnStats.count}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Tickets de venta:</span><span>{turnStats.ventas}</span>
+              </div>
+            </div>
+
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>VENTAS:</div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Efectivo:</span><span>${money(turnStats.ventasEfectivo)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tarjeta:</span><span>${money(turnStats.ventasTarjeta)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Transferencia:</span><span>${money(turnStats.ventasTransferencia)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "1px dashed #000", paddingTop: 3, marginTop: 3 }}>
+                <span>Total ventas:</span><span>${money(turnStats.totalVentas)}</span>
+              </div>
+            </div>
+
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>COBROS CxC:</div>
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Efectivo:</span><span>${money(turnStats.cxcEfectivo)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Tarjeta:</span><span>${money(turnStats.cxcTarjeta)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span>Transferencia:</span><span>${money(turnStats.cxcTransferencia)}</span></div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, borderTop: "1px dashed #000", paddingTop: 3, marginTop: 3 }}>
+                <span>Total CxC:</span><span>${money(turnStats.totalCxc)}</span>
+              </div>
+            </div>
+
+            <div style={{ borderTop: "2px solid #000", paddingTop: 6, marginBottom: 6 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Total efectivo:</span><span>${money(turnStats.totalEfectivo)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Total tarjeta:</span><span>${money(turnStats.totalTarjeta)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <span>Total transferencia:</span><span>${money(turnStats.totalTransferencia)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 14, marginTop: 4 }}>
+                <span>TOTAL TURNO:</span><span>${money(turnStats.total)}</span>
+              </div>
+            </div>
 
             <div style={{ textAlign: "center", marginTop: 14, fontSize: 10 }}>
               _______________________<br />
