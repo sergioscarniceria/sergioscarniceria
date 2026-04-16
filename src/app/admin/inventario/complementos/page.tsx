@@ -240,6 +240,10 @@ export default function InventarioComplementosPage() {
               padding: "10px 18px", borderRadius: 14, border: `1px solid ${C.border}`,
               background: "white", color: C.text, textDecoration: "none", fontWeight: 700, fontSize: 14,
             }}>Compras</Link>
+            <Link href="/admin/inventario/auditoria" style={{
+              padding: "10px 18px", borderRadius: 14, border: `1px solid ${C.border}`,
+              background: "white", color: C.text, textDecoration: "none", fontWeight: 700, fontSize: 14,
+            }}>Auditoría</Link>
             <Link href="/" style={{
               padding: "10px 18px", borderRadius: 14, border: `1px solid ${C.border}`,
               background: "rgba(255,255,255,0.75)", color: C.text, textDecoration: "none", fontWeight: 700,

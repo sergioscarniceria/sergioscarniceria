@@ -43,6 +43,7 @@ const moduleCategories = {
       { title: "Admin productos", icon: "🥩", href: "/admin/productos", desc: "Catálogo y precios" },
       { title: "Inventario", icon: "📦", href: "/admin/inventario/complementos", desc: "Bodega y complementos" },
       { title: "Compras", icon: "🛒", href: "/admin/inventario/compras", desc: "Órdenes a proveedores" },
+      { title: "Auditoría", icon: "✅", href: "/admin/inventario/auditoria", desc: "Conteo físico y pérdidas" },
       { title: "Dashboard asistencia", icon: "📅", href: "/admin/dashboard/asistencia", desc: "Control de asistencia" },
     ],
   },
