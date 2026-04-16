@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { smartPrintTicket, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
+import ScaleButton from "@/components/ScaleButton";
+import { getScale } from "@/lib/scale";
 
 type Item = {
   id: string;
@@ -174,6 +176,11 @@ const [showHeld, setShowHeld] = useState(false);
 const [holdNote, setHoldNote] = useState("");
 const [showHoldModal, setShowHoldModal] = useState(false);
 
+// Báscula Torrey
+const [scaleWeight, setScaleWeight] = useState<number>(0);
+const [scaleStable, setScaleStable] = useState<boolean>(false);
+const [scaleConnected, setScaleConnected] = useState<boolean>(false);
+
   useEffect(() => {
   loadProducts();
   loadCustomers();
@@ -187,6 +194,28 @@ const [showHoldModal, setShowHoldModal] = useState(false);
 
   return () => clearInterval(interval);
 }, []);
+
+  // Suscripción a báscula Torrey
+  useEffect(() => {
+    const scale = getScale();
+    setScaleConnected(scale.isConnected);
+
+    const unsub = scale.onWeight((w, _unit, s) => {
+      setScaleWeight(w);
+      setScaleStable(s);
+      setScaleConnected(scale.isConnected);
+    });
+
+    // Revisar conexión cada 2s
+    const checkInterval = setInterval(() => {
+      setScaleConnected(scale.isConnected);
+    }, 2000);
+
+    return () => {
+      unsub();
+      clearInterval(checkInterval);
+    };
+  }, []);
 
   async function loadProducts() {
     setLoading(true);
@@ -559,6 +588,7 @@ const paidTickets = useMemo(() => {
   return (
     <div style={pageStyle}>
       <PrinterButton />
+      <ScaleButton />
       <div style={shellStyle}>
         <div style={headerStyle}>
           <div>
@@ -820,13 +850,43 @@ const paidTickets = useMemo(() => {
       <label style={fieldLabelStyle}>
   {isFixedPieceProduct ? "Piezas" : "Kilos"}
 </label>
-      <input
-        placeholder={isFixedPieceProduct ? "Ejemplo: 2" : "Ejemplo: 1.250"}
-        value={kilos}
-        onChange={(e) => setKilos(e.target.value)}
-        style={inputStyle}
-        inputMode="decimal"
-      />
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <input
+          placeholder={isFixedPieceProduct ? "Ejemplo: 2" : "Ejemplo: 1.250"}
+          value={kilos}
+          onChange={(e) => setKilos(e.target.value)}
+          style={{ ...inputStyle, flex: 1 }}
+          inputMode="decimal"
+        />
+        {scaleConnected && !isFixedPieceProduct && (
+          <button
+            onClick={() => {
+              if (scaleWeight > 0) {
+                setKilos(scaleWeight.toFixed(3));
+              }
+            }}
+            style={{
+              padding: "16px 14px",
+              borderRadius: 16,
+              border: "none",
+              background: scaleStable && scaleWeight > 0
+                ? "rgba(31,122,77,0.15)"
+                : "rgba(166,106,16,0.12)",
+              color: scaleStable && scaleWeight > 0 ? COLORS.success : COLORS.warning,
+              fontWeight: 800,
+              fontSize: 14,
+              cursor: scaleWeight > 0 ? "pointer" : "default",
+              whiteSpace: "nowrap",
+              minHeight: 56,
+              opacity: scaleWeight > 0 ? 1 : 0.6,
+            }}
+            disabled={scaleWeight <= 0}
+            title="Tomar peso de la báscula"
+          >
+            ⚖ {scaleWeight.toFixed(3)} kg{scaleStable ? " ✓" : " ~"}
+          </button>
+        )}
+      </div>
     </div>
 
     <button onClick={addItem} style={addButtonStyle}>

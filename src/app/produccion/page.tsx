@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
+import ScaleButton from "@/components/ScaleButton";
+import { getScale } from "@/lib/scale";
 
 type OrderItem = {
   id: string;
@@ -67,6 +69,11 @@ export default function ProduccionPage() {
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [preparedKilosDrafts, setPreparedKilosDrafts] = useState<Record<string, string>>({});
 
+  // Báscula Torrey
+  const [scaleWeight, setScaleWeight] = useState<number>(0);
+  const [scaleStable, setScaleStable] = useState<boolean>(false);
+  const [scaleConnected, setScaleConnected] = useState<boolean>(false);
+
   async function loadData() {
     const supabase = getSupabaseClient();
 
@@ -108,6 +115,27 @@ export default function ProduccionPage() {
     }, 3000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  // Suscripción a báscula Torrey
+  useEffect(() => {
+    const scale = getScale();
+    setScaleConnected(scale.isConnected);
+
+    const unsub = scale.onWeight((w, _unit, s) => {
+      setScaleWeight(w);
+      setScaleStable(s);
+      setScaleConnected(scale.isConnected);
+    });
+
+    const checkInterval = setInterval(() => {
+      setScaleConnected(scale.isConnected);
+    }, 2000);
+
+    return () => {
+      unsub();
+      clearInterval(checkInterval);
+    };
   }, []);
 
   async function updateStatus(id: string, status: string, currentStatus?: string) {
@@ -383,6 +411,7 @@ function isOrderReady(o: Order) {
 
   return (
     <div style={pageStyle}>
+      <ScaleButton />
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 
@@ -458,6 +487,9 @@ function isOrderReady(o: Order) {
           statusBadgeStyle={statusBadgeStyle}
           paymentBadgeStyle={paymentBadgeStyle}
           isOrderReady={isOrderReady}
+          scaleWeight={scaleWeight}
+          scaleStable={scaleStable}
+          scaleConnected={scaleConnected}
         />
 
         <div style={{ height: 24 }} />
@@ -481,6 +513,9 @@ function isOrderReady(o: Order) {
           statusBadgeStyle={statusBadgeStyle}
           paymentBadgeStyle={paymentBadgeStyle}
           isOrderReady={isOrderReady}
+          scaleWeight={scaleWeight}
+          scaleStable={scaleStable}
+          scaleConnected={scaleConnected}
         />
       </div>
     </div>
@@ -506,6 +541,9 @@ function Section({
   statusBadgeStyle,
   paymentBadgeStyle,
   isOrderReady,
+  scaleWeight,
+  scaleStable,
+  scaleConnected,
 }: {
   title: string;
   subtitle: string;
@@ -525,6 +563,9 @@ function Section({
   statusBadgeStyle: (status: string) => React.CSSProperties;
     paymentBadgeStyle: (paymentStatus?: string | null) => React.CSSProperties;
     isOrderReady: (o: Order) => boolean;
+    scaleWeight: number;
+    scaleStable: boolean;
+    scaleConnected: boolean;
 }) {
   return (
     <div style={sectionCardStyle}>
@@ -627,6 +668,32 @@ function Section({
                               style={preparedInputStyle}
                             />
 
+                            {scaleConnected && (
+                              <button
+                                onClick={() => {
+                                  if (scaleWeight > 0) {
+                                    setPreparedKilosDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: scaleWeight.toFixed(3),
+                                    }));
+                                  }
+                                }}
+                                disabled={scaleWeight <= 0}
+                                style={{
+                                  ...miniActionButtonStyle,
+                                  background: scaleStable && scaleWeight > 0
+                                    ? "rgba(31,122,77,0.15)"
+                                    : "rgba(166,106,16,0.12)",
+                                  color: scaleStable && scaleWeight > 0 ? COLORS.success : COLORS.warning,
+                                  opacity: scaleWeight > 0 ? 1 : 0.6,
+                                  whiteSpace: "nowrap",
+                                }}
+                                title="Tomar peso de báscula"
+                              >
+                                ⚖ {scaleWeight.toFixed(3)}
+                              </button>
+                            )}
+
                             <button
                               onClick={() => savePreparedKilos(item.id)}
                               disabled={savingItemId === item.id}
@@ -674,6 +741,32 @@ function Section({
                               }
                               style={preparedInputStyle}
                             />
+
+                            {scaleConnected && (
+                              <button
+                                onClick={() => {
+                                  if (scaleWeight > 0) {
+                                    setPreparedKilosDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: scaleWeight.toFixed(3),
+                                    }));
+                                  }
+                                }}
+                                disabled={scaleWeight <= 0}
+                                style={{
+                                  ...miniActionButtonStyle,
+                                  background: scaleStable && scaleWeight > 0
+                                    ? "rgba(31,122,77,0.15)"
+                                    : "rgba(166,106,16,0.12)",
+                                  color: scaleStable && scaleWeight > 0 ? COLORS.success : COLORS.warning,
+                                  opacity: scaleWeight > 0 ? 1 : 0.6,
+                                  whiteSpace: "nowrap",
+                                }}
+                                title="Tomar peso de báscula"
+                              >
+                                ⚖ {scaleWeight.toFixed(3)}
+                              </button>
+                            )}
 
                             <button
                               onClick={() => savePreparedKilos(item.id)}
