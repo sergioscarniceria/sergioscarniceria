@@ -1241,8 +1241,8 @@ export default function ClientePage() {
         setPaymentLoading(false);
         return;
       }
-      // Redirigir a MP Checkout (sandbox para pruebas, init_point para producción)
-      const url = data.sandbox_init_point || data.init_point;
+      // Redirigir a MP Checkout Pro
+      const url = data.init_point;
       window.location.href = url;
     } catch (err) {
       console.error(err);
