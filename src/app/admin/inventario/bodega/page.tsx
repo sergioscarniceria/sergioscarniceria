@@ -24,6 +24,7 @@ type Movement = {
   new_stock: number;
   notes: string | null;
   created_by: string | null;
+  authorized_by: string | null;
   created_at: string;
 };
 
@@ -72,6 +73,15 @@ export default function InventarioBodegaPage() {
   // History
   const [historyId, setHistoryId] = useState<string | null>(null);
   const [movements, setMovements] = useState<Movement[]>([]);
+
+  // Edit item modal
+  const [editItem, setEditItem] = useState<BodegaItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editUnit, setEditUnit] = useState("piezas");
+  const [editCost, setEditCost] = useState("");
+  const [editMin, setEditMin] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => { loadItems(); }, []);
 
@@ -161,6 +171,33 @@ export default function InventarioBodegaPage() {
     const val = parseInt(editMinVal) || 0;
     await supabase.from("bodega_items").update({ min_stock: val }).eq("id", itemId);
     setEditMinId(null);
+    loadItems();
+  }
+
+  function openEdit(item: BodegaItem) {
+    setEditItem(item);
+    setEditName(item.name || "");
+    setEditDesc(item.description || "");
+    setEditUnit(item.unit || "piezas");
+    setEditCost(String(item.cost || 0));
+    setEditMin(String(item.min_stock || 0));
+  }
+
+  async function saveEdit() {
+    if (!editItem) return;
+    if (!editName.trim()) { alert("El nombre no puede estar vacío"); return; }
+    setEditSaving(true);
+    const { error } = await supabase.from("bodega_items").update({
+      name: editName.trim(),
+      description: editDesc.trim() || null,
+      unit: editUnit,
+      cost: parseFloat(editCost) || 0,
+      min_stock: parseInt(editMin) || 0,
+      updated_at: new Date().toISOString(),
+    }).eq("id", editItem.id);
+    if (error) { alert("Error: " + error.message); setEditSaving(false); return; }
+    setEditItem(null);
+    setEditSaving(false);
     loadItems();
   }
 
@@ -336,6 +373,10 @@ export default function InventarioBodegaPage() {
                       padding: "8px 16px", borderRadius: 12, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 13,
                       background: "white", color: C.muted,
                     }}>Historial</button>
+                    <button onClick={() => openEdit(item)} style={{
+                      padding: "8px 16px", borderRadius: 12, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 13,
+                      background: "white", color: C.primary,
+                    }}>Editar</button>
                     <button onClick={() => deleteItem(item)} style={{
                       padding: "8px 16px", borderRadius: 12, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 13,
                       background: "white", color: C.danger, marginLeft: "auto",
@@ -351,17 +392,25 @@ export default function InventarioBodegaPage() {
                       {movements.length === 0 ? (
                         <div style={{ color: C.muted, fontSize: 13, textAlign: "center", padding: 10 }}>Sin movimientos</div>
                       ) : movements.map((m) => (
-                        <div key={m.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
-                          <div>
-                            <span style={{ color: m.movement_type === "entrada" ? C.success : C.danger, fontWeight: 700 }}>
-                              {m.movement_type === "entrada" ? "+" : "-"}{m.quantity}
+                        <div key={m.id} style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                            <div>
+                              <span style={{ color: m.movement_type === "entrada" ? C.success : C.danger, fontWeight: 700 }}>
+                                {m.movement_type === "entrada" ? "+" : "-"}{m.quantity}
+                              </span>
+                              <span style={{ color: C.muted, marginLeft: 8 }}>{m.previous_stock} → {m.new_stock}</span>
+                              {m.notes && <span style={{ color: C.muted, marginLeft: 8, fontStyle: "italic" }}>({m.notes})</span>}
+                            </div>
+                            <span style={{ color: C.muted, fontSize: 12, whiteSpace: "nowrap" }}>
+                              {new Date(m.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}
                             </span>
-                            <span style={{ color: C.muted, marginLeft: 8 }}>{m.previous_stock} → {m.new_stock}</span>
-                            {m.notes && <span style={{ color: C.muted, marginLeft: 8, fontStyle: "italic" }}>({m.notes})</span>}
                           </div>
-                          <span style={{ color: C.muted, fontSize: 12 }}>
-                            {new Date(m.created_at).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}
-                          </span>
+                          {(m.created_by || m.authorized_by) && (
+                            <div style={{ marginTop: 4, color: C.muted, fontSize: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                              {m.created_by && <span>Por: <b style={{ color: C.text }}>{m.created_by}</b></span>}
+                              {m.authorized_by && <span>Autorizó: <b style={{ color: C.text }}>{m.authorized_by}</b></span>}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -456,6 +505,55 @@ export default function InventarioBodegaPage() {
               }}>
                 {movSaving ? "..." : modal.type === "entrada" ? "Registrar entrada" : "Registrar salida"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit item modal */}
+      {editItem && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setEditItem(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: C.cardStrong, borderRadius: 22, padding: 24, maxWidth: 440, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.2)" }}>
+            <h3 style={{ margin: "0 0 4px", color: C.text, fontSize: 18 }}>Editar insumo</h3>
+            <p style={{ margin: "0 0 16px", color: C.muted, fontSize: 13 }}>
+              Stock actual: {editItem.stock || 0} {editItem.unit} (no se modifica aquí)
+            </p>
+
+            <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Nombre *</label>
+            <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ ...inputStyle, marginBottom: 12 }} autoFocus />
+
+            <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Descripción</label>
+            <input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} placeholder="Opcional" style={{ ...inputStyle, marginBottom: 12 }} />
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <div>
+                <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Unidad</label>
+                <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={inputStyle}>
+                  <option value="piezas">Piezas</option>
+                  <option value="rollos">Rollos</option>
+                  <option value="paquetes">Paquetes</option>
+                  <option value="cajas">Cajas</option>
+                  <option value="litros">Litros</option>
+                  <option value="kg">Kg</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Costo unit.</label>
+                <input value={editCost} onChange={(e) => setEditCost(e.target.value)} type="number" step="0.5" min="0" style={inputStyle} />
+              </div>
+              <div>
+                <label style={{ color: C.muted, fontSize: 12, fontWeight: 700, display: "block", marginBottom: 4 }}>Stock mín.</label>
+                <input value={editMin} onChange={(e) => setEditMin(e.target.value)} type="number" min="0" style={inputStyle} />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setEditItem(null)} style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${C.border}`, background: "white", color: C.text, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={saveEdit} disabled={editSaving} style={{
+                flex: 1, padding: "12px", borderRadius: 14, border: "none", fontWeight: 800, cursor: "pointer",
+                background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
+                color: "white", opacity: editSaving ? 0.7 : 1,
+              }}>{editSaving ? "..." : "Guardar cambios"}</button>
             </div>
           </div>
         </div>
