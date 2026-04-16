@@ -75,7 +75,7 @@ function isFutureDate(value?: string | null) {
 
 function isTodayDate(value?: string | null) {
   const normalized = normalizeDateOnly(value);
-  if (!normalized) return true;
+  if (!normalized) return false;
   return normalized === getTodayDateInput();
 }
 

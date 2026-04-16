@@ -110,7 +110,13 @@ export default function ProduccionPage() {
     return () => clearInterval(interval);
   }, []);
 
-  async function updateStatus(id: string, status: string) {
+  async function updateStatus(id: string, status: string, currentStatus?: string) {
+    // Validar transición: nuevo → proceso → terminado
+    if (status === "terminado" && currentStatus && currentStatus !== "proceso") {
+      alert("El pedido debe estar en proceso antes de marcarlo como terminado");
+      return;
+    }
+
     const supabase = getSupabaseClient();
     setChangingId(id);
 
@@ -120,7 +126,12 @@ export default function ProduccionPage() {
       payload.prepared_at = new Date().toISOString();
     }
 
-    await supabase.from("orders").update(payload).eq("id", id);
+    const { error } = await supabase.from("orders").update(payload).eq("id", id);
+
+    if (error) {
+      console.log(error);
+      alert("Error al actualizar estado: " + error.message);
+    }
 
     if (status === "terminado") {
       await supabase.rpc("apply_loyalty_points", { p_order_id: id });
@@ -331,9 +342,8 @@ function isOrderReady(o: Order) {
   return (o.order_items || []).every((item) => {
     if (!item.is_ready) return false;
 
-    if (item.sale_type === "pieza") {
-      return Number(item.prepared_kilos || 0) > 0;
-    }
+    // Tanto piezas como kilos deben tener peso preparado capturado
+    if (Number(item.prepared_kilos || 0) <= 0) return false;
 
     return true;
   });
@@ -506,7 +516,7 @@ function Section({
   preparedKilosDrafts: Record<string, string>;
   setPreparedKilosDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   assignButcher: (orderId: string, butcherName: string) => void;
-  updateStatus: (id: string, status: string) => void;
+  updateStatus: (id: string, status: string, currentStatus?: string) => void;
   deleteOrder: (id: string) => void;
   savePreparedKilos: (itemId: string) => void;
   toggleItemReady: (itemId: string, nextValue: boolean) => void;
@@ -765,8 +775,8 @@ function Section({
                 </button>
 
                 <button
-  onClick={() => updateStatus(o.id, "terminado")}
-  disabled={changingId === o.id || !isOrderReady(o)}
+  onClick={() => updateStatus(o.id, "terminado", o.status)}
+  disabled={changingId === o.id || !isOrderReady(o) || o.status !== "proceso"}
   style={{
     ...actionButtonStyle,
     background: isOrderReady(o)

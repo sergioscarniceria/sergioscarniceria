@@ -101,7 +101,8 @@ export default function RecetarioPage() {
   function costPerKg(r: Recipe) {
     const cost = recipeCost(r);
     const yld = Number(r.yield_kg || 0);
-    return yld > 0 ? cost / yld : 0;
+    if (yld <= 0) return -1; // indica que falta rendimiento
+    return cost / yld;
   }
 
   if (loading) {
@@ -216,7 +217,7 @@ export default function RecetarioPage() {
                     </div>
                     <div style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 14, padding: 10 }}>
                       <div style={{ color: C.muted, fontSize: 11 }}>Costo/kg</div>
-                      <div style={{ color: C.primary, fontSize: 18, fontWeight: 800 }}>${money(cpk)}</div>
+                      <div style={{ color: cpk < 0 ? C.warning : C.primary, fontSize: 18, fontWeight: 800 }}>{cpk < 0 ? "Sin rendimiento" : `$${money(cpk)}`}</div>
                     </div>
                   </div>
 

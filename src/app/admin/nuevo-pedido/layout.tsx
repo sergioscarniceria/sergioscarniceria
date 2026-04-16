@@ -7,9 +7,9 @@ export default function NuevoPedidoLayout({
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin"]}
+      allowedRoles={["admin", "cajera"]}
       title="Nuevo Pedido"
-      subtitle="Solo administradores"
+      subtitle="Acceso para administradores y cajeras"
     >
       {children}
     </AccessGate>

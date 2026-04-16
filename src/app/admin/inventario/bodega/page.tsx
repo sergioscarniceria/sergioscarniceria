@@ -138,8 +138,22 @@ export default function InventarioBodegaPage() {
     }
 
     setMovSaving(true);
-    const prev = modal.item.stock || 0;
+
+    // Leer stock actual de BD para evitar race conditions
+    const { data: freshItem } = await supabase
+      .from("bodega_items")
+      .select("stock")
+      .eq("id", modal.item.id)
+      .single();
+
+    const prev = freshItem?.stock ?? modal.item.stock ?? 0;
     const newStock = modal.type === "entrada" ? prev + qty : prev - qty;
+
+    if (newStock < 0) {
+      alert("No hay suficiente stock para esta salida");
+      setMovSaving(false);
+      return;
+    }
 
     const { error: upErr } = await supabase
       .from("bodega_items")

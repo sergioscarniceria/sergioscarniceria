@@ -750,6 +750,7 @@ async function saveManualCredit() {
         payment_status: "credito_autorizado",
         payment_method: "credito",
         paid_at: new Date().toISOString(),
+        cashier_name: cashierName || null,
       },
     ])
     .select()
@@ -886,6 +887,7 @@ if (customerMode === "existente" && selectedCustomerId) {
         payment_status: "pagado",
         payment_method: method,
         paid_at: new Date().toISOString(),
+        cashier_name: cashierName || null,
       },
     ])
     .select()
@@ -925,6 +927,7 @@ if (customerMode === "existente" && selectedCustomerId) {
       amount: Number(manualTotal.toFixed(2)),
       payment_method: method,
       reference_id: orderData.id,
+      cashier_name: cashierName || null,
     },
   ]);
 
