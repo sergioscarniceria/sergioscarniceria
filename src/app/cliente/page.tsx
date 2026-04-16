@@ -12,6 +12,7 @@ type Product = {
   is_excluded_from_discount?: boolean;
   category?: string | null;
   fixed_piece_price?: number | null;
+  recommended_with?: string[] | null;
 };
 
 type CartItem = {
@@ -454,6 +455,7 @@ export default function ClientePage() {
   const [loginError, setLoginError] = useState("");
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [topSellerNames, setTopSellerNames] = useState<string[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [points, setPoints] = useState(0);
@@ -476,8 +478,25 @@ export default function ClientePage() {
   const [expandedRecipe, setExpandedRecipe] = useState<string | null>(null);
   const [recipeServings, setRecipeServings] = useState<Record<string, number>>({});
 
+  // Mercado Pago - pago con tarjeta
+  const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [lastOrderTotal, setLastOrderTotal] = useState(0);
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentResult, setPaymentResult] = useState<"success" | "failure" | "pending" | null>(null);
+
   useEffect(() => {
     checkUser();
+    // Detectar regreso de Mercado Pago
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const paymentParam = params.get("payment");
+      if (paymentParam === "success" || paymentParam === "failure" || paymentParam === "pending") {
+        setPaymentResult(paymentParam);
+        // Limpiar URL sin recargar
+        window.history.replaceState({}, "", "/cliente");
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -532,6 +551,33 @@ export default function ClientePage() {
       .order("name", { ascending: true });
 
     setProducts((data as Product[]) || []);
+    await loadTopSellers();
+  }
+
+  async function loadTopSellers() {
+    // Top vendidos últimos 2 meses - para sugerencias genéricas
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    const since = twoMonthsAgo.toISOString();
+
+    const { data } = await supabase
+      .from("order_items")
+      .select("product, created_at")
+      .gte("created_at", since)
+      .limit(2000);
+
+    if (!data) return;
+
+    const counts: Record<string, number> = {};
+    for (const row of data as Array<{ product: string }>) {
+      if (!row.product) continue;
+      counts[row.product] = (counts[row.product] || 0) + 1;
+    }
+    const top = Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name]) => name);
+    setTopSellerNames(top);
   }
 
   async function loadData(userId: string) {
@@ -924,6 +970,78 @@ export default function ClientePage() {
     }, 0);
   }
 
+  // Sugerencias combinando: recomendaciones manuales + categoría complementaria + top vendidos
+  const suggestions = useMemo(() => {
+    if (cart.length === 0) return [] as Product[];
+
+    const cartNames = new Set(cart.map((c) => c.name));
+    const cartProducts = cart
+      .map((c) => products.find((p) => p.name === c.name))
+      .filter((p): p is Product => Boolean(p));
+
+    const picked: Product[] = [];
+    const pickedIds = new Set<string>();
+
+    const addIfEligible = (p?: Product) => {
+      if (!p) return;
+      if (!p.is_active) return;
+      if (cartNames.has(p.name)) return;
+      if (pickedIds.has(p.id)) return;
+      picked.push(p);
+      pickedIds.add(p.id);
+    };
+
+    // 1) Manuales definidas en Admin Productos
+    for (const cp of cartProducts) {
+      for (const recId of cp.recommended_with || []) {
+        if (picked.length >= 4) break;
+        addIfEligible(products.find((x) => x.id === recId));
+      }
+      if (picked.length >= 4) break;
+    }
+
+    // 2) Por categoría: si hay carne (res/cerdo/asar/embutido), sugerir complementos
+    if (picked.length < 4) {
+      const hasMeat = cartProducts.some((p) => {
+        const c = (p.category || "").toLowerCase();
+        return c.includes("res") || c.includes("cerdo") || c.includes("asar") || c.includes("embutido");
+      });
+      const hasComplement = cartProducts.some((p) =>
+        (p.category || "").toLowerCase().includes("complemento")
+      );
+      if (hasMeat && !hasComplement) {
+        const complementos = products.filter((p) =>
+          (p.category || "").toLowerCase().includes("complemento")
+        );
+        for (const p of complementos) {
+          if (picked.length >= 4) break;
+          addIfEligible(p);
+        }
+      }
+      // Si solo tiene complementos, sugerir carne
+      if (hasComplement && !hasMeat) {
+        const carnes = products.filter((p) => {
+          const c = (p.category || "").toLowerCase();
+          return c.includes("res") || c.includes("asar");
+        });
+        for (const p of carnes) {
+          if (picked.length >= 4) break;
+          addIfEligible(p);
+        }
+      }
+    }
+
+    // 3) Top vendidos (fallback o relleno)
+    if (picked.length < 4) {
+      for (const name of topSellerNames) {
+        if (picked.length >= 4) break;
+        addIfEligible(products.find((x) => x.name === name));
+      }
+    }
+
+    return picked.slice(0, 4);
+  }, [cart, products, topSellerNames]);
+
   function repeatOrder(order: Order) {
     const previousItems =
       (order.order_items || []).map((item) => {
@@ -1094,7 +1212,11 @@ export default function ClientePage() {
       return;
     }
 
-    alert("Pedido enviado");
+    // Guardar info del pedido para ofrecer pago
+    const orderTotal = cart.reduce((acc, c) => acc + c.kilos * c.price, 0);
+    setLastOrderId(order.id);
+    setLastOrderTotal(orderTotal);
+    setShowPaymentChoice(true);
 
     setCart([]);
     setNotes("");
@@ -1102,6 +1224,31 @@ export default function ClientePage() {
     setDeliveryDate(getTodayDateInput());
     await loadData(user.id);
     setSaving(false);
+  }
+
+  async function payWithMP() {
+    if (!lastOrderId) return;
+    setPaymentLoading(true);
+    try {
+      const res = await fetch("/api/mp/create-preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_id: lastOrderId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.init_point) {
+        alert("Error al generar link de pago: " + (data.error || "desconocido"));
+        setPaymentLoading(false);
+        return;
+      }
+      // Redirigir a MP Checkout (sandbox para pruebas, init_point para producción)
+      const url = data.sandbox_init_point || data.init_point;
+      window.location.href = url;
+    } catch (err) {
+      console.error(err);
+      alert("Error al conectar con Mercado Pago");
+      setPaymentLoading(false);
+    }
   }
 
   const filteredProducts = useMemo(() => {
@@ -1130,6 +1277,86 @@ export default function ClientePage() {
   const paidNotes = useMemo(() => {
     return cxcNotes.filter((note) => Number(note.balance_due || 0) <= 0 || note.status === "pagada");
   }, [cxcNotes]);
+
+  // Modal: resultado de pago (regreso de MP)
+  if (paymentResult) {
+    const msgs = {
+      success: { icon: "✅", title: "Pago recibido", desc: "Tu pago fue procesado exitosamente. Tu pedido está confirmado." },
+      failure: { icon: "❌", title: "Pago no procesado", desc: "Hubo un problema con el pago. Puedes intentar de nuevo o pagar en efectivo al recibir." },
+      pending: { icon: "⏳", title: "Pago en proceso", desc: "Tu pago está siendo verificado. Te notificaremos cuando se confirme." },
+    };
+    const m = msgs[paymentResult];
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`, fontFamily: "Arial, sans-serif", padding: 20 }}>
+        <div style={{ background: COLORS.cardStrong, borderRadius: 24, padding: 32, maxWidth: 420, width: "100%", textAlign: "center", boxShadow: COLORS.shadow, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>{m.icon}</div>
+          <h2 style={{ margin: "0 0 12px", color: COLORS.text }}>{m.title}</h2>
+          <p style={{ color: COLORS.muted, marginBottom: 24 }}>{m.desc}</p>
+          <button onClick={() => setPaymentResult(null)} style={{ padding: "14px 28px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, cursor: "pointer", fontSize: 16 }}>
+            Continuar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Modal: elegir método de pago después de crear pedido
+  if (showPaymentChoice) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(180deg, ${COLORS.bgSoft} 0%, ${COLORS.bg} 100%)`, fontFamily: "Arial, sans-serif", padding: 20 }}>
+        <div style={{ background: COLORS.cardStrong, borderRadius: 24, padding: 32, maxWidth: 440, width: "100%", boxShadow: COLORS.shadow, border: `1px solid ${COLORS.border}` }}>
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
+            <h2 style={{ margin: "0 0 8px", color: COLORS.text }}>Pedido enviado</h2>
+            <p style={{ color: COLORS.muted, margin: 0 }}>Total: <b style={{ color: COLORS.primary, fontSize: 20 }}>${lastOrderTotal.toFixed(2)}</b></p>
+          </div>
+
+          <p style={{ color: COLORS.text, textAlign: "center", marginBottom: 20, fontWeight: 600 }}>
+            ¿Cómo quieres pagar?
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <button
+              onClick={payWithMP}
+              disabled={paymentLoading}
+              style={{
+                padding: "16px 20px", borderRadius: 16, border: "none",
+                background: "linear-gradient(180deg, #009ee3 0%, #0077b6 100%)",
+                color: "white", fontWeight: 800, cursor: paymentLoading ? "not-allowed" : "pointer",
+                fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                opacity: paymentLoading ? 0.7 : 1,
+              }}
+            >
+              💳 {paymentLoading ? "Conectando con Mercado Pago..." : "Pagar ahora con tarjeta"}
+            </button>
+
+            <button
+              onClick={() => { setShowPaymentChoice(false); setLastOrderId(null); }}
+              style={{
+                padding: "14px 20px", borderRadius: 16,
+                border: `1px solid ${COLORS.border}`,
+                background: "white", color: COLORS.text, fontWeight: 700,
+                cursor: "pointer", fontSize: 15,
+              }}
+            >
+              💵 Pago en efectivo / al recibir
+            </button>
+
+            <button
+              onClick={() => { setShowPaymentChoice(false); setLastOrderId(null); }}
+              style={{
+                padding: "10px", borderRadius: 12, border: "none",
+                background: "transparent", color: COLORS.muted, fontWeight: 600,
+                cursor: "pointer", fontSize: 13,
+              }}
+            >
+              Decidir después
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -1698,6 +1925,36 @@ export default function ClientePage() {
                       </>
                     )}
 
+                    {suggestions.length > 0 && (
+                      <div style={suggestionBlockStyle}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 15 }}>✨ Te puede interesar</span>
+                          <span style={{ fontSize: 12, color: COLORS.muted }}>Complementa tu pedido</span>
+                        </div>
+                        <div style={suggestionListStyle}>
+                          {suggestions.map((p) => {
+                            const piece = isPieceProduct(p);
+                            const price = piece ? Number(p.fixed_piece_price) : getPrice(p);
+                            return (
+                              <div key={p.id} style={suggestionCardStyle}>
+                                <div style={{ fontSize: 22, textAlign: "center", marginBottom: 6 }}>{getCategoryEmoji(p.category)}</div>
+                                <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 13, textAlign: "center", marginBottom: 4, minHeight: 34 }}>{p.name}</div>
+                                <div style={{ color: COLORS.primary, fontWeight: 800, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
+                                  ${price.toFixed(2)}{piece ? "/pza" : "/kg"}
+                                </div>
+                                <button
+                                  onClick={() => addProduct(p, piece ? "pieza" : "kg")}
+                                  style={suggestionAddButtonStyle}
+                                >
+                                  + Agregar
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ marginTop: 12 }}>
                       <label style={{ display: "block", color: COLORS.text, fontWeight: 700, marginBottom: 8 }}>
                         Dirección de entrega
@@ -1793,6 +2050,9 @@ export default function ClientePage() {
                         setAddress={setAddress}
                         saveAddress={saveAddress}
                         products={products}
+                        suggestions={suggestions}
+                        addProduct={addProduct}
+                        getPrice={getPrice}
                       />
                     </div>
                   </div>
@@ -2823,6 +3083,9 @@ function CartPanel({
   setAddress,
   saveAddress,
   products,
+  suggestions,
+  addProduct,
+  getPrice,
 }: {
   cart: CartItem[];
   notes: string;
@@ -2837,6 +3100,9 @@ function CartPanel({
   setAddress: (value: string) => void;
   saveAddress: () => void;
   products: Product[];
+  suggestions: Product[];
+  addProduct: (product: Product, mode: "kg" | "half" | "money" | "custom" | "pieza") => void;
+  getPrice: (product: Product) => number;
 }) {
   return (
     <div style={panelStyle}>
@@ -2887,6 +3153,36 @@ function CartPanel({
             <span>${cartTotal().toFixed(2)}</span>
           </div>
         </>
+      )}
+
+      {suggestions.length > 0 && (
+        <div style={suggestionBlockStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 15 }}>✨ Te puede interesar</span>
+            <span style={{ fontSize: 12, color: COLORS.muted }}>Complementa tu pedido</span>
+          </div>
+          <div style={suggestionListStyle}>
+            {suggestions.map((p) => {
+              const piece = isPieceProduct(p);
+              const price = piece ? Number(p.fixed_piece_price) : getPrice(p);
+              return (
+                <div key={p.id} style={suggestionCardStyle}>
+                  <div style={{ fontSize: 22, textAlign: "center", marginBottom: 6 }}>{getCategoryEmoji(p.category)}</div>
+                  <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 13, textAlign: "center", marginBottom: 4, minHeight: 34 }}>{p.name}</div>
+                  <div style={{ color: COLORS.primary, fontWeight: 800, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
+                    ${price.toFixed(2)}{piece ? "/pza" : "/kg"}
+                  </div>
+                  <button
+                    onClick={() => addProduct(p, piece ? "pieza" : "kg")}
+                    style={suggestionAddButtonStyle}
+                  >
+                    + Agregar
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
 
       <div style={{ marginTop: 14 }}>
@@ -3667,4 +3963,40 @@ const catalogPromptStyle: React.CSSProperties = {
   background: "linear-gradient(135deg, rgba(123,34,24,0.04) 0%, rgba(217,201,163,0.12) 100%)",
   border: `1px dashed ${COLORS.border}`,
   textAlign: "center",
+};
+
+const suggestionBlockStyle: React.CSSProperties = {
+  marginTop: 14,
+  padding: 14,
+  borderRadius: 16,
+  background: "linear-gradient(135deg, rgba(166,106,16,0.06) 0%, rgba(217,201,163,0.14) 100%)",
+  border: `1px solid ${COLORS.border}`,
+};
+
+const suggestionListStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))",
+  gap: 10,
+};
+
+const suggestionCardStyle: React.CSSProperties = {
+  background: "white",
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 14,
+  padding: 10,
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between",
+};
+
+const suggestionAddButtonStyle: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
+  fontSize: 12,
+  width: "100%",
 };

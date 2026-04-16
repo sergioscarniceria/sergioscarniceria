@@ -13,6 +13,7 @@ type Product = {
   is_active?: boolean | null;
   is_excluded_from_discount?: boolean | null;
   category?: string | null;
+  recommended_with?: string[] | null;
   created_at?: string | null;
 };
 
@@ -57,6 +58,8 @@ const [fixedPiecePrice, setFixedPiecePrice] = useState("");
 const [saleType, setSaleType] = useState<"kg" | "pieza">("kg");
 const [isActive, setIsActive] = useState(true);
 const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
+const [recommendedWith, setRecommendedWith] = useState<string[]>([]);
+const [recommendSearch, setRecommendSearch] = useState("");
 
   useEffect(() => {
     loadProducts();
@@ -90,6 +93,8 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   setSaleType("kg");
   setIsActive(true);
   setIsExcludedFromDiscount(false);
+  setRecommendedWith([]);
+  setRecommendSearch("");
   setSaving(false);
 }
 
@@ -99,6 +104,8 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
   setCategory(product.category || "Complementos");
   setIsActive(Boolean(product.is_active));
   setIsExcludedFromDiscount(Boolean(product.is_excluded_from_discount));
+  setRecommendedWith(Array.isArray(product.recommended_with) ? product.recommended_with : []);
+  setRecommendSearch("");
 
   // Detectar tipo de venta
   const isPiece = product.fixed_piece_price != null && product.fixed_piece_price > 0;
@@ -148,6 +155,7 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
     fixed_piece_price: saleType === "pieza" ? Number(Number(fixedPiecePrice).toFixed(2)) : null,
     is_active: isActive,
     is_excluded_from_discount: isExcludedFromDiscount,
+    recommended_with: recommendedWith,
   };
 
     if (editingId) {
@@ -411,6 +419,71 @@ const [isExcludedFromDiscount, setIsExcludedFromDiscount] = useState(false);
               />
               <span>Sin descuento</span>
             </label>
+          </div>
+
+          {/* Recomendaciones manuales para sugerir al cliente en el carrito */}
+          <div style={{ marginTop: 16, padding: 16, background: COLORS.bgSoft, borderRadius: 16, border: `1px solid ${COLORS.border}` }}>
+            <div style={fieldLabelStyle}>Recomendar con estos productos (opcional)</div>
+            <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10 }}>
+              Cuando el cliente agregue este producto, se le sugerirán los que selecciones aquí.
+            </div>
+            {recommendedWith.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+                {recommendedWith.map((id) => {
+                  const p = products.find((x) => x.id === id);
+                  if (!p) return null;
+                  return (
+                    <span key={id} style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "6px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700,
+                      background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+                      color: "white",
+                    }}>
+                      {p.name}
+                      <button
+                        type="button"
+                        onClick={() => setRecommendedWith((prev) => prev.filter((x) => x !== id))}
+                        style={{ background: "rgba(255,255,255,0.3)", border: "none", borderRadius: "50%", width: 18, height: 18, color: "white", cursor: "pointer", fontSize: 11, lineHeight: "18px", padding: 0 }}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            <input
+              placeholder="Buscar producto para agregar..."
+              value={recommendSearch}
+              onChange={(e) => setRecommendSearch(e.target.value)}
+              style={inputStyle}
+            />
+            {recommendSearch.trim().length > 0 && (
+              <div style={{ marginTop: 8, maxHeight: 220, overflow: "auto", background: "white", border: `1px solid ${COLORS.border}`, borderRadius: 12 }}>
+                {products
+                  .filter((p) =>
+                    p.id !== editingId &&
+                    !recommendedWith.includes(p.id) &&
+                    (p.name || "").toLowerCase().includes(recommendSearch.toLowerCase())
+                  )
+                  .slice(0, 15)
+                  .map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => {
+                        setRecommendedWith((prev) => [...prev, p.id]);
+                        setRecommendSearch("");
+                      }}
+                      style={{ padding: "10px 12px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    >
+                      <span style={{ color: COLORS.text, fontWeight: 600 }}>{p.name}</span>
+                      <span style={{ color: COLORS.muted, fontSize: 12 }}>
+                        {p.category || "Complementos"}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
 
           <div style={actionsWrapStyle}>
