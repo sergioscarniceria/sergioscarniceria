@@ -73,6 +73,14 @@ export default function AdminDashboardPage() {
   const [bodegaItems, setBodegaItems] = useState<{ name: string; stock: number; cost: number; unit: string }[]>([]);
   const [complementos, setComplementos] = useState<{ name: string; stock: number; purchase_price: number }[]>([]);
 
+  // Utilidades data
+  const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
+  const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
+  const [prevYearExpenses, setPrevYearExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
+  const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
+  const [prevYearOrders, setPrevYearOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
+  const [cxcNotes, setCxcNotes] = useState<{ customer_name: string; total_amount: number; balance_due: number; status: string; due_date: string }[]>([]);
+
   const today = new Date();
   const todayStr = toDateInputValue(today);
   const firstDayMonthStr = toDateInputValue(
@@ -131,6 +139,66 @@ export default function AdminDashboardPage() {
       (p: any) => p.category === "Complementos" || (p.fixed_piece_price !== null && p.fixed_piece_price > 0)
     );
     setComplementos(compData as any[]);
+
+    // ─── Utilidades: gastos externos del mes actual ───
+    const currentMonth = new Date();
+    const cmFirst = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-01`;
+    const cmLast = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
+    const cmLastStr = `${currentMonth.getFullYear()}-${String(currentMonth.getMonth() + 1).padStart(2, "0")}-${String(cmLast.getDate()).padStart(2, "0")}`;
+
+    const { data: oeData } = await supabase
+      .from("owner_expenses")
+      .select("expense_date, amount, category")
+      .gte("expense_date", cmFirst)
+      .lte("expense_date", cmLastStr);
+    setOwnerExpenses((oeData as any[]) || []);
+
+    // Mes anterior
+    const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
+    const pmFirst = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-01`;
+    const pmLast = new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0);
+    const pmLastStr = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-${String(pmLast.getDate()).padStart(2, "0")}`;
+
+    const { data: pmOeData } = await supabase
+      .from("owner_expenses")
+      .select("expense_date, amount, category")
+      .gte("expense_date", pmFirst)
+      .lte("expense_date", pmLastStr);
+    setPrevMonthExpenses((pmOeData as any[]) || []);
+
+    const { data: pmOrders } = await supabase
+      .from("orders")
+      .select("created_at, order_items(kilos, price)")
+      .gte("created_at", `${pmFirst}T00:00:00`)
+      .lte("created_at", `${pmLastStr}T23:59:59`);
+    setPrevMonthOrders((pmOrders as any[]) || []);
+
+    // Mismo mes del año anterior
+    const prevYear = new Date(currentMonth.getFullYear() - 1, currentMonth.getMonth(), 1);
+    const pyFirst = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, "0")}-01`;
+    const pyLast = new Date(prevYear.getFullYear(), prevYear.getMonth() + 1, 0);
+    const pyLastStr = `${prevYear.getFullYear()}-${String(prevYear.getMonth() + 1).padStart(2, "0")}-${String(pyLast.getDate()).padStart(2, "0")}`;
+
+    const { data: pyOeData } = await supabase
+      .from("owner_expenses")
+      .select("expense_date, amount, category")
+      .gte("expense_date", pyFirst)
+      .lte("expense_date", pyLastStr);
+    setPrevYearExpenses((pyOeData as any[]) || []);
+
+    const { data: pyOrders } = await supabase
+      .from("orders")
+      .select("created_at, order_items(kilos, price)")
+      .gte("created_at", `${pyFirst}T00:00:00`)
+      .lte("created_at", `${pyLastStr}T23:59:59`);
+    setPrevYearOrders((pyOrders as any[]) || []);
+
+    // CxC abiertas
+    const { data: cxcData } = await supabase
+      .from("cxc_notes")
+      .select("customer_name, total_amount, balance_due, status, due_date")
+      .eq("status", "abierta");
+    setCxcNotes((cxcData as any[]) || []);
 
     setLoading(false);
   }
@@ -250,6 +318,56 @@ export default function AdminDashboardPage() {
     const complementosLow = complementos.filter((p: any) => (p.min_stock || 0) > 0 && (p.stock || 0) <= (p.min_stock || 0)).length;
     return { bodegaValue, complementosValue, totalValue, bodegaCount, complementosCount, bodegaLow, complementosLow };
   }, [bodegaItems, complementos]);
+
+  // ─── Utilidades del Mes ─────────────────────────────────
+  const utilityStats = useMemo(() => {
+    const calcOrdersTotal = (ords: any[]) =>
+      ords.reduce((acc: number, o: any) =>
+        acc + (o.order_items || []).reduce((s: number, i: any) => s + Number(i.kilos || 0) * Number(i.price || 0), 0), 0);
+
+    const currentSales = salesThisMonth;
+    const currentExpenses = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const currentUtility = currentSales - currentExpenses;
+    const currentMargin = currentSales > 0 ? (currentUtility / currentSales) * 100 : 0;
+
+    const prevMSales = calcOrdersTotal(prevMonthOrders);
+    const prevMExpenses = prevMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevMUtility = prevMSales - prevMExpenses;
+    const prevMMargin = prevMSales > 0 ? (prevMUtility / prevMSales) * 100 : 0;
+
+    const prevYSales = calcOrdersTotal(prevYearOrders);
+    const prevYExpenses = prevYearExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevYUtility = prevYSales - prevYExpenses;
+    const prevYMargin = prevYSales > 0 ? (prevYUtility / prevYSales) * 100 : 0;
+
+    // CxC
+    const totalCxC = cxcNotes.reduce((s, n) => s + Number(n.balance_due || 0), 0);
+    const cxcCount = cxcNotes.length;
+    const cxcVencidas = cxcNotes.filter((n) => n.due_date && new Date(n.due_date) < new Date()).length;
+
+    // Desglose por categoría gastos actuales
+    const byCategory: Record<string, number> = {};
+    ownerExpenses.forEach((e) => {
+      byCategory[e.category] = (byCategory[e.category] || 0) + Number(e.amount);
+    });
+
+    const categories = Object.entries(byCategory)
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, total]) => ({ category: cat, total }));
+
+    const monthNames = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+    const cm = new Date();
+    const pm = new Date(cm.getFullYear(), cm.getMonth() - 1, 1);
+    const py = new Date(cm.getFullYear() - 1, cm.getMonth(), 1);
+
+    return {
+      current: { sales: currentSales, expenses: currentExpenses, utility: currentUtility, margin: currentMargin, label: monthNames[cm.getMonth()] },
+      prevMonth: { sales: prevMSales, expenses: prevMExpenses, utility: prevMUtility, margin: prevMMargin, label: monthNames[pm.getMonth()] },
+      prevYear: { sales: prevYSales, expenses: prevYExpenses, utility: prevYUtility, margin: prevYMargin, label: `${monthNames[py.getMonth()]} ${py.getFullYear()}` },
+      cxc: { total: totalCxC, count: cxcCount, vencidas: cxcVencidas },
+      categories,
+    };
+  }, [salesThisMonth, ownerExpenses, prevMonthOrders, prevMonthExpenses, prevYearOrders, prevYearExpenses, cxcNotes]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -692,6 +810,142 @@ export default function AdminDashboardPage() {
             ))
           )}
         </div>
+        {/* ─── Panel de Utilidades ─── */}
+        <div style={panelStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h2 style={panelTitleStyle}>Utilidades del Mes</h2>
+              <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>Resumen financiero — {utilityStats.current.label} {new Date().getFullYear()}</p>
+            </div>
+            <Link href="/admin/gastos" style={{ padding: "8px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none" }}>
+              Registrar gastos
+            </Link>
+          </div>
+
+          {/* KPIs principales */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Ventas del mes</div>
+              <div style={{ ...heroValueStyle, color: COLORS.success }}>${fmt(utilityStats.current.sales)}</div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Gastos externos</div>
+              <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.expenses)}</div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Utilidad</div>
+              <div style={{ ...heroValueStyle, color: utilityStats.current.utility >= 0 ? COLORS.success : COLORS.danger }}>
+                ${fmt(utilityStats.current.utility)}
+              </div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Margen EBITDA</div>
+              <div style={{ ...heroValueStyle, color: utilityStats.current.margin >= 10 ? COLORS.success : COLORS.warning }}>
+                {utilityStats.current.margin.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+
+          {/* Comparativas */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {/* vs Mes anterior */}
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevMonth.label} (mes anterior)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevMonth.sales)}</div>
+                  {utilityStats.prevMonth.sales > 0 && (
+                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevMonth.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
+                      {utilityStats.current.sales >= utilityStats.prevMonth.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevMonth.sales) / utilityStats.prevMonth.sales) * 100).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevMonth.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevMonth.utility)}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevMonth.margin.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+
+            {/* vs Mismo mes año anterior */}
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevYear.label}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevYear.sales)}</div>
+                  {utilityStats.prevYear.sales > 0 && (
+                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevYear.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
+                      {utilityStats.current.sales >= utilityStats.prevYear.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevYear.sales) / utilityStats.prevYear.sales) * 100).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevYear.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevYear.utility)}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevYear.margin.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CxC + Desglose gastos */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {/* Lo que me deben */}
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que me deben (CxC)</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.warning, marginBottom: 4 }}>${fmt(utilityStats.cxc.total)}</div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>
+                {utilityStats.cxc.count} notas abiertas
+                {utilityStats.cxc.vencidas > 0 && (
+                  <span style={{ color: COLORS.danger, fontWeight: 700 }}> — {utilityStats.cxc.vencidas} vencidas</span>
+                )}
+              </div>
+              {cxcNotes.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {cxcNotes.slice(0, 5).map((n, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <span style={{ color: COLORS.text }}>{n.customer_name}</span>
+                      <span style={{ fontWeight: 700, color: new Date(n.due_date) < new Date() ? COLORS.danger : COLORS.text }}>${fmt(n.balance_due)}</span>
+                    </div>
+                  ))}
+                  {cxcNotes.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {cxcNotes.length - 5} más...</div>}
+                </div>
+              )}
+            </div>
+
+            {/* Desglose de gastos */}
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Desglose gastos externos</div>
+              {utilityStats.categories.length === 0 ? (
+                <div style={{ fontSize: 13, color: COLORS.muted, padding: 10 }}>Sin gastos registrados este mes</div>
+              ) : (
+                utilityStats.categories.map((cat, i) => {
+                  const catLabels: Record<string, string> = {
+                    compras_ganado: "Compras ganado", pagos_proveedores: "Pagos proveedores", renta: "Renta",
+                    gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
+                    servicios: "Servicios", sueldos_extra: "Sueldos extra", otros: "Otros",
+                  };
+                  const pct = utilityStats.current.expenses > 0 ? (cat.total / utilityStats.current.expenses) * 100 : 0;
+                  return (
+                    <div key={i} style={{ marginBottom: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                        <span style={{ color: COLORS.text, fontWeight: 600 }}>{catLabels[cat.category] || cat.category}</span>
+                        <span style={{ fontWeight: 700, color: COLORS.text }}>${fmt(cat.total)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div style={{ height: 6, background: "#eee", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: COLORS.primary, borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Panel de salud del sistema */}
         <SystemHealthPanel />
       </div>
