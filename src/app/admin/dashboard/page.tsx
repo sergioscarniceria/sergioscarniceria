@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
+
+/** Formato contable: $1,234.56 (sin el $, solo el número) */
+function fmt(n: number, decimals = 2): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
 import {
   LineChart,
   Line,
@@ -437,7 +442,7 @@ export default function AdminDashboardPage() {
         <div style={statsGridStyle}>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Ventas del rango</div>
-            <div style={heroValueStyle}>${totalSales.toFixed(2)}</div>
+            <div style={heroValueStyle}>${fmt(totalSales)}</div>
           </div>
 
           <div style={heroCardStyle}>
@@ -447,40 +452,40 @@ export default function AdminDashboardPage() {
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Kilos vendidos</div>
-            <div style={heroValueStyle}>{totalKilos.toFixed(2)}</div>
+            <div style={heroValueStyle}>{fmt(totalKilos)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Ticket promedio</div>
-            <div style={heroValueStyle}>${averageTicket.toFixed(2)}</div>
+            <div style={heroValueStyle}>${fmt(averageTicket)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Pedidos hoy</div>
             <div style={heroValueStyle}>{ordersToday}</div>
-            <div style={heroMetaStyle}>${salesToday.toFixed(2)}</div>
+            <div style={heroMetaStyle}>${fmt(salesToday)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Pedidos este mes</div>
             <div style={heroValueStyle}>{ordersThisMonth}</div>
-            <div style={heroMetaStyle}>${salesThisMonth.toFixed(2)}</div>
+            <div style={heroMetaStyle}>${fmt(salesThisMonth)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Pedidos este año</div>
             <div style={heroValueStyle}>{ordersThisYear}</div>
-            <div style={heroMetaStyle}>${salesThisYear.toFixed(2)}</div>
+            <div style={heroMetaStyle}>${fmt(salesThisYear)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Ventas hoy</div>
-            <div style={heroValueStyle}>${salesToday.toFixed(2)}</div>
+            <div style={heroValueStyle}>${fmt(salesToday)}</div>
           </div>
 
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Ventas este año</div>
-            <div style={heroValueStyle}>${salesThisYear.toFixed(2)}</div>
+            <div style={heroValueStyle}>${fmt(salesThisYear)}</div>
           </div>
         </div>
 
@@ -555,16 +560,16 @@ export default function AdminDashboardPage() {
         <div style={statsGridStyle}>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Valor total inventario</div>
-            <div style={{ ...heroValueStyle, color: COLORS.primary }}>${inventoryStats.totalValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style={{ ...heroValueStyle, color: COLORS.primary }}>${fmt(inventoryStats.totalValue)}</div>
           </div>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Bodega (insumos)</div>
-            <div style={heroValueStyle}>${inventoryStats.bodegaValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style={heroValueStyle}>${fmt(inventoryStats.bodegaValue)}</div>
             <div style={heroMetaStyle}>{inventoryStats.bodegaCount} items</div>
           </div>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Complementos</div>
-            <div style={heroValueStyle}>${inventoryStats.complementosValue.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div style={heroValueStyle}>${fmt(inventoryStats.complementosValue)}</div>
             <div style={heroMetaStyle}>{inventoryStats.complementosCount} items</div>
           </div>
         </div>
@@ -609,7 +614,7 @@ export default function AdminDashboardPage() {
                 <div key={customer.name} style={rowStyle}>
                   <div style={{ minWidth: 0 }}>#{index + 1} <b>{customer.name}</b></div>
                   <div style={{ fontWeight: 700, color: COLORS.text, flexShrink: 0 }}>
-                    ${customer.total.toFixed(2)}
+                    ${fmt(customer.total)}
                   </div>
                 </div>
               ))
@@ -645,13 +650,13 @@ export default function AdminDashboardPage() {
                   #{index + 1} <b>{product.product}</b>
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
-                  {product.kilos.toFixed(2)} kg
+                  {fmt(product.kilos)} kg
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
                   {product.times} veces
                 </div>
                 <div style={{ flex: 1, textAlign: "right", fontWeight: 700, color: COLORS.text }}>
-                  ${product.revenue.toFixed(2)}
+                  ${fmt(product.revenue)}
                 </div>
               </div>
             ))
@@ -681,7 +686,7 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div style={{ fontWeight: 800, fontSize: 18, color: COLORS.primary, flexShrink: 0 }}>
-                  ${orderTotal(order).toFixed(2)}
+                  ${fmt(orderTotal(order))}
                 </div>
               </div>
             ))
