@@ -548,7 +548,7 @@ export default function AdminDashboardPage() {
       return `<tr><td>${catLabels[c.category] || c.category}</td><td style="text-align:right">$${fmt(c.total)}</td><td style="text-align:right">${pct}%</td></tr>`;
     }).join("");
 
-    const html = `<!DOCTYPE html><html><head><title>Reporte ${u.current.label} ${new Date().getFullYear()}</title>
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Reporte ${u.current.label} ${new Date().getFullYear()}</title>
 <style>
   @page{size:letter;margin:15mm}
   *{margin:0;padding:0;box-sizing:border-box}
@@ -572,8 +572,8 @@ export default function AdminDashboardPage() {
   .balance .val{font-size:16px;font-weight:900}
   .footer{text-align:center;font-size:9px;color:#999;margin-top:20px;border-top:1px solid #ddd;padding-top:8px}
 </style></head><body>
-  <h1>Sergio's Carnicería — Reporte de Utilidades</h1>
-  <div class="subtitle">${u.current.label} ${new Date().getFullYear()} — Generado el ${new Date().toLocaleDateString("es-MX")}</div>
+  <h1>Sergio's Carnicer\u00eda - Reporte de Utilidades</h1>
+  <div class="subtitle">${u.current.label} ${new Date().getFullYear()} - Generado el ${new Date().toLocaleDateString("es-MX")}</div>
 
   <div class="grid">
     <div class="card"><div class="label">Ventas del mes</div><div class="value green">$${fmt(u.current.sales)}</div></div>
@@ -626,7 +626,7 @@ export default function AdminDashboardPage() {
   <table><thead><tr><th>Categoría</th><th style="text-align:right">Monto</th><th style="text-align:right">%</th></tr></thead><tbody>${catRows}</tbody></table>
   ` : ""}
 
-  <div class="footer">Sergio's Carnicería — sergioscarniceria.com — Reporte generado automáticamente</div>
+  <div class="footer">Sergio's Carnicer\u00eda - sergioscarniceria.com - Reporte generado autom\u00e1ticamente</div>
 </body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
