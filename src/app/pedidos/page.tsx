@@ -25,6 +25,7 @@ type Order = {
   created_at?: string;
   butcher_name?: string | null;
   delivery_date?: string | null;
+  delivery_status?: string | null;
   payment_status?: string | null;
   payment_method?: string | null;
   order_items?: OrderItem[];
@@ -239,6 +240,22 @@ const [changingId, setChangingId] = useState<string | null>(null);
   const futureOrders = useMemo(() => {
     return applyBaseFilters(
       orders.filter((o) => isFutureDate(o.delivery_date))
+    );
+  }, [orders, filter, search]);
+
+  const overdueOrders = useMemo(() => {
+    return applyBaseFilters(
+      orders.filter((o) => {
+        const n = normalizeDateOnly(o.delivery_date);
+        if (!n) return false;
+        return n < getTodayDateInput() && o.status !== "terminado" && o.delivery_status !== "entregado";
+      })
+    );
+  }, [orders, filter, search]);
+
+  const noDateOrders = useMemo(() => {
+    return applyBaseFilters(
+      orders.filter((o) => !normalizeDateOnly(o.delivery_date) && o.status !== "terminado" && o.delivery_status !== "entregado")
     );
   }, [orders, filter, search]);
 
@@ -504,6 +521,13 @@ const [changingId, setChangingId] = useState<string | null>(null);
         </div>
 
         <div style={summaryGridStyle}>
+          {overdueOrders.length > 0 && (
+            <div style={{ ...summaryCardStyle, background: "rgba(200,40,40,0.08)", border: "1px solid rgba(200,40,40,0.2)" }}>
+              <div style={{ ...summaryLabelStyle, color: "#c42828" }}>Atrasados</div>
+              <div style={{ ...summaryValueStyle, color: "#c42828" }}>{overdueOrders.length}</div>
+            </div>
+          )}
+
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Pedidos para hoy</div>
             <div style={summaryValueStyle}>{todayOrders.length}</div>
@@ -524,6 +548,38 @@ const [changingId, setChangingId] = useState<string | null>(null);
             </div>
           </div>
         </div>
+
+        {overdueOrders.length > 0 && (
+          <div style={sectionWrapStyle}>
+            <div style={sectionHeaderStyle}>
+              <div>
+                <h2 style={{ ...sectionTitleStyle, color: "#c42828" }}>Pedidos atrasados</h2>
+                <p style={sectionSubtitleStyle}>
+                  Pedidos con fecha pasada que no se han completado
+                </p>
+              </div>
+            </div>
+            <div style={gridStyle}>
+              {overdueOrders.map((o) => renderOrderCard(o))}
+            </div>
+          </div>
+        )}
+
+        {noDateOrders.length > 0 && (
+          <div style={sectionWrapStyle}>
+            <div style={sectionHeaderStyle}>
+              <div>
+                <h2 style={sectionTitleStyle}>Sin fecha asignada</h2>
+                <p style={sectionSubtitleStyle}>
+                  Pedidos que no tienen fecha de entrega
+                </p>
+              </div>
+            </div>
+            <div style={gridStyle}>
+              {noDateOrders.map((o) => renderOrderCard(o))}
+            </div>
+          </div>
+        )}
 
         <div style={sectionWrapStyle}>
           <div style={sectionHeaderStyle}>
