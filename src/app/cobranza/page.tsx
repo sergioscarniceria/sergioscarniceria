@@ -164,6 +164,25 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
 
+  // Modo fullscreen POS
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function onFsChange() {
+      setIsFullscreen(!!document.fullscreenElement);
+    }
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
   // Historial reimpresión
   const [historialSearch, setHistorialSearch] = useState("");
   const [historialResults, setHistorialResults] = useState<Ticket[]>([]);
@@ -1145,6 +1164,19 @@ if (cashError) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {/* Modo fullscreen POS */}
+            <button
+              onClick={toggleFullscreen}
+              style={{
+                ...secondaryButtonStyle,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                cursor: "pointer",
+              }}
+            >
+              {isFullscreen ? "⬜ Salir" : "🖥️ POS"}
+            </button>
             {/* Indicador de báscula */}
             <button
               onClick={toggleScale}
