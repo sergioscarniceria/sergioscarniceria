@@ -6,6 +6,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import QrScanner from "@/components/QrScanner";
 import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
+import { getScale } from "@/lib/scale";
 
 type TabMode = "ticket" | "manual";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -163,6 +164,12 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
 
+  // Báscula Torrey
+  const [scaleConnected, setScaleConnected] = useState(false);
+  const [scaleWeight, setScaleWeight] = useState(0);
+  const [scaleStable, setScaleStable] = useState(false);
+  const [scaleConnecting, setScaleConnecting] = useState(false);
+
   // Identificación cajera
   const [cashierName, setCashierName] = useState("");
   const [cashierCode, setCashierCode] = useState("");
@@ -182,6 +189,37 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     setCashierName(data.name);
     setCashierVerified(true);
     setCashierError("");
+  }
+
+  // Báscula: suscribirse a cambios de peso
+  useEffect(() => {
+    const scale = getScale();
+    const unsub = scale.onWeight((weight, _unit, stable) => {
+      setScaleWeight(weight);
+      setScaleStable(stable);
+    });
+    // Si ya estaba conectada de antes
+    if (scale.isConnected) {
+      setScaleConnected(true);
+      setScaleWeight(scale.lastWeight);
+      setScaleStable(scale.lastStable);
+    }
+    return unsub;
+  }, []);
+
+  async function toggleScale() {
+    const scale = getScale();
+    if (scale.isConnected) {
+      await scale.disconnect();
+      setScaleConnected(false);
+      setScaleWeight(0);
+      setScaleStable(false);
+    } else {
+      setScaleConnecting(true);
+      const ok = await scale.connect();
+      setScaleConnected(ok);
+      setScaleConnecting(false);
+    }
   }
 
   // Scanner detection: el escáner USB escribe muy rápido (< 50ms entre chars)
@@ -1060,7 +1098,25 @@ if (cashError) {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {/* Indicador de báscula */}
+            <button
+              onClick={toggleScale}
+              disabled={scaleConnecting}
+              style={{
+                ...secondaryButtonStyle,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: scaleConnected ? "rgba(31,122,77,0.12)" : "rgba(255,255,255,0.75)",
+                color: scaleConnected ? COLORS.success : COLORS.muted,
+                cursor: scaleConnecting ? "wait" : "pointer",
+                border: `1px solid ${scaleConnected ? "rgba(31,122,77,0.3)" : COLORS.border}`,
+              }}
+            >
+              {scaleConnecting ? "⏳" : scaleConnected ? "⚖️" : "⚖️"}
+              {scaleConnecting ? "Conectando..." : scaleConnected ? `${scaleWeight.toFixed(3)} kg${scaleStable ? " ✓" : " ~"}` : "Báscula"}
+            </button>
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/admin/cxc" style={secondaryButtonStyle}>CxC</Link>
@@ -1275,6 +1331,35 @@ if (cashError) {
                         ))
                       )}
                     </div>
+
+                    {/* Lectura de báscula en vivo */}
+                    {scaleConnected && (
+                      <div style={{
+                        marginTop: 12,
+                        padding: 16,
+                        borderRadius: 18,
+                        background: scaleStable ? "rgba(31,122,77,0.08)" : "rgba(166,106,16,0.08)",
+                        border: `1px solid ${scaleStable ? "rgba(31,122,77,0.2)" : "rgba(166,106,16,0.2)"}`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted }}>⚖️ Báscula en vivo</div>
+                          <div style={{ fontSize: 11, color: scaleStable ? COLORS.success : COLORS.warning }}>
+                            {scaleStable ? "Peso estable" : "Estabilizando..."}
+                          </div>
+                        </div>
+                        <div style={{
+                          fontSize: 28,
+                          fontWeight: 900,
+                          color: scaleStable ? COLORS.success : COLORS.warning,
+                          fontVariantNumeric: "tabular-nums",
+                        }}>
+                          {scaleWeight.toFixed(3)} <span style={{ fontSize: 16 }}>kg</span>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Badge mayoreo */}
                     {getCustomerType(selectedTicket) === "mayoreo" && (
