@@ -452,9 +452,12 @@ export default function ClientePage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [loginError, setLoginError] = useState("");
+  const [loginSuccess, setLoginSuccess] = useState("");
   const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; customerId: string } | null>(null);
+  const [forgotPhone, setForgotPhone] = useState("");
+  const [forgotNewPass, setForgotNewPass] = useState("");
 
   const [products, setProducts] = useState<Product[]>([]);
   const [topSellerNames, setTopSellerNames] = useState<string[]>([]);
@@ -688,84 +691,90 @@ export default function ClientePage() {
   }
 
   async function register() {
-    if (!name || !phone || !email || !password) {
-      alert("Llena todos los campos");
+    setLoginError("");
+    if (!name || !phone || !password) {
+      setLoginError("Llena tu nombre, tel\u00e9fono y contrase\u00f1a");
+      return;
+    }
+    if (password.length < 4) {
+      setLoginError("La contrase\u00f1a debe tener al menos 4 caracteres");
       return;
     }
 
     setSaving(true);
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      // 1. Create account via server API (admin, auto-confirmed)
+      const res = await fetch("/api/portal/registrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), phone: phone.trim(), email: email.trim() || null, password }),
+      });
+      const result = await res.json();
 
-    if (error) {
-      console.log(error);
-      alert("Error al registrar");
-      setSaving(false);
+      if (!res.ok || !result.success) {
+        setLoginError(result.error || "Error al crear tu cuenta");
+        setSaving(false);
+        return;
+      }
+
+      // 2. Auto-login immediately
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: result.auth_email,
+        password,
+      });
+
+      if (signInError) {
+        // Account created but login failed — show card and let them login manually
+        setNewCardData({ name, phone, email, password, customerId: result.customer_id });
+        setSaving(false);
+        return;
+      }
+
+      // 3. Show customer card + load data (user is now logged in)
+      setNewCardData({ name, phone, email, password, customerId: result.customer_id });
+      await checkUser();
+    } catch {
+      setLoginError("Error de conexi\u00f3n. Intenta de nuevo.");
+    }
+
+    setSaving(false);
+  }
+
+  async function resetPassword() {
+    setLoginError("");
+    setLoginSuccess("");
+    if (!forgotPhone.trim()) {
+      setLoginError("Escribe tu n\u00famero de tel\u00e9fono");
+      return;
+    }
+    if (!forgotNewPass || forgotNewPass.length < 4) {
+      setLoginError("Escribe tu nueva contrase\u00f1a (m\u00ednimo 4 caracteres)");
       return;
     }
 
-    const createdUser = data.user;
-    if (!createdUser) {
-      alert("No se creó el usuario");
-      setSaving(false);
-      return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/portal/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: forgotPhone.trim(), new_password: forgotNewPass }),
+      });
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        setLoginError(result.error || "No se pudo cambiar la contrase\u00f1a");
+        setSaving(false);
+        return;
+      }
+
+      setLoginSuccess(`Listo, ${result.name || ""}. Tu contrase\u00f1a fue cambiada. Ya puedes entrar.`);
+      setForgotPhone("");
+      setForgotNewPass("");
+      setTimeout(() => { setMode("login"); setLoginSuccess(""); }, 3000);
+    } catch {
+      setLoginError("Error de conexi\u00f3n");
     }
-
-    const { data: customer, error: customerError } = await supabase
-      .from("customers")
-      .insert([
-        {
-          name,
-          phone,
-          business_name: name,
-          customer_type: "menudeo",
-          email,
-          address: "",
-        },
-      ])
-      .select()
-      .single();
-
-    if (customerError || !customer) {
-      console.log(customerError);
-      alert("Se creó el usuario, pero falló el cliente");
-      setSaving(false);
-      return;
-    }
-
-    const { error: profileError } = await supabase.from("customer_profiles").upsert([
-      {
-        id: createdUser.id,
-        customer_id: customer.id,
-        full_name: name,
-        phone,
-        email,
-        customer_type: "menudeo",
-        role: "customer",
-      },
-    ]);
-
-    if (profileError) {
-      console.log(profileError);
-      alert("Se creó el usuario, pero falló el perfil");
-      setSaving(false);
-      return;
-    }
-
-    await supabase.from("loyalty_accounts").upsert([{ customer_id: customer.id }]);
-
-    // Mostrar tarjeta de cliente con sus datos
-    setNewCardData({
-      name,
-      phone,
-      email,
-      password,
-      customerId: customer.id,
-    });
-
     setSaving(false);
   }
 
@@ -1379,15 +1388,17 @@ export default function ClientePage() {
         <div style={{ width: "100%", maxWidth: 520, position: "relative", zIndex: 2 }}>
           <div style={{ marginBottom: 18 }}>
             <Link href="/" style={backButton}>
-              ← Volver
+              &larr; Volver
             </Link>
           </div>
 
           <div style={authCardStyle}>
             <div style={{ textAlign: "center", marginBottom: 28 }}>
               <img
-                src="/logo.png"
-                alt="Sergios Carnicería"
+                src="/logo-sm.png"
+                alt="Sergios Carnicer&iacute;a"
+                loading="eager"
+                fetchPriority="high"
                 style={{
                   width: 200,
                   maxWidth: "100%",
@@ -1397,16 +1408,17 @@ export default function ClientePage() {
                 }}
               />
               <h1 style={{ margin: 0, color: COLORS.text, fontSize: 32, fontWeight: 800 }}>
-                Sergio{"'"}s Carnicería
+                Sergio{"'"}s Carnicer&iacute;a
               </h1>
               <p style={{ color: COLORS.muted, marginTop: 10, fontSize: 16, lineHeight: 1.5 }}>
                 Pide carne fresca desde tu celular
               </p>
             </div>
 
+            {/* Tabs: Entrar / Crear cuenta */}
             <div style={{ marginBottom: 22, display: "flex", gap: 12 }}>
               <button
-                onClick={() => { setMode("login"); setLoginError(""); }}
+                onClick={() => { setMode("login"); setLoginError(""); setLoginSuccess(""); }}
                 style={{
                   ...switchButtonStyle,
                   background: mode === "login" ? COLORS.primary : "#efe8df",
@@ -1417,7 +1429,7 @@ export default function ClientePage() {
                 Entrar
               </button>
               <button
-                onClick={() => { setMode("register"); setLoginError(""); }}
+                onClick={() => { setMode("register"); setLoginError(""); setLoginSuccess(""); }}
                 style={{
                   ...switchButtonStyle,
                   background: mode === "register" ? COLORS.primary : "#efe8df",
@@ -1432,6 +1444,9 @@ export default function ClientePage() {
             {loginError && (
               <div style={loginErrorStyle}>{loginError}</div>
             )}
+            {loginSuccess && (
+              <div style={{ ...loginErrorStyle, background: "rgba(31,122,77,0.1)", color: "#1f7a4d", borderColor: "rgba(31,122,77,0.2)" }}>{loginSuccess}</div>
+            )}
 
             {mode === "login" ? (
               <>
@@ -1445,7 +1460,7 @@ export default function ClientePage() {
                       borderColor: loginMethod === "phone" ? COLORS.primary : COLORS.border,
                     }}
                   >
-                    Teléfono
+                    Tel&eacute;fono
                   </button>
                   <button
                     onClick={() => { setLoginMethod("email"); setLoginError(""); }}
@@ -1462,7 +1477,7 @@ export default function ClientePage() {
 
                 {loginMethod === "phone" ? (
                   <input
-                    placeholder="Tu número de teléfono"
+                    placeholder="Tu n&uacute;mero de tel&eacute;fono"
                     value={loginPhone}
                     onChange={(e) => setLoginPhone(e.target.value)}
                     style={inputStyle}
@@ -1470,7 +1485,7 @@ export default function ClientePage() {
                   />
                 ) : (
                   <input
-                    placeholder="Tu correo electrónico"
+                    placeholder="Tu correo electr&oacute;nico"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     style={inputStyle}
@@ -1479,7 +1494,7 @@ export default function ClientePage() {
                 )}
 
                 <input
-                  placeholder="Contraseña"
+                  placeholder="Contrase&ntilde;a"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -1492,31 +1507,44 @@ export default function ClientePage() {
                 >
                   {saving ? "Entrando..." : "Entrar"}
                 </button>
+
+                {/* Forgot password link */}
+                <button
+                  onClick={() => { setMode("forgot"); setLoginError(""); setLoginSuccess(""); }}
+                  style={{
+                    background: "none", border: "none", color: COLORS.primary,
+                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    marginTop: 12, padding: 0, textDecoration: "underline",
+                    width: "100%", textAlign: "center",
+                  }}
+                >
+                  &iquest;Olvidaste tu contrase&ntilde;a?
+                </button>
               </>
-            ) : (
+            ) : mode === "register" ? (
               <>
                 <input
-                  placeholder="Tu nombre"
+                  placeholder="Tu nombre *"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   style={inputStyle}
                 />
                 <input
-                  placeholder="Tu teléfono"
+                  placeholder="Tu tel&eacute;fono (WhatsApp) *"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   style={inputStyle}
                   type="tel"
                 />
                 <input
-                  placeholder="Tu correo electrónico"
+                  placeholder="Correo electr&oacute;nico (opcional)"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   style={inputStyle}
                   type="email"
                 />
                 <input
-                  placeholder="Crea una contraseña"
+                  placeholder="Crea una contrase&ntilde;a *"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -1527,14 +1555,55 @@ export default function ClientePage() {
                   disabled={saving}
                   style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
                 >
-                  {saving ? "Creando cuenta..." : "Crear mi cuenta"}
+                  {saving ? "Creando tu cuenta..." : "Crear mi cuenta"}
+                </button>
+                <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", marginTop: 10 }}>
+                  Al crear tu cuenta entras autom&aacute;ticamente
+                </div>
+              </>
+            ) : (
+              /* Forgot password mode */
+              <>
+                <div style={{ marginBottom: 16, fontSize: 14, color: COLORS.muted, lineHeight: 1.5 }}>
+                  Escribe tu n&uacute;mero de tel&eacute;fono y tu nueva contrase&ntilde;a.
+                </div>
+                <input
+                  placeholder="Tu n&uacute;mero de tel&eacute;fono"
+                  value={forgotPhone}
+                  onChange={(e) => setForgotPhone(e.target.value)}
+                  style={inputStyle}
+                  type="tel"
+                />
+                <input
+                  placeholder="Nueva contrase&ntilde;a"
+                  type="password"
+                  value={forgotNewPass}
+                  onChange={(e) => setForgotNewPass(e.target.value)}
+                  style={inputStyle}
+                />
+                <button
+                  onClick={resetPassword}
+                  disabled={saving}
+                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
+                >
+                  {saving ? "Cambiando..." : "Cambiar contrase\u00f1a"}
+                </button>
+                <button
+                  onClick={() => { setMode("login"); setLoginError(""); setLoginSuccess(""); }}
+                  style={{
+                    background: "none", border: "none", color: COLORS.primary,
+                    fontSize: 14, fontWeight: 600, cursor: "pointer",
+                    marginTop: 12, padding: 0, width: "100%", textAlign: "center",
+                  }}
+                >
+                  &larr; Volver a entrar
                 </button>
               </>
             )}
 
             <div style={authPromoStyle}>
               <div style={{ fontWeight: 800, color: COLORS.primary, marginBottom: 8, fontSize: 16 }}>
-                🥩 Carne fresca todos los días
+                🥩 Carne fresca todos los d&iacute;as
               </div>
               <div style={{ color: COLORS.muted, fontSize: 14, lineHeight: 1.6 }}>
                 Cortes especiales, marinados y complementos. Hacemos tu pedido a medida.
@@ -1561,7 +1630,6 @@ export default function ClientePage() {
             setPhone("");
             setEmail("");
             setPassword("");
-            setMode("login");
           }}
         />
       )}

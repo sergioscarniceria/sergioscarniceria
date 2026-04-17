@@ -159,31 +159,45 @@ export default function CustomerCard({ name, phone, email, password, customerId,
         </div>
 
         {/* Botones debajo de la tarjeta */}
-        <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "center" }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "center", flexWrap: "wrap" as const }}>
+          <button
+            onClick={() => {
+              const msg = `🥩 *Sergio's Carnicería*\n\nTu tarjeta de cliente:\n👤 ${name}\n${phone ? `📱 ${phone}\n` : ""}${email ? `📧 ${email}\n` : ""}${password ? `🔑 Contraseña: ${password}\n` : ""}\nEntra en: sergioscarniceria.com/cliente`;
+              const url = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+              window.open(url, "_blank");
+            }}
+            style={{
+              padding: "12px 20px", borderRadius: 14, border: "none",
+              background: "#25D366", color: "white", fontWeight: 700,
+              cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            📱 Enviar por WhatsApp
+          </button>
           <button
             onClick={printCard}
             style={{
-              padding: "12px 24px", borderRadius: 14, border: "none",
+              padding: "12px 20px", borderRadius: 14, border: "none",
               background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
               color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14,
             }}
           >
-            Imprimir tarjeta
+            🖨 Imprimir
           </button>
           <button
             onClick={onClose}
             style={{
-              padding: "12px 24px", borderRadius: 14, border: `1.5px solid ${C.border}`,
+              padding: "12px 20px", borderRadius: 14, border: `1.5px solid ${C.border}`,
               background: "rgba(255,255,255,0.9)", color: C.text, fontWeight: 600,
               cursor: "pointer", fontSize: 14,
             }}
           >
-            Cerrar
+            Continuar
           </button>
         </div>
 
         <p style={{ textAlign: "center" as const, marginTop: 10, fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
-          Toma foto o captura de pantalla para recordar tus datos
+          Env&iacute;ate la tarjeta por WhatsApp para no perder tus datos
         </p>
       </div>
     </div>
