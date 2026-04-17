@@ -12,6 +12,7 @@ type Product = {
   sale_type: string | null;
   fixed_piece_price: number | null;
   is_active: boolean;
+  image_url: string | null;
 };
 
 type CartItem = {
@@ -102,7 +103,7 @@ export default function TiendaPage() {
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from("products")
-        .select("id, name, price, category, sale_type, fixed_piece_price, is_active")
+        .select("id, name, price, category, sale_type, fixed_piece_price, is_active, image_url")
         .eq("is_active", true)
         .order("category")
         .order("name");
@@ -733,10 +734,17 @@ export default function TiendaPage() {
                     }}>
                       {/* Visual top */}
                       <div style={{
-                        background: `linear-gradient(135deg, ${C.primaryBg} 0%, rgba(212,168,83,0.06) 100%)`,
-                        padding: "14px 10px 10px", textAlign: "center", position: "relative",
+                        background: p.image_url ? "#f5f0eb" : `linear-gradient(135deg, ${C.primaryBg} 0%, rgba(212,168,83,0.06) 100%)`,
+                        padding: p.image_url ? "0" : "14px 10px 10px", textAlign: "center", position: "relative",
+                        height: p.image_url ? 120 : "auto", overflow: "hidden",
                       }}>
-                        <div style={{ fontSize: 34 }}>{saleType === "pieza" ? "🥓" : "🥩"}</div>
+                        {p.image_url ? (
+                          <img src={p.image_url} alt={p.name} style={{
+                            width: "100%", height: 120, objectFit: "cover", display: "block",
+                          }} />
+                        ) : (
+                          <div style={{ fontSize: 34 }}>{saleType === "pieza" ? "🥓" : "🥩"}</div>
+                        )}
                         <div style={{
                           position: "absolute", top: 6, right: 6,
                           background: saleType === "pieza" ? C.accentLight : "rgba(255,255,255,0.85)",
