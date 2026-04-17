@@ -527,6 +527,118 @@ export default function AdminDashboardPage() {
     setDateTo("");
   }
 
+  function exportUtilitiesPDF() {
+    const u = utilityStats;
+    const catLabels: Record<string, string> = {
+      compras_ganado: "Compras ganado", pagos_proveedores: "Pagos proveedores", renta: "Renta",
+      gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
+      servicios: "Servicios", sueldos_extra: "Sueldos extra", otros: "Otros",
+    };
+
+    const cxcRows = cxcNotes.map(n =>
+      `<tr><td>${n.customer_name}</td><td style="text-align:right;font-weight:700">$${fmt(n.balance_due)}</td><td style="text-align:center">${n.due_date || "—"}</td></tr>`
+    ).join("");
+
+    const debtRows = supplierDebt.map(s =>
+      `<tr><td>${s.name}</td><td style="text-align:right;font-weight:700;color:#b42318">$${fmt(s.debt)}</td></tr>`
+    ).join("");
+
+    const catRows = u.categories.map(c => {
+      const pct = u.current.expenses > 0 ? ((c.total / u.current.expenses) * 100).toFixed(1) : "0";
+      return `<tr><td>${catLabels[c.category] || c.category}</td><td style="text-align:right">$${fmt(c.total)}</td><td style="text-align:right">${pct}%</td></tr>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><title>Reporte ${u.current.label} ${new Date().getFullYear()}</title>
+<style>
+  @page{size:letter;margin:15mm}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:Arial,sans-serif;font-size:12px;color:#333;padding:10mm}
+  h1{font-size:20px;color:#7b2218;margin-bottom:4px}
+  h2{font-size:14px;color:#7b2218;margin:16px 0 8px;border-bottom:2px solid #7b2218;padding-bottom:4px}
+  .subtitle{color:#666;font-size:12px;margin-bottom:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+  .card{background:#f9f5ef;border:1px solid #ddd;border-radius:8px;padding:10px}
+  .card .label{font-size:10px;color:#666;text-transform:uppercase}
+  .card .value{font-size:18px;font-weight:900;margin-top:2px}
+  .green{color:#1f7a4d} .red{color:#b42318} .orange{color:#a66a10}
+  table{width:100%;border-collapse:collapse;margin-bottom:12px}
+  th{text-align:left;font-size:10px;color:#666;border-bottom:2px solid #ddd;padding:4px 6px}
+  td{padding:4px 6px;border-bottom:1px solid #eee;font-size:11px}
+  .comp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+  .comp{background:#f9f5ef;border:1px solid #ddd;border-radius:8px;padding:10px}
+  .comp .title{font-size:11px;font-weight:700;color:#666;margin-bottom:6px}
+  .balance{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;text-align:center;background:#f9f5ef;border:1px solid #ddd;border-radius:8px;padding:12px;margin-bottom:16px}
+  .balance .label{font-size:10px;color:#666}
+  .balance .val{font-size:16px;font-weight:900}
+  .footer{text-align:center;font-size:9px;color:#999;margin-top:20px;border-top:1px solid #ddd;padding-top:8px}
+</style></head><body>
+  <h1>Sergio's Carnicería — Reporte de Utilidades</h1>
+  <div class="subtitle">${u.current.label} ${new Date().getFullYear()} — Generado el ${new Date().toLocaleDateString("es-MX")}</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Ventas del mes</div><div class="value green">$${fmt(u.current.sales)}</div></div>
+    <div class="card"><div class="label">Gastos externos</div><div class="value red">$${fmt(u.current.expenses)}</div></div>
+    <div class="card"><div class="label">Utilidad</div><div class="value ${u.current.utility >= 0 ? "green" : "red"}">$${fmt(u.current.utility)}</div></div>
+    <div class="card"><div class="label">Margen EBITDA</div><div class="value ${u.current.margin >= 10 ? "green" : "orange"}">${u.current.margin.toFixed(1)}%</div></div>
+  </div>
+
+  <h2>Comparativas</h2>
+  <div class="comp-grid">
+    <div class="comp">
+      <div class="title">vs ${u.prevMonth.label} (mes anterior)</div>
+      <table>
+        <tr><td>Ventas</td><td style="text-align:right;font-weight:700">$${fmt(u.prevMonth.sales)}</td></tr>
+        <tr><td>Utilidad</td><td style="text-align:right;font-weight:700" class="${u.prevMonth.utility >= 0 ? "green" : "red"}">$${fmt(u.prevMonth.utility)}</td></tr>
+        <tr><td>Margen</td><td style="text-align:right">${u.prevMonth.margin.toFixed(1)}%</td></tr>
+        ${u.prevMonth.sales > 0 ? `<tr><td>Cambio ventas</td><td style="text-align:right;font-weight:700" class="${u.current.sales >= u.prevMonth.sales ? "green" : "red"}">${u.current.sales >= u.prevMonth.sales ? "▲" : "▼"} ${Math.abs(((u.current.sales - u.prevMonth.sales) / u.prevMonth.sales) * 100).toFixed(1)}%</td></tr>` : ""}
+      </table>
+    </div>
+    <div class="comp">
+      <div class="title">vs ${u.prevYear.label}</div>
+      <table>
+        <tr><td>Ventas</td><td style="text-align:right;font-weight:700">$${fmt(u.prevYear.sales)}</td></tr>
+        <tr><td>Utilidad</td><td style="text-align:right;font-weight:700" class="${u.prevYear.utility >= 0 ? "green" : "red"}">$${fmt(u.prevYear.utility)}</td></tr>
+        <tr><td>Margen</td><td style="text-align:right">${u.prevYear.margin.toFixed(1)}%</td></tr>
+        ${u.prevYear.sales > 0 ? `<tr><td>Cambio ventas</td><td style="text-align:right;font-weight:700" class="${u.current.sales >= u.prevYear.sales ? "green" : "red"}">${u.current.sales >= u.prevYear.sales ? "▲" : "▼"} ${Math.abs(((u.current.sales - u.prevYear.sales) / u.prevYear.sales) * 100).toFixed(1)}%</td></tr>` : ""}
+      </table>
+    </div>
+  </div>
+
+  <h2>Balance: Me deben vs Yo debo</h2>
+  <div class="balance">
+    <div><div class="label">Me deben (CxC)</div><div class="val green">$${fmt(u.cxc.total)}</div></div>
+    <div><div class="label">Yo debo (Proveedores)</div><div class="val red">$${fmt(u.debt.total)}</div></div>
+    <div><div class="label">Balance neto</div><div class="val ${(u.cxc.total - u.debt.total) >= 0 ? "green" : "red"}">$${fmt(u.cxc.total - u.debt.total)}</div></div>
+  </div>
+
+  ${cxcNotes.length > 0 ? `
+  <h2>Cuentas por cobrar (${u.cxc.count} notas${u.cxc.vencidas > 0 ? `, ${u.cxc.vencidas} vencidas` : ""})</h2>
+  <table><thead><tr><th>Cliente</th><th style="text-align:right">Saldo</th><th style="text-align:center">Vence</th></tr></thead><tbody>${cxcRows}</tbody></table>
+  ` : ""}
+
+  ${supplierDebt.length > 0 ? `
+  <h2>Deuda a proveedores (${u.debt.count})</h2>
+  <table><thead><tr><th>Proveedor</th><th style="text-align:right">Saldo</th></tr></thead><tbody>${debtRows}</tbody></table>
+  ` : ""}
+
+  ${u.categories.length > 0 ? `
+  <h2>Desglose gastos externos</h2>
+  <table><thead><tr><th>Categoría</th><th style="text-align:right">Monto</th><th style="text-align:right">%</th></tr></thead><tbody>${catRows}</tbody></table>
+  ` : ""}
+
+  <div class="footer">Sergio's Carnicería — sergioscarniceria.com — Reporte generado automáticamente</div>
+</body></html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (win) {
+      win.onload = () => {
+        setTimeout(() => win.print(), 300);
+      };
+    }
+  }
+
   if (loading) {
     return (
       <div style={loadingPageStyle}>
@@ -606,9 +718,17 @@ export default function AdminDashboardPage() {
               <h2 style={panelTitleStyle}>Utilidades del Mes</h2>
               <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>Resumen financiero — {utilityStats.current.label} {new Date().getFullYear()}</p>
             </div>
-            <Link href="/admin/gastos" style={{ padding: "8px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none" }}>
-              Registrar gastos
-            </Link>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={exportUtilitiesPDF}
+                style={{ padding: "8px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 13 }}
+              >
+                Exportar PDF
+              </button>
+              <Link href="/admin/gastos" style={{ padding: "8px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none" }}>
+                Registrar gastos
+              </Link>
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
