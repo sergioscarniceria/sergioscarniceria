@@ -1033,10 +1033,10 @@ if (cashError) {
             type="password"
             placeholder="Tu código"
             autoFocus
-            style={{ width: "100%", padding: "14px 16px", borderRadius: 14, border: `1px solid rgba(92,27,17,0.10)`, outline: "none", fontSize: 18, textAlign: "center", letterSpacing: 8, marginBottom: 12, background: "rgba(255,255,255,0.85)", color: COLORS.text }}
+            style={{ width: "100%", padding: "18px 16px", borderRadius: 16, border: `1px solid rgba(92,27,17,0.10)`, outline: "none", fontSize: 22, textAlign: "center", letterSpacing: 8, marginBottom: 12, background: "rgba(255,255,255,0.85)", color: COLORS.text, minHeight: 60 }}
           />
-          {cashierError && <p style={{ color: COLORS.danger, fontSize: 13, margin: "0 0 10px", fontWeight: 700 }}>{cashierError}</p>}
-          <button onClick={verifyCashier} style={{ width: "100%", padding: "14px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+          {cashierError && <p style={{ color: COLORS.danger, fontSize: 14, margin: "0 0 10px", fontWeight: 700 }}>{cashierError}</p>}
+          <button onClick={verifyCashier} style={{ width: "100%", padding: "18px", borderRadius: 16, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 800, fontSize: 18, cursor: "pointer", minHeight: 60 }}>
             Entrar
           </button>
           <Link href="/" style={{ display: "block", marginTop: 16, color: COLORS.muted, fontSize: 13, textDecoration: "none" }}>Volver al inicio</Link>
@@ -1173,15 +1173,20 @@ if (cashError) {
                   onClick={() => setShowQrScanner(true)}
                   title="Escanear QR con cámara"
                   style={{
-                    padding: "10px 14px",
-                    borderRadius: 12,
+                    padding: "14px 18px",
+                    borderRadius: 14,
                     border: `1px solid ${COLORS.border}`,
                     background: COLORS.primary,
                     color: "white",
                     fontWeight: 800,
-                    fontSize: 18,
+                    fontSize: 22,
                     cursor: "pointer",
                     whiteSpace: "nowrap",
+                    minHeight: 52,
+                    minWidth: 52,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
                   }}
                 >
                   📷
@@ -1342,7 +1347,7 @@ if (cashError) {
                           <span>-${money(calcDiscount(ticketTotal(selectedTicket)))}</span>
                         </div>
                       )}
-                      <div style={{ ...summaryRowStyle, fontWeight: 800, fontSize: 18 }}>
+                      <div style={{ ...summaryRowStyle, fontWeight: 800, fontSize: 22 }}>
                         <span>Total a cobrar</span>
                         <span>${money(ticketFinalTotal(selectedTicket))}</span>
                       </div>
@@ -1354,7 +1359,7 @@ if (cashError) {
                         style={successButtonStyle}
                         disabled={saving}
                       >
-                        Cobrar efectivo
+                        💵 Cobrar efectivo
                       </button>
 
                       <button
@@ -1362,7 +1367,7 @@ if (cashError) {
                         style={infoButtonStyle}
                         disabled={saving}
                       >
-                        Cobrar tarjeta
+                        💳 Cobrar tarjeta
                       </button>
 
                       <button
@@ -1370,7 +1375,7 @@ if (cashError) {
                         style={secondaryActionButtonStyle}
                         disabled={saving}
                       >
-                        Transferencia
+                        📲 Transferencia
                       </button>
 
                       <button
@@ -1378,7 +1383,7 @@ if (cashError) {
                         style={warningButtonStyle}
                         disabled={saving}
                       >
-                        Mandar a crédito
+                        📋 Mandar a crédito
                       </button>
                     </div>
 
@@ -1387,7 +1392,7 @@ if (cashError) {
                       style={dangerButtonStyle}
                       disabled={saving}
                     >
-                      Cancelar ticket
+                      ❌ Cancelar ticket
                     </button>
 
                     {/* Modal escáner QR */}
@@ -1884,7 +1889,7 @@ if (cashError) {
     style={successButtonStyle}
     disabled={saving}
   >
-    Cobrar efectivo
+    💵 Cobrar efectivo
   </button>
 
   <button
@@ -1892,7 +1897,7 @@ if (cashError) {
     style={infoButtonStyle}
     disabled={saving}
   >
-    Cobrar tarjeta
+    💳 Cobrar tarjeta
   </button>
 
   <button
@@ -1900,7 +1905,7 @@ if (cashError) {
     style={secondaryActionButtonStyle}
     disabled={saving}
   >
-    Transferencia
+    📲 Transferencia
   </button>
 
   <button
@@ -1908,12 +1913,12 @@ if (cashError) {
     style={warningButtonStyle}
     disabled={saving}
   >
-    Crédito
+    📋 Crédito
   </button>
 </div>
 
                 <button onClick={clearManualSale} style={dangerButtonStyle}>
-                  Limpiar venta manual
+                  🗑️ Limpiar venta manual
                 </button>
               </div>
             </div>
@@ -2001,11 +2006,13 @@ const tabsCardStyle: React.CSSProperties = {
 };
 
 const tabButtonStyle: React.CSSProperties = {
-  padding: "12px 16px",
+  padding: "16px 24px",
   borderRadius: 14,
   border: "none",
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 52,
 };
 
 const mainGridStyle: React.CSSProperties = {
@@ -2065,77 +2072,91 @@ const fieldLabelStyle: React.CSSProperties = {
 };
 
 const primaryActionButtonStyle: React.CSSProperties = {
-  padding: "12px 16px",
-  borderRadius: 14,
+  padding: "18px 20px",
+  borderRadius: 16,
   border: "none",
   background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
   color: "white",
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 56,
   boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
 };
 
 const secondaryActionButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
+  padding: "16px 20px",
+  borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
   background: "white",
   color: COLORS.text,
   cursor: "pointer",
   fontWeight: 700,
+  fontSize: 15,
+  minHeight: 52,
 };
 
 const successButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
+  padding: "18px 20px",
+  borderRadius: 16,
   border: "none",
-  background: "rgba(31,122,77,0.12)",
+  background: "rgba(31,122,77,0.15)",
   color: COLORS.success,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 56,
 };
 
 const infoButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
+  padding: "18px 20px",
+  borderRadius: 16,
   border: "none",
-  background: "rgba(53,92,125,0.12)",
+  background: "rgba(53,92,125,0.15)",
   color: COLORS.info,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 56,
 };
 
 const warningButtonStyle: React.CSSProperties = {
-  padding: "12px 14px",
-  borderRadius: 14,
+  padding: "18px 20px",
+  borderRadius: 16,
   border: "none",
-  background: "rgba(166,106,16,0.12)",
+  background: "rgba(166,106,16,0.15)",
   color: COLORS.warning,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 56,
 };
 
 const dangerButtonStyle: React.CSSProperties = {
   width: "100%",
   marginTop: 12,
-  padding: "12px 14px",
-  borderRadius: 14,
+  padding: "18px 20px",
+  borderRadius: 16,
   border: "none",
   background: "rgba(180,35,24,0.10)",
   color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 56,
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
   display: "inline-block",
-  padding: "12px 18px",
+  padding: "14px 20px",
   borderRadius: 14,
   border: `1px solid ${COLORS.border}`,
   background: "rgba(255,255,255,0.75)",
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
+  fontSize: 15,
+  minHeight: 48,
 };
 
 const listWrapStyle: React.CSSProperties = {
@@ -2149,33 +2170,36 @@ const searchResultCardStyle: React.CSSProperties = {
   justifyContent: "space-between",
   alignItems: "center",
   gap: 12,
-  padding: 14,
+  padding: 18,
   borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
   background: COLORS.bgSoft,
   cursor: "pointer",
+  minHeight: 72,
 };
 
 const searchTitleStyle: React.CSSProperties = {
   fontWeight: 800,
   color: COLORS.text,
+  fontSize: 17,
 };
 
 const searchMetaStyle: React.CSSProperties = {
   color: COLORS.muted,
-  fontSize: 13,
+  fontSize: 14,
   marginTop: 4,
 };
 
 const badgeStyle: React.CSSProperties = {
   display: "inline-block",
-  padding: "6px 10px",
+  padding: "10px 16px",
   borderRadius: 999,
-  fontSize: 12,
+  fontSize: 14,
   fontWeight: 700,
   background: "rgba(123, 34, 24, 0.10)",
   color: COLORS.primary,
   flexShrink: 0,
+  minHeight: 40,
 };
 
 const miniTitleStyle: React.CSSProperties = {
@@ -2211,12 +2235,12 @@ const ticketMetaStyle: React.CSSProperties = {
 };
 
 const ticketTotalStyle: React.CSSProperties = {
-  padding: "12px 14px",
+  padding: "16px 20px",
   borderRadius: 16,
   background: COLORS.primary,
   color: "white",
   fontWeight: 800,
-  fontSize: 22,
+  fontSize: 26,
   whiteSpace: "nowrap",
 };
 
@@ -2268,14 +2292,15 @@ const summaryRowStyle: React.CSSProperties = {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  padding: 14,
+  padding: 16,
   borderRadius: 16,
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
   background: "rgba(255,255,255,0.82)",
   color: COLORS.text,
-  fontSize: 15,
+  fontSize: 17,
+  minHeight: 52,
 };
 
 const textareaStyle: React.CSSProperties = {
@@ -2306,24 +2331,27 @@ const manualRowStyle: React.CSSProperties = {
 
 const inputMiniStyle: React.CSSProperties = {
   width: "100%",
-  padding: 10,
-  borderRadius: 12,
+  padding: 14,
+  borderRadius: 14,
   border: `1px solid ${COLORS.border}`,
   boxSizing: "border-box",
   outline: "none",
   background: "white",
   color: COLORS.text,
-  fontSize: 14,
+  fontSize: 16,
+  minHeight: 48,
 };
 
 const dangerMiniButtonStyle: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 12,
+  padding: "14px 16px",
+  borderRadius: 14,
   border: "none",
   background: "rgba(180,35,24,0.10)",
   color: COLORS.danger,
   cursor: "pointer",
   fontWeight: 800,
+  fontSize: 16,
+  minHeight: 48,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
@@ -2336,8 +2364,8 @@ const emptyBoxStyle: React.CSSProperties = {
 
 const actionsGridStyle: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "1fr 1fr",
+  gap: 14,
   marginTop: 16,
 };
 
@@ -2360,12 +2388,13 @@ const discountSectionStyle: React.CSSProperties = {
 };
 
 const discountTabStyle: React.CSSProperties = {
-  padding: "8px 12px",
-  borderRadius: 12,
+  padding: "12px 16px",
+  borderRadius: 14,
   border: `1px solid ${COLORS.border}`,
   cursor: "pointer",
   fontWeight: 700,
-  fontSize: 13,
+  fontSize: 14,
+  minHeight: 48,
 };
 
 const discountSummaryStyle: React.CSSProperties = {
