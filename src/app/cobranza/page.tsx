@@ -8,7 +8,7 @@ import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketDa
 import PrinterButton from "@/components/PrinterButton";
 import { getScale } from "@/lib/scale";
 
-type TabMode = "ticket" | "manual";
+type TabMode = "ticket" | "manual" | "historial";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
 
 type OrderItem = {
@@ -163,6 +163,12 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [showCreditPrint, setShowCreditPrint] = useState(false);
   const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
+
+  // Historial reimpresión
+  const [historialSearch, setHistorialSearch] = useState("");
+  const [historialResults, setHistorialResults] = useState<Ticket[]>([]);
+  const [historialLoading, setHistorialLoading] = useState(false);
+  const [historialTicket, setHistorialTicket] = useState<Ticket | null>(null);
 
   // Báscula Torrey
   const [scaleConnected, setScaleConnected] = useState(false);
@@ -1042,6 +1048,46 @@ if (cashError) {
   setSaving(false);
 }
 
+  // Buscar tickets pagados para reimpresión
+  async function searchHistorial() {
+    const q = historialSearch.trim();
+    if (!q) return;
+    setHistorialLoading(true);
+    setHistorialTicket(null);
+
+    const { full, short: shortCode } = extractTicketId(q);
+
+    // Buscar por ID exacto
+    if (full) {
+      const { data } = await supabase
+        .from("orders")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .eq("id", full)
+        .single();
+      if (data) {
+        setHistorialResults([data as Ticket]);
+        setHistorialLoading(false);
+        return;
+      }
+    }
+
+    // Buscar por folio parcial o nombre
+    const { data } = await supabase
+      .from("orders")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+      .or(`id.ilike.${shortCode || q}%,customer_name.ilike.%${q}%`)
+      .in("payment_status", ["pagado", "credito_autorizado", "credito", "cancelado"])
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    setHistorialResults((data as Ticket[]) || []);
+    setHistorialLoading(false);
+  }
+
+  function selectHistorialTicket(ticket: Ticket) {
+    setHistorialTicket(ticket);
+  }
+
   const manualTotal = useMemo(() => {
     return manualLines.reduce((acc, line) => {
       return acc + Number(line.kilos || 0) * Number(line.price || 0);
@@ -1146,6 +1192,17 @@ if (cashError) {
             }}
           >
             Venta manual
+          </button>
+
+          <button
+            onClick={() => setTab("historial")}
+            style={{
+              ...tabButtonStyle,
+              background: tab === "historial" ? COLORS.primary : "white",
+              color: tab === "historial" ? "white" : COLORS.text,
+            }}
+          >
+            🧾 Reimprimir
           </button>
         </div>
 
@@ -2008,7 +2065,211 @@ if (cashError) {
               </div>
             </div>
           </div>
-        )}
+        ) : tab === "historial" ? (
+          <div style={mainGridStyle}>
+            <div style={leftColumnStyle}>
+              <div style={panelStyle}>
+                <div style={panelHeaderStyle}>
+                  <div>
+                    <h2 style={panelTitleStyle}>Buscar ticket pagado</h2>
+                    <p style={panelSubtitleStyle}>Busca por folio, ID o nombre del cliente</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    placeholder="Folio TK-xxx, ID o nombre..."
+                    value={historialSearch}
+                    onChange={(e) => setHistorialSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchHistorial()}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    onClick={searchHistorial}
+                    disabled={historialLoading}
+                    style={{ ...primaryActionButtonStyle, whiteSpace: "nowrap" }}
+                  >
+                    {historialLoading ? "⏳" : "🔍 Buscar"}
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 14 }}>
+                  <div style={miniTitleStyle}>Resultados</div>
+                  <div style={listWrapStyle}>
+                    {historialResults.length === 0 ? (
+                      <div style={emptyBoxStyle}>
+                        {historialLoading ? "Buscando..." : "Busca un ticket para reimprimir"}
+                      </div>
+                    ) : (
+                      historialResults.map((ticket) => (
+                        <button
+                          key={ticket.id}
+                          onClick={() => selectHistorialTicket(ticket)}
+                          style={{
+                            ...searchResultCardStyle,
+                            border: historialTicket?.id === ticket.id
+                              ? `2px solid ${COLORS.primary}`
+                              : `1px solid ${COLORS.border}`,
+                          }}
+                        >
+                          <div style={{ textAlign: "left", minWidth: 0 }}>
+                            <div style={searchTitleStyle}>{ticketFolio(ticket.id)}</div>
+                            <div style={searchMetaStyle}>
+                              {ticket.customer_name || "Mostrador"} · ${money(ticketTotal(ticket))}
+                            </div>
+                            <div style={searchMetaStyle}>
+                              {ticket.paid_at
+                                ? new Date(ticket.paid_at).toLocaleDateString("es-MX", {
+                                    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+                                  })
+                                : ticket.created_at
+                                ? new Date(ticket.created_at).toLocaleDateString("es-MX", {
+                                    day: "2-digit", month: "short", year: "numeric"
+                                  })
+                                : ""}
+                            </div>
+                          </div>
+                          <div style={{
+                            ...badgeStyle,
+                            background: ticket.payment_status === "pagado"
+                              ? "rgba(31,122,77,0.10)"
+                              : ticket.payment_status === "cancelado"
+                              ? "rgba(180,35,24,0.10)"
+                              : "rgba(166,106,16,0.10)",
+                            color: ticket.payment_status === "pagado"
+                              ? COLORS.success
+                              : ticket.payment_status === "cancelado"
+                              ? COLORS.danger
+                              : COLORS.warning,
+                          }}>
+                            {ticket.payment_status === "pagado" ? "💰 Pagado"
+                              : ticket.payment_status === "cancelado" ? "❌ Cancelado"
+                              : "📋 Crédito"}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={rightColumnStyle}>
+              <div style={panelStyle}>
+                <div style={panelHeaderStyle}>
+                  <div>
+                    <h2 style={panelTitleStyle}>Vista previa</h2>
+                    <p style={panelSubtitleStyle}>Revisa y reimprime el ticket</p>
+                  </div>
+                </div>
+
+                {!historialTicket ? (
+                  <div style={emptyBoxStyle}>Selecciona un ticket para ver el detalle</div>
+                ) : (
+                  <>
+                    <div style={ticketHeaderStyle}>
+                      <div>
+                        <div style={ticketTitleStyle}>{ticketFolio(historialTicket.id)}</div>
+                        <div style={ticketMetaStyle}>
+                          Cliente: <b>{historialTicket.customer_name || "Mostrador"}</b>
+                        </div>
+                        <div style={ticketMetaStyle}>
+                          Estado: <b>{historialTicket.payment_status || "—"}</b>
+                        </div>
+                        <div style={ticketMetaStyle}>
+                          Método: <b>{historialTicket.payment_method || "—"}</b>
+                        </div>
+                      </div>
+                      <div style={ticketTotalStyle}>
+                        ${money(ticketTotal(historialTicket))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                      {(historialTicket.order_items || []).map((item, index) => (
+                        <div key={index} style={itemRowStyle}>
+                          <div>
+                            <div style={itemNameStyle}>{item.product}</div>
+                            <div style={itemMetaStyle}>
+                              {item.prepared_kilos && item.prepared_kilos !== item.kilos
+                                ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
+                                : `${item.kilos} kg`} · ${money(item.price)}
+                            </div>
+                          </div>
+                          <div style={itemTotalStyle}>
+                            ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
+                      <button
+                        onClick={() => {
+                          if (!historialTicket) return;
+                          const total = ticketTotal(historialTicket);
+                          const ticketForPrint: TicketData = {
+                            folio: ticketFolio(historialTicket.id),
+                            customerName: historialTicket.customer_name,
+                            cashier: cashierName || null,
+                            items: (historialTicket.order_items || []).map((item: any) => ({
+                              product: item.product,
+                              kilos: item.kilos,
+                              price: item.price,
+                              quantity: item.quantity,
+                              sale_type: item.sale_type,
+                              is_fixed_price_piece: item.is_fixed_price_piece,
+                              prepared_kilos: item.prepared_kilos,
+                            })),
+                            subtotal: total,
+                            total: total,
+                            qrData: historialTicket.id,
+                            type: "cobro",
+                          };
+                          smartPrintTicket(ticketForPrint);
+                        }}
+                        style={successButtonStyle}
+                      >
+                        🖨️ Reimprimir ticket
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          if (!historialTicket) return;
+                          const total = ticketTotal(historialTicket);
+                          const creditTicket: TicketData = {
+                            folio: ticketFolio(historialTicket.id),
+                            customerName: historialTicket.customer_name,
+                            cashier: cashierName || null,
+                            attendant: null,
+                            items: (historialTicket.order_items || []).map((item: any) => ({
+                              product: item.product,
+                              kilos: item.kilos,
+                              price: item.price,
+                              quantity: item.quantity,
+                              sale_type: item.sale_type,
+                              is_fixed_price_piece: item.is_fixed_price_piece,
+                              prepared_kilos: item.prepared_kilos,
+                            })),
+                            subtotal: total,
+                            total: total,
+                            paymentMethod: historialTicket.payment_method || "efectivo",
+                            qrData: historialTicket.id,
+                            type: "cobro",
+                          };
+                          smartPrintCreditTicket(creditTicket);
+                        }}
+                        style={infoButtonStyle}
+                      >
+                        🧾 Reimprimir con pagaré
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
