@@ -92,7 +92,7 @@ type CashExpense = {
   created_at?: string | null;
 };
 
-type Tab = "resumen" | "apertura" | "gastos" | "cierre" | "historial" | "reportes";
+type Tab = "resumen" | "apertura" | "gastos" | "reconteo" | "cierre" | "historial" | "reportes";
 
 // ─── Colors ────────────────────────────────────────────────────
 const C = {
@@ -209,6 +209,11 @@ export default function CajaPage() {
   const [closureNotes, setClosureNotes] = useState("");
   const [closureDenoms, setClosureDenoms] = useState<Record<string, string>>({});
   const [useDenoms, setUseDenoms] = useState(true); // modo conteo por denominaciones (default)
+
+  // Reconteo a medio turno
+  const [reconteoDenoms, setReconteoDenoms] = useState<Record<string, string>>({});
+  const [reconteoNotes, setReconteoNotes] = useState("");
+  const [reconteoSaved, setReconteoSaved] = useState(false);
 
   // Opening form
   const [denomDrafts, setDenomDrafts] = useState<Record<string, string>>({});
@@ -601,6 +606,52 @@ export default function CajaPage() {
     }
   }, [closureDenomTotal, useDenoms]);
 
+  // Reconteo: total por denominaciones
+  const reconteoDenomTotal = useMemo(() => {
+    let total = 0;
+    for (const d of DENOMINATIONS) {
+      total += Number(reconteoDenoms[d.key] || 0) * d.value;
+    }
+    return total;
+  }, [reconteoDenoms]);
+
+  const reconteoDifference = useMemo(() => {
+    return Number((reconteoDenomTotal - stats.efectivoEsperado).toFixed(2));
+  }, [reconteoDenomTotal, stats.efectivoEsperado]);
+
+  async function saveReconteo() {
+    setSaving(true);
+    const now = new Date();
+    const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+
+    // Guardar como movimiento de tipo "reconteo" para registro
+    const { error } = await supabase.from("cash_movements").insert([{
+      type: "reconteo",
+      source: "caja",
+      amount: reconteoDenomTotal,
+      payment_method: "efectivo",
+      cashier_name: reconteoNotes ? `Reconteo ${hora}: ${reconteoNotes}` : `Reconteo ${hora}`,
+      reference_id: null,
+    }]);
+
+    if (error) {
+      alert("Error al guardar reconteo");
+      console.log(error);
+      setSaving(false);
+      return;
+    }
+
+    setReconteoSaved(true);
+    setSaving(false);
+    alert(`Reconteo guardado: $${money(reconteoDenomTotal)} (diferencia: ${reconteoDifference >= 0 ? "+" : ""}$${money(reconteoDifference)})`);
+  }
+
+  function resetReconteo() {
+    setReconteoDenoms({});
+    setReconteoNotes("");
+    setReconteoSaved(false);
+  }
+
   // ─── Actions ───────────────────────────────────────────────
   async function saveOpening() {
     setSaving(true);
@@ -799,6 +850,7 @@ export default function CajaPage() {
     { id: "resumen", label: "Resumen", icon: "📊" },
     { id: "apertura", label: "Apertura", icon: "🔓" },
     { id: "gastos", label: "Gastos", icon: "💸" },
+    { id: "reconteo", label: "Reconteo", icon: "🔄" },
     { id: "cierre", label: "Cierre", icon: "🔒" },
     { id: "historial", label: "Historial", icon: "📋" },
     ...(isAdmin ? [{ id: "reportes" as Tab, label: "Reportes", icon: "📈" }] : []),
@@ -1197,6 +1249,97 @@ export default function CajaPage() {
             saveExpense={saveExpense}
             deleteExpense={deleteExpense}
           />
+        )}
+
+        {/* ═══ TAB: RECONTEO ═══ */}
+        {tab === "reconteo" && (
+          <Panel title="Reconteo a medio turno" subtitle="Verifica que el efectivo cuadre sin cerrar la caja">
+            <div style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 18, padding: 14, display: "grid", gap: 10, marginBottom: 14 }}>
+              <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
+              <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
+              <SummaryRow label="(-) Gastos del día" value={`-$${money(stats.totalGastos)}`} color={C.danger} />
+              <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
+                <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
+              </div>
+              <SummaryRow label="Efectivo contado" value={`$${money(reconteoDenomTotal)}`} />
+              <SummaryRow
+                label="Diferencia"
+                value={`${reconteoDifference >= 0 ? "+" : ""}$${money(reconteoDifference)}`}
+                color={reconteoDifference === 0 ? C.success : reconteoDifference > 0 ? C.info : C.danger}
+                bold
+              />
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 4 }}>Billetes</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                {DENOMINATIONS.filter((d) => d.key.startsWith("bills")).map((d) => (
+                  <div key={d.key} style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12 }}>
+                    <div style={{ color: C.muted, fontSize: 12, marginBottom: 4 }}>{d.label}</div>
+                    <input
+                      type="number" min="0"
+                      value={reconteoDenoms[d.key] || ""}
+                      onChange={(e) => setReconteoDenoms((p) => ({ ...p, [d.key]: e.target.value }))}
+                      placeholder="0"
+                      style={{ ...inputSt, padding: 10, fontSize: 16, fontWeight: 700 }}
+                    />
+                    <div style={{ color: C.text, fontSize: 12, marginTop: 4, fontWeight: 700 }}>
+                      = ${money(Number(reconteoDenoms[d.key] || 0) * d.value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 4 }}>Monedas</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+                {DENOMINATIONS.filter((d) => d.key.startsWith("coins")).map((d) => (
+                  <div key={d.key} style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12 }}>
+                    <div style={{ color: C.muted, fontSize: 12, marginBottom: 4 }}>{d.label}</div>
+                    <input
+                      type="number" min="0"
+                      value={reconteoDenoms[d.key] || ""}
+                      onChange={(e) => setReconteoDenoms((p) => ({ ...p, [d.key]: e.target.value }))}
+                      placeholder="0"
+                      style={{ ...inputSt, padding: 10, fontSize: 16, fontWeight: 700 }}
+                    />
+                    <div style={{ color: C.text, fontSize: 12, marginTop: 4, fontWeight: 700 }}>
+                      = ${money(Number(reconteoDenoms[d.key] || 0) * d.value)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ padding: 16, borderRadius: 18, background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, marginBottom: 14 }}>
+              <div style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Total contado</div>
+              <div style={{ color: "white", fontSize: 34, fontWeight: 800 }}>${money(reconteoDenomTotal)}</div>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ color: C.muted, fontWeight: 700, fontSize: 14, marginBottom: 6 }}>Notas del reconteo</div>
+              <textarea value={reconteoNotes} onChange={(e) => setReconteoNotes(e.target.value)} style={{ width: "100%", minHeight: 80, padding: 14, borderRadius: 16, border: `1px solid ${C.border}`, boxSizing: "border-box" as const, outline: "none", background: "rgba(255,255,255,0.82)", color: C.text, fontSize: 15, resize: "vertical" as const }} placeholder="Observaciones..." />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button onClick={saveReconteo} disabled={saving} style={{ padding: "16px 24px", borderRadius: 16, border: "none", background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, color: "white", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>
+                {saving ? "Guardando..." : "Guardar reconteo"}
+              </button>
+              <button onClick={resetReconteo} style={{ padding: "16px 24px", borderRadius: 16, border: `1px solid ${C.border}`, background: "white", color: C.text, fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+                Limpiar
+              </button>
+            </div>
+
+            {reconteoSaved && (
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 18, background: "rgba(31,122,77,0.10)", border: `1px solid ${C.border}` }}>
+                <div style={{ fontWeight: 800, color: C.text }}>Reconteo registrado</div>
+                <div style={{ color: C.muted, fontSize: 14, marginTop: 4 }}>
+                  Contado: <b>${money(reconteoDenomTotal)}</b> — Esperado: <b>${money(stats.efectivoEsperado)}</b> — Diferencia: <b>{reconteoDifference >= 0 ? "+" : ""}${money(reconteoDifference)}</b>
+                </div>
+              </div>
+            )}
+          </Panel>
         )}
 
         {/* ═══ TAB: CIERRE ═══ */}
