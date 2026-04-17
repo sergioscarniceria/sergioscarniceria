@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
+import { checkRateLimit, getClientIP } from "@/lib/rate-limit";
+import { updatePinSchema, validateBody } from "@/lib/schemas";
+
+function isAuthorized(req: Request): boolean {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) return false;
+  const auth = req.headers.get("x-admin-secret") || req.headers.get("authorization")?.replace("Bearer ", "");
+  return auth === secret;
+}
 
 /**
- * GET /api/auth/pins — lista los PINs (para panel admin)
- * PUT /api/auth/pins — actualizar un PIN { role, pin }
+ * GET /api/auth/pins — lista los PINs (para panel admin, requiere auth)
+ * PUT /api/auth/pins — actualizar un PIN { role, pin } (requiere auth)
  */
-export async function GET() {
+export async function GET(req: Request) {
+  if (!isAuthorized(req)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
   const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from("app_pins")
@@ -20,15 +33,26 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const { role, pin } = await req.json();
-
-    if (!role || !pin) {
-      return NextResponse.json({ error: "role y pin requeridos" }, { status: 400 });
+    if (!isAuthorized(req)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    if (!/^\d{4}$/.test(pin)) {
-      return NextResponse.json({ error: "El PIN debe ser de 4 dígitos" }, { status: 400 });
+    // Rate limit PIN changes: 10 per minute
+    const ip = getClientIP(req);
+    const rl = checkRateLimit(`pins-put:${ip}`, { limit: 10, windowSeconds: 60 });
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Demasiados intentos. Reintenta en ${rl.retryAfterSeconds}s` },
+        { status: 429 }
+      );
     }
+
+    const body = await req.json();
+    const v = validateBody(updatePinSchema, body);
+    if (v.error) {
+      return NextResponse.json({ error: v.error }, { status: 400 });
+    }
+    const { role, pin } = v.data;
 
     const supabase = getSupabaseClient();
 

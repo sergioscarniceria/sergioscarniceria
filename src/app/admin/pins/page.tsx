@@ -54,7 +54,9 @@ export default function AdminPinsPage() {
 
   async function fetchPins() {
     try {
-      const res = await fetch("/api/auth/pins");
+      const res = await fetch("/api/auth/pins", {
+        headers: { "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET || "" },
+      });
       if (res.ok) {
         const data = await res.json();
         setPins(data);
@@ -77,7 +79,10 @@ export default function AdminPinsPage() {
     try {
       const res = await fetch("/api/auth/pins", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
+        },
         body: JSON.stringify({ role, pin: newPin }),
       });
 
