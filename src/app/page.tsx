@@ -69,6 +69,7 @@ const moduleCategories = {
       { title: "Repartidores", icon: "🚚", href: "/repartidores", desc: "Control de entregas" },
       { title: "Checador", icon: "⏰", href: "/asistencia/checador", desc: "Checar asistencia" },
       { title: "Recetario", icon: "📖", href: "/admin/recetario", desc: "Recetas con costos" },
+      { title: "Tienda Online", icon: "🌐", href: "/tienda", desc: "Pedidos de clientes" },
     ],
   },
 };
