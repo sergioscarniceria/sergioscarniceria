@@ -1296,6 +1296,11 @@ if (cashError) {
                         >
                           <div style={{ textAlign: "left", minWidth: 0 }}>
                             <div style={searchTitleStyle}>{ticketFolio(ticket.id)}</div>
+                            {ticket.status !== "terminado" && (
+                              <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(166,106,16,0.15)", color: COLORS.warning, marginTop: 4, marginBottom: 2 }}>
+                                Pendiente de preparación
+                              </div>
+                            )}
                             <div style={searchMetaStyle}>
                               Cliente: {ticket.customer_name || "Mostrador"}
                             </div>
@@ -1335,6 +1340,11 @@ if (cashError) {
                         <div style={ticketMetaStyle}>
                           Estado: <b>{selectedTicket.payment_status || "pendiente"}</b>
                         </div>
+                        {selectedTicket.status !== "terminado" && (
+                          <div style={{ display: "inline-block", padding: "5px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(166,106,16,0.15)", color: COLORS.warning, marginTop: 6 }}>
+                            Pendiente de preparación
+                          </div>
+                        )}
                       </div>
 
                       <div style={ticketTotalStyle}>

@@ -111,10 +111,32 @@ export default function AdminCxcPage() {
   const [expandedCustomer, setExpandedCustomer] = useState<string | null>(null);
   const [noteItemsMap, setNoteItemsMap] = useState<Record<string, CxcNoteItem[]>>({});
   const [loadingItems, setLoadingItems] = useState<string | null>(null);
+  const [showMovimientos, setShowMovimientos] = useState(false);
+  const [recentPayments, setRecentPayments] = useState<{ id: string; customer_name: string; amount: number; payment_method?: string | null; payment_date: string; notes?: string | null }[]>([]);
+  const [loadingMovimientos, setLoadingMovimientos] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  async function loadRecentPayments() {
+    setLoadingMovimientos(true);
+    setShowMovimientos(true);
+    const { data, error } = await supabase
+      .from("cxc_payments")
+      .select("id, customer_name, amount, payment_method, payment_date, notes")
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(25);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudieron cargar los movimientos");
+    } else {
+      setRecentPayments(data || []);
+    }
+    setLoadingMovimientos(false);
+  }
 
   async function loadData() {
     setLoading(true);
@@ -338,6 +360,7 @@ export default function AdminCxcPage() {
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/admin/cxc/nueva" style={primaryButtonStyle}>+ Nueva nota</Link>
             <Link href="/admin/cxc/pagos" style={secondaryActionButtonStyle}>Registrar pago</Link>
+            <button onClick={loadRecentPayments} style={secondaryActionButtonStyle}>Últimos movimientos</button>
             <Link href="/admin/caja" style={secondaryButtonStyle}>Caja</Link>
           </div>
         </div>
@@ -578,6 +601,41 @@ export default function AdminCxcPage() {
           )}
         </div>
       </div>
+
+      {/* Modal: Últimos movimientos */}
+      {showMovimientos && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }} onClick={() => setShowMovimientos(false)}>
+          <div style={{ background: "white", borderRadius: 24, padding: 24, maxWidth: 600, width: "90%", maxHeight: "80vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Últimos movimientos</h2>
+              <button onClick={() => setShowMovimientos(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted }}>✕</button>
+            </div>
+
+            {loadingMovimientos ? (
+              <div style={{ padding: 20, textAlign: "center", color: COLORS.muted }}>Cargando...</div>
+            ) : recentPayments.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: COLORS.muted }}>No hay pagos registrados</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {recentPayments.map((p) => (
+                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 16, background: COLORS.bgSoft, border: `1px solid ${COLORS.border}` }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 15 }}>{p.customer_name}</div>
+                      <div style={{ color: COLORS.muted, fontSize: 13 }}>
+                        {formatDate(p.payment_date)} · {p.payment_method || "efectivo"}
+                        {p.notes ? ` · ${p.notes}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ fontWeight: 800, color: COLORS.success, fontSize: 18 }}>
+                      ${Number(p.amount).toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
