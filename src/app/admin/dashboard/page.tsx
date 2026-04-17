@@ -598,6 +598,166 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {/* ─── Panel de Utilidades (arriba, expandible) ─── */}
+        {showUtilities && (
+        <div style={panelStyle}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h2 style={panelTitleStyle}>Utilidades del Mes</h2>
+              <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>Resumen financiero — {utilityStats.current.label} {new Date().getFullYear()}</p>
+            </div>
+            <Link href="/admin/gastos" style={{ padding: "8px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none" }}>
+              Registrar gastos
+            </Link>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Ventas del mes</div>
+              <div style={{ ...heroValueStyle, color: COLORS.success }}>${fmt(utilityStats.current.sales)}</div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Gastos externos</div>
+              <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.expenses)}</div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Utilidad</div>
+              <div style={{ ...heroValueStyle, color: utilityStats.current.utility >= 0 ? COLORS.success : COLORS.danger }}>
+                ${fmt(utilityStats.current.utility)}
+              </div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Margen EBITDA</div>
+              <div style={{ ...heroValueStyle, color: utilityStats.current.margin >= 10 ? COLORS.success : COLORS.warning }}>
+                {utilityStats.current.margin.toFixed(1)}%
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevMonth.label} (mes anterior)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevMonth.sales)}</div>
+                  {utilityStats.prevMonth.sales > 0 && (
+                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevMonth.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
+                      {utilityStats.current.sales >= utilityStats.prevMonth.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevMonth.sales) / utilityStats.prevMonth.sales) * 100).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevMonth.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevMonth.utility)}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevMonth.margin.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevYear.label}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevYear.sales)}</div>
+                  {utilityStats.prevYear.sales > 0 && (
+                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevYear.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
+                      {utilityStats.current.sales >= utilityStats.prevYear.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevYear.sales) / utilityStats.prevYear.sales) * 100).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevYear.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevYear.utility)}</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevYear.margin.toFixed(1)}%</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12, marginBottom: 12 }}>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que me deben (CxC)</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.warning, marginBottom: 4 }}>${fmt(utilityStats.cxc.total)}</div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>
+                {utilityStats.cxc.count} notas abiertas
+                {utilityStats.cxc.vencidas > 0 && <span style={{ color: COLORS.danger, fontWeight: 700 }}> — {utilityStats.cxc.vencidas} vencidas</span>}
+              </div>
+              {cxcNotes.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {cxcNotes.slice(0, 5).map((n, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <span style={{ color: COLORS.text }}>{n.customer_name}</span>
+                      <span style={{ fontWeight: 700, color: new Date(n.due_date) < new Date() ? COLORS.danger : COLORS.text }}>${fmt(n.balance_due)}</span>
+                    </div>
+                  ))}
+                  {cxcNotes.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {cxcNotes.length - 5} más...</div>}
+                </div>
+              )}
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que yo debo (Proveedores)</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.danger, marginBottom: 4 }}>${fmt(utilityStats.debt.total)}</div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>{utilityStats.debt.count} proveedores con saldo</div>
+              {supplierDebt.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {supplierDebt.slice(0, 5).map((s, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <span style={{ color: COLORS.text }}>{s.name}</span>
+                      <span style={{ fontWeight: 700, color: COLORS.danger }}>${fmt(s.debt)}</span>
+                    </div>
+                  ))}
+                  {supplierDebt.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {supplierDebt.length - 5} más...</div>}
+                </div>
+              )}
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Desglose gastos externos</div>
+              {utilityStats.categories.length === 0 ? (
+                <div style={{ fontSize: 13, color: COLORS.muted, padding: 10 }}>Sin gastos registrados este mes</div>
+              ) : (
+                utilityStats.categories.map((cat, i) => {
+                  const catLabels: Record<string, string> = {
+                    compras_ganado: "Compras ganado", pagos_proveedores: "Pagos proveedores", renta: "Renta",
+                    gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
+                    servicios: "Servicios", sueldos_extra: "Sueldos extra", otros: "Otros",
+                  };
+                  const pct = utilityStats.current.expenses > 0 ? (cat.total / utilityStats.current.expenses) * 100 : 0;
+                  return (
+                    <div key={i} style={{ marginBottom: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                        <span style={{ color: COLORS.text, fontWeight: 600 }}>{catLabels[cat.category] || cat.category}</span>
+                        <span style={{ fontWeight: 700, color: COLORS.text }}>${fmt(cat.total)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div style={{ height: 6, background: "#eee", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: COLORS.primary, borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Me deben</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.success }}>${fmt(utilityStats.cxc.total)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Yo debo</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.danger }}>${fmt(utilityStats.debt.total)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Balance neto</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: (utilityStats.cxc.total - utilityStats.debt.total) >= 0 ? COLORS.success : COLORS.danger }}>
+                ${fmt(utilityStats.cxc.total - utilityStats.debt.total)}
+              </div>
+            </div>
+          </div>
+        </div>
+        )}
+
         <div style={statsGridStyle}>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Ventas del rango</div>
@@ -851,179 +1011,6 @@ export default function AdminDashboardPage() {
             ))
           )}
         </div>
-        {/* ─── Panel de Utilidades ─── */}
-        {showUtilities && <div style={panelStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <h2 style={panelTitleStyle}>Utilidades del Mes</h2>
-              <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>Resumen financiero — {utilityStats.current.label} {new Date().getFullYear()}</p>
-            </div>
-            <Link href="/admin/gastos" style={{ padding: "8px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 13, textDecoration: "none" }}>
-              Registrar gastos
-            </Link>
-          </div>
-
-          {/* KPIs principales */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
-            <div style={heroCardStyle}>
-              <div style={smallLabelStyle}>Ventas del mes</div>
-              <div style={{ ...heroValueStyle, color: COLORS.success }}>${fmt(utilityStats.current.sales)}</div>
-            </div>
-            <div style={heroCardStyle}>
-              <div style={smallLabelStyle}>Gastos externos</div>
-              <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.expenses)}</div>
-            </div>
-            <div style={heroCardStyle}>
-              <div style={smallLabelStyle}>Utilidad</div>
-              <div style={{ ...heroValueStyle, color: utilityStats.current.utility >= 0 ? COLORS.success : COLORS.danger }}>
-                ${fmt(utilityStats.current.utility)}
-              </div>
-            </div>
-            <div style={heroCardStyle}>
-              <div style={smallLabelStyle}>Margen EBITDA</div>
-              <div style={{ ...heroValueStyle, color: utilityStats.current.margin >= 10 ? COLORS.success : COLORS.warning }}>
-                {utilityStats.current.margin.toFixed(1)}%
-              </div>
-            </div>
-          </div>
-
-          {/* Comparativas */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-            {/* vs Mes anterior */}
-            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevMonth.label} (mes anterior)</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevMonth.sales)}</div>
-                  {utilityStats.prevMonth.sales > 0 && (
-                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevMonth.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
-                      {utilityStats.current.sales >= utilityStats.prevMonth.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevMonth.sales) / utilityStats.prevMonth.sales) * 100).toFixed(1)}%
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevMonth.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevMonth.utility)}</div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevMonth.margin.toFixed(1)}%</div>
-                </div>
-              </div>
-            </div>
-
-            {/* vs Mismo mes año anterior */}
-            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>vs {utilityStats.prevYear.label}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Ventas</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: COLORS.text }}>${fmt(utilityStats.prevYear.sales)}</div>
-                  {utilityStats.prevYear.sales > 0 && (
-                    <div style={{ fontSize: 11, color: utilityStats.current.sales >= utilityStats.prevYear.sales ? COLORS.success : COLORS.danger, fontWeight: 700 }}>
-                      {utilityStats.current.sales >= utilityStats.prevYear.sales ? "▲" : "▼"} {Math.abs(((utilityStats.current.sales - utilityStats.prevYear.sales) / utilityStats.prevYear.sales) * 100).toFixed(1)}%
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Utilidad</div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: utilityStats.prevYear.utility >= 0 ? COLORS.success : COLORS.danger }}>${fmt(utilityStats.prevYear.utility)}</div>
-                  <div style={{ fontSize: 11, color: COLORS.muted }}>Margen: {utilityStats.prevYear.margin.toFixed(1)}%</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CxC + Lo que debo + Desglose gastos */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
-            {/* Lo que me deben */}
-            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que me deben (CxC)</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.warning, marginBottom: 4 }}>${fmt(utilityStats.cxc.total)}</div>
-              <div style={{ fontSize: 12, color: COLORS.muted }}>
-                {utilityStats.cxc.count} notas abiertas
-                {utilityStats.cxc.vencidas > 0 && (
-                  <span style={{ color: COLORS.danger, fontWeight: 700 }}> — {utilityStats.cxc.vencidas} vencidas</span>
-                )}
-              </div>
-              {cxcNotes.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  {cxcNotes.slice(0, 5).map((n, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                      <span style={{ color: COLORS.text }}>{n.customer_name}</span>
-                      <span style={{ fontWeight: 700, color: new Date(n.due_date) < new Date() ? COLORS.danger : COLORS.text }}>${fmt(n.balance_due)}</span>
-                    </div>
-                  ))}
-                  {cxcNotes.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {cxcNotes.length - 5} más...</div>}
-                </div>
-              )}
-            </div>
-
-            {/* Lo que yo debo */}
-            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que yo debo (Proveedores)</div>
-              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.danger, marginBottom: 4 }}>${fmt(utilityStats.debt.total)}</div>
-              <div style={{ fontSize: 12, color: COLORS.muted }}>{utilityStats.debt.count} proveedores con saldo</div>
-              {supplierDebt.length > 0 && (
-                <div style={{ marginTop: 8 }}>
-                  {supplierDebt.slice(0, 5).map((s, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                      <span style={{ color: COLORS.text }}>{s.name}</span>
-                      <span style={{ fontWeight: 700, color: COLORS.danger }}>${fmt(s.debt)}</span>
-                    </div>
-                  ))}
-                  {supplierDebt.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {supplierDebt.length - 5} más...</div>}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Balance neto */}
-          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, textAlign: "center" }}>
-            <div>
-              <div style={{ fontSize: 12, color: COLORS.muted }}>Me deben</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.success }}>${fmt(utilityStats.cxc.total)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: COLORS.muted }}>Yo debo</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.danger }}>${fmt(utilityStats.debt.total)}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: COLORS.muted }}>Balance neto</div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: (utilityStats.cxc.total - utilityStats.debt.total) >= 0 ? COLORS.success : COLORS.danger }}>
-                ${fmt(utilityStats.cxc.total - utilityStats.debt.total)}
-              </div>
-            </div>
-          </div>
-
-          {/* Desglose de gastos */}
-            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Desglose gastos externos</div>
-              {utilityStats.categories.length === 0 ? (
-                <div style={{ fontSize: 13, color: COLORS.muted, padding: 10 }}>Sin gastos registrados este mes</div>
-              ) : (
-                utilityStats.categories.map((cat, i) => {
-                  const catLabels: Record<string, string> = {
-                    compras_ganado: "Compras ganado", pagos_proveedores: "Pagos proveedores", renta: "Renta",
-                    gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
-                    servicios: "Servicios", sueldos_extra: "Sueldos extra", otros: "Otros",
-                  };
-                  const pct = utilityStats.current.expenses > 0 ? (cat.total / utilityStats.current.expenses) * 100 : 0;
-                  return (
-                    <div key={i} style={{ marginBottom: 6 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
-                        <span style={{ color: COLORS.text, fontWeight: 600 }}>{catLabels[cat.category] || cat.category}</span>
-                        <span style={{ fontWeight: 700, color: COLORS.text }}>${fmt(cat.total)} ({pct.toFixed(0)}%)</span>
-                      </div>
-                      <div style={{ height: 6, background: "#eee", borderRadius: 3, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${pct}%`, background: COLORS.primary, borderRadius: 3 }} />
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>}
-
         {/* Panel de salud del sistema */}
         <SystemHealthPanel />
       </div>
