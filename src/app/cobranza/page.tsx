@@ -159,6 +159,8 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
   const [discountValue, setDiscountValue] = useState("");
   const [showPrintTicket, setShowPrintTicket] = useState(false);
+  const [showCreditPrint, setShowCreditPrint] = useState(false);
+  const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
 
   // Identificación cajera
@@ -661,10 +663,10 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
       dueDate: dueDate,
       creditDays: Number(customer.credit_days || 7),
     };
-    smartPrintCreditTicket(creditTicket);
+    // Mostrar modal de impresión de crédito con pagaré
+    setCreditPrintTicket(creditTicket);
+    setShowCreditPrint(true);
 
-    alert("Ticket enviado a crédito");
-    setSelectedTicket(null);
     await loadData();
     setSaving(false);
   }
@@ -892,9 +894,10 @@ async function saveManualCredit() {
     dueDate: dueDate,
     creditDays: Number(selected.credit_days || 7),
   };
-  smartPrintCreditTicket(creditTicket);
+  // Mostrar modal de impresión de crédito con pagaré
+  setCreditPrintTicket(creditTicket);
+  setShowCreditPrint(true);
 
-  alert("Venta mandada a crédito correctamente");
   clearManualSale();
   await loadData();
   setSaving(false);
@@ -1520,6 +1523,131 @@ if (cashError) {
                               ¡Gracias por su compra!
                             </div>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Modal ticket crédito con pagaré */}
+                    {showCreditPrint && creditPrintTicket && (
+                      <div style={printOverlayStyle}>
+                        <div style={{ ...printModalStyle, maxWidth: 440 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                            <button
+                              onClick={async () => {
+                                if (!creditPrintTicket) return;
+                                await smartPrintCreditTicket(creditPrintTicket);
+                              }}
+                              style={successButtonStyle}
+                            >
+                              Imprimir pagaré
+                            </button>
+                            <button
+                              onClick={() => {
+                                setShowCreditPrint(false);
+                                setCreditPrintTicket(null);
+                                setSelectedTicket(null);
+                              }}
+                              style={secondaryActionButtonStyle}
+                            >
+                              Cerrar
+                            </button>
+                          </div>
+
+                          {/* Vista previa del ticket de crédito con pagaré */}
+                          {["NEGOCIO", "CLIENTE"].map((copy) => (
+                            <div key={copy} style={{ fontFamily: "monospace", fontSize: 12, maxWidth: 300, margin: "0 auto 16px", padding: 12, border: "1px dashed #ccc", borderRadius: 8 }}>
+                              <div style={{ textAlign: "center", marginBottom: 8 }}>
+                                <div style={{ fontWeight: 800, fontSize: 14 }}>SERGIO&apos;S CARNICERÍA</div>
+                                <div style={{ fontSize: 11, color: "#666" }}>sergioscarniceria.com</div>
+                              </div>
+
+                              <div style={{ textAlign: "center", background: "#f0f0f0", padding: "4px 8px", borderRadius: 4, fontWeight: 700, fontSize: 13, margin: "6px 0" }}>
+                                CRÉDITO ({copy})
+                              </div>
+
+                              <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                              <div style={{ marginBottom: 4 }}>
+                                <b>Folio:</b> {creditPrintTicket.folio}
+                              </div>
+                              <div style={{ marginBottom: 4 }}>
+                                <b>Cliente:</b> {creditPrintTicket.customerName || "—"}
+                              </div>
+                              <div style={{ marginBottom: 4 }}>
+                                <b>Fecha:</b> {new Date().toLocaleDateString("es-MX")}
+                              </div>
+                              {creditPrintTicket.dueDate && (
+                                <div style={{ marginBottom: 4 }}>
+                                  <b>Vence:</b> {creditPrintTicket.dueDate} ({creditPrintTicket.creditDays || 7} días)
+                                </div>
+                              )}
+
+                              <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                              {(creditPrintTicket.items || []).map((item, i) => {
+                                const kg = Number(item.prepared_kilos || item.kilos || 0);
+                                const lineTotal = kg * Number(item.price || 0);
+                                return (
+                                  <div key={i} style={{ marginBottom: 6 }}>
+                                    <div style={{ fontWeight: 700 }}>{item.product}</div>
+                                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                                      <span>{kg} kg x ${money(item.price)}</span>
+                                      <span>${money(lineTotal)}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
+
+                              <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16, margin: "8px 0" }}>
+                                <span>TOTAL</span>
+                                <span>${money(creditPrintTicket.total)}</span>
+                              </div>
+
+                              <div style={{ display: "flex", justifyContent: "space-between", margin: "2px 0" }}>
+                                <span>Método:</span>
+                                <span style={{ fontWeight: 700 }}>CRÉDITO</span>
+                              </div>
+
+                              {/* PAGARÉ */}
+                              <div style={{ borderTop: "2px solid #000", margin: "10px 0 6px" }} />
+                              <div style={{ textAlign: "center", fontSize: 16, fontWeight: 900, letterSpacing: 3, margin: "6px 0" }}>
+                                PAGARÉ
+                              </div>
+                              <div style={{ borderTop: "2px solid #000", margin: "6px 0" }} />
+
+                              <p style={{ margin: "6px 0", fontSize: 11 }}>
+                                Debo y pagaré incondicionalmente a la orden de:
+                              </p>
+                              <p style={{ fontWeight: 700, fontSize: 13, margin: "4px 0" }}>
+                                SERGIO VEGA MARIN
+                              </p>
+                              <p style={{ margin: "4px 0", fontSize: 11 }}>
+                                La cantidad de:
+                              </p>
+                              <p style={{ fontWeight: 900, fontSize: 18, margin: "6px 0", textAlign: "center" }}>
+                                ${money(creditPrintTicket.total)} MXN
+                              </p>
+                              <p style={{ margin: "4px 0", fontSize: 10 }}>
+                                Pagadero a más tardar el día <b>{creditPrintTicket.dueDate || "—"}</b> en el domicilio del acreedor.
+                              </p>
+
+                              <div style={{ margin: "20px 0 8px", textAlign: "center" }}>
+                                <div style={{ width: "70%", margin: "0 auto 4px", borderBottom: "1px solid #000", height: 30 }} />
+                                <div style={{ fontSize: 11 }}>Firma del deudor</div>
+                                <div style={{ fontSize: 11, fontWeight: 700 }}>{creditPrintTicket.customerName || "—"}</div>
+                              </div>
+
+                              <div style={{ textAlign: "center", margin: "8px 0" }}>
+                                <img
+                                  src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(creditPrintTicket.qrData || "")}`}
+                                  alt="QR"
+                                  style={{ width: 80, height: 80 }}
+                                />
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
