@@ -255,20 +255,28 @@ export default function AdminClientesPage() {
   }
 
   async function deleteCustomer(id: string, name: string) {
-    if (!confirm(`¿Eliminar cliente "${name}"?`)) return;
+    if (!confirm(`\u00bfEliminar cliente "${name}" y todos sus datos (pedidos, cr\u00e9ditos, cuenta)?`)) return;
 
     setDeletingId(id);
 
-    const { error } = await supabase.from("customers").delete().eq("id", id);
+    try {
+      const res = await fetch("/api/portal/eliminar-cliente", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: id, secret: "sergios2026" }),
+      });
+      const result = await res.json();
 
-    if (error) {
-      console.log(error);
-      alert("No se puede eliminar este cliente porque probablemente tiene pedidos o movimientos relacionados");
-      setDeletingId(null);
-      return;
+      if (!res.ok || !result.success) {
+        alert(result.error || "No se pudo eliminar el cliente");
+        setDeletingId(null);
+        return;
+      }
+
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
+    } catch {
+      alert("Error de conexi\u00f3n al eliminar");
     }
-
-    setCustomers((prev) => prev.filter((c) => c.id !== id));
     setDeletingId(null);
   }
 

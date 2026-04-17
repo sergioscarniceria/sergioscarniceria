@@ -458,6 +458,7 @@ export default function ClientePage() {
   const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; customerId: string } | null>(null);
   const [forgotPhone, setForgotPhone] = useState("");
   const [forgotNewPass, setForgotNewPass] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [topSellerNames, setTopSellerNames] = useState<string[]>([]);
@@ -781,84 +782,69 @@ export default function ClientePage() {
   async function login() {
     setLoginError("");
 
-    if (loginMethod === "phone") {
-      if (!loginPhone.trim() || !password) {
-        setLoginError("Escribe tu teléfono y contraseña");
-        return;
-      }
+    const lookupField = loginMethod === "phone"
+      ? { phone: loginPhone.trim() }
+      : { email: email.trim() };
 
-      setSaving(true);
+    if (loginMethod === "phone" && !loginPhone.trim()) {
+      setLoginError("Escribe tu tel\u00e9fono");
+      return;
+    }
+    if (loginMethod === "email" && !email.trim()) {
+      setLoginError("Escribe tu correo");
+      return;
+    }
+    if (!password) {
+      setLoginError("Escribe tu contrase\u00f1a");
+      return;
+    }
 
-      // Lookup email from phone
-      try {
-        const res = await fetch("/api/portal/buscar-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phone: loginPhone.trim() }),
-        });
+    setSaving(true);
 
-        const result = await res.json();
+    try {
+      const res = await fetch("/api/portal/buscar-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(lookupField),
+      });
 
-        if (!res.ok || !result.email) {
-          setLoginError("No encontramos una cuenta con ese teléfono. Verifica o usa correo.");
-          setSaving(false);
-          return;
-        }
+      const result = await res.json();
 
-        const { error } = await supabase.auth.signInWithPassword({
-          email: result.email,
-          password,
-        });
-
-        if (error) {
-          setLoginError("Contraseña incorrecta");
-          setSaving(false);
-          return;
-        }
-      } catch {
-        setLoginError("Error de conexión");
+      if (!res.ok || !result.email) {
+        setLoginError(
+          loginMethod === "phone"
+            ? "No encontramos una cuenta con ese tel\u00e9fono. Verifica o crea una cuenta nueva."
+            : "No encontramos una cuenta con ese correo. Verifica o usa tel\u00e9fono."
+        );
         setSaving(false);
         return;
       }
-    } else {
-      if (!email || !password) {
-        setLoginError("Escribe correo y contraseña");
-        return;
-      }
 
-      setSaving(true);
+      // Try all possible auth emails
+      const emailsToTry = [result.email, ...(result.alternatives || [])];
+      let loginOk = false;
 
-      // Lookup auth email from real email via API
-      try {
-        const res = await fetch("/api/portal/buscar-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: email.trim() }),
-        });
-
-        const result = await res.json();
-
-        if (!res.ok || !result.email) {
-          setLoginError("No encontramos una cuenta con ese correo. Verifica o usa teléfono.");
-          setSaving(false);
-          return;
-        }
-
-        const { error } = await supabase.auth.signInWithPassword({
-          email: result.email,
+      for (const tryEmail of emailsToTry) {
+        if (!tryEmail) continue;
+        const { error: err } = await supabase.auth.signInWithPassword({
+          email: tryEmail,
           password,
         });
-
-        if (error) {
-          setLoginError("Contraseña incorrecta");
-          setSaving(false);
-          return;
+        if (!err) {
+          loginOk = true;
+          break;
         }
-      } catch {
-        setLoginError("Error de conexión");
+      }
+
+      if (!loginOk) {
+        setLoginError("Contrase\u00f1a incorrecta. Si la olvidaste, usa \"\u00bfOlvid\u00e9 mi contrase\u00f1a?\" para poner una nueva.");
         setSaving(false);
         return;
       }
+    } catch {
+      setLoginError("Error de conexi\u00f3n. Intenta de nuevo.");
+      setSaving(false);
+      return;
     }
 
     await checkUser();
@@ -1493,13 +1479,18 @@ export default function ClientePage() {
                   />
                 )}
 
-                <input
-                  placeholder="Contrase&ntilde;a"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    placeholder="Contrase\u00f1a"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ ...inputStyle, paddingRight: 80 }}
+                  />
+                  <button onClick={() => setShowPassword(!showPassword)} type="button" style={showPassBtnStyle}>
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
                 <button
                   onClick={login}
                   disabled={saving}
@@ -1543,13 +1534,18 @@ export default function ClientePage() {
                   style={inputStyle}
                   type="email"
                 />
-                <input
-                  placeholder="Crea una contrase&ntilde;a *"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    placeholder="Crea una contrase\u00f1a *"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ ...inputStyle, paddingRight: 80 }}
+                  />
+                  <button onClick={() => setShowPassword(!showPassword)} type="button" style={showPassBtnStyle}>
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
                 <button
                   onClick={register}
                   disabled={saving}
@@ -1574,13 +1570,18 @@ export default function ClientePage() {
                   style={inputStyle}
                   type="tel"
                 />
-                <input
-                  placeholder="Nueva contrase&ntilde;a"
-                  type="password"
-                  value={forgotNewPass}
-                  onChange={(e) => setForgotNewPass(e.target.value)}
-                  style={inputStyle}
-                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    placeholder="Nueva contrase\u00f1a"
+                    type={showPassword ? "text" : "password"}
+                    value={forgotNewPass}
+                    onChange={(e) => setForgotNewPass(e.target.value)}
+                    style={{ ...inputStyle, paddingRight: 80 }}
+                  />
+                  <button onClick={() => setShowPassword(!showPassword)} type="button" style={showPassBtnStyle}>
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
                 <button
                   onClick={resetPassword}
                   disabled={saving}
@@ -4004,6 +4005,21 @@ const metaPillStyle: React.CSSProperties = {
   border: `1px solid ${COLORS.border}`,
   color: COLORS.text,
   fontSize: 12,
+};
+
+const showPassBtnStyle: React.CSSProperties = {
+  position: "absolute",
+  right: 8,
+  top: "50%",
+  transform: "translateY(-50%)",
+  background: "rgba(123,34,24,0.08)",
+  border: "none",
+  borderRadius: 8,
+  padding: "5px 12px",
+  fontSize: 13,
+  fontWeight: 600,
+  color: "#7b2218",
+  cursor: "pointer",
 };
 
 const loginErrorStyle: React.CSSProperties = {
