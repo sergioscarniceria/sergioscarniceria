@@ -2099,56 +2099,7 @@ export default function ClientePage() {
               )}
             </div>
 
-            {isMobile && (
-              <>
-                <div style={{ height: 90 }} />
-
-                <button
-                  onClick={() => setShowCart(true)}
-                  style={floatingCartButtonStyle}
-                >
-                  Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
-                </button>
-
-                {showCart && (
-                  <div style={mobileOverlayStyle} onClick={() => setShowCart(false)}>
-                    <div style={mobileSheetStyle} onClick={(e) => e.stopPropagation()}>
-                      <div style={mobileSheetHeaderStyle}>
-                        <div>
-                          <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 24 }}>
-                            Mi pedido
-                          </div>
-                          <div style={{ color: COLORS.muted }}>Revisa antes de enviar</div>
-                        </div>
-
-                        <button onClick={() => setShowCart(false)} style={closeButtonStyle}>
-                          ✕
-                        </button>
-                      </div>
-
-                      <CartPanel
-                        cart={cart}
-                        notes={notes}
-                        setNotes={setNotes}
-                        removeCartItem={removeCartItem}
-                        cartTotal={cartTotal}
-                        createOrder={createOrder}
-                        saving={saving}
-                        mobile
-                        deliveryDate={deliveryDate}
-                        address={address}
-                        setAddress={setAddress}
-                        saveAddress={saveAddress}
-                        products={products}
-                        suggestions={suggestions}
-                        addProduct={addProduct}
-                        getPrice={getPrice}
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
+            {isMobile && <div style={{ height: 90 }} />}
           </div>
         )}
 
@@ -3143,6 +3094,78 @@ export default function ClientePage() {
         )}
       </div>
 
+      {/* CARRITO FLOTANTE — visible en todas las tabs cuando hay productos */}
+      {cart.length > 0 && (
+        <>
+          <button
+            onClick={() => { setShowCart(true); }}
+            style={floatingCartBubbleStyle}
+          >
+            <span style={{ fontSize: 22 }}>🛒</span>
+            <span style={{
+              position: "absolute", top: -4, right: -4,
+              background: "#e53e3e", color: "white",
+              borderRadius: "50%", width: 22, height: 22,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, fontWeight: 800,
+              border: "2px solid white",
+            }}>
+              {cart.length}
+            </span>
+          </button>
+
+          {isMobile && (
+            <button
+              onClick={() => setShowCart(true)}
+              style={floatingCartButtonStyle}
+            >
+              Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
+            </button>
+          )}
+        </>
+      )}
+
+      {/* OVERLAY DEL CARRITO */}
+      {showCart && (
+        <div style={mobileOverlayStyle} onClick={() => setShowCart(false)}>
+          <div style={{
+            ...mobileSheetStyle,
+            ...(isMobile ? {} : { maxWidth: 480, margin: "auto", borderRadius: 20, maxHeight: "85vh" }),
+          }} onClick={(e) => e.stopPropagation()}>
+            <div style={mobileSheetHeaderStyle}>
+              <div>
+                <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 24 }}>
+                  Mi pedido
+                </div>
+                <div style={{ color: COLORS.muted }}>Revisa antes de enviar</div>
+              </div>
+              <button onClick={() => setShowCart(false)} style={closeButtonStyle}>
+                ✕
+              </button>
+            </div>
+
+            <CartPanel
+              cart={cart}
+              notes={notes}
+              setNotes={setNotes}
+              removeCartItem={removeCartItem}
+              cartTotal={cartTotal}
+              createOrder={createOrder}
+              saving={saving}
+              mobile
+              deliveryDate={deliveryDate}
+              address={address}
+              setAddress={setAddress}
+              saveAddress={saveAddress}
+              products={products}
+              suggestions={suggestions}
+              addProduct={addProduct}
+              getPrice={getPrice}
+            />
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes fadeIn {
           from {
@@ -3914,6 +3937,24 @@ const mobileOverlayStyle: React.CSSProperties = {
   zIndex: 60,
   display: "flex",
   alignItems: "flex-end",
+};
+
+const floatingCartBubbleStyle: React.CSSProperties = {
+  position: "fixed",
+  bottom: 80,
+  right: 18,
+  zIndex: 45,
+  width: 56,
+  height: 56,
+  borderRadius: "50%",
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  boxShadow: "0 8px 24px rgba(123, 34, 24, 0.35)",
+  cursor: "pointer",
 };
 
 const mobileSheetStyle: React.CSSProperties = {

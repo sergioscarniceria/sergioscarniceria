@@ -49,7 +49,7 @@ const C = {
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
-  Res: "🥩", Cerdo: "🐷", Pollo: "🍗", Complementos: "🧂",
+  Res: "🥩", Cerdo: "🐷", Pollo: "🍗", Complementos: "🛒",
   Marinados: "🌶️", Especiales: "⭐", Otros: "🔖",
 };
 
