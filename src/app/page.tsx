@@ -340,7 +340,7 @@ export default function HomePage() {
       }}>
         <div style={navInnerStyle}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <img src="/logo.png" alt="Sergio's" style={{ width: 40, height: "auto" }} />
+            <img src="/logo-sm.png" alt="Sergio's" style={{ width: 40, height: "auto" }} loading="eager" fetchPriority="high" />
             <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 16 }}>Sergio&apos;s Carnicería</span>
           </Link>
           <div style={navLinksStyle}>
@@ -356,8 +356,10 @@ export default function HomePage() {
       <div style={shellStyle}>
         <div id="inicio" style={heroCardStyle}>
           <img
-            src="/logo.png"
+            src="/logo-sm.png"
             alt="Sergios Carnicería"
+            loading="eager"
+            fetchPriority="high"
             style={{
               width: 190,
               maxWidth: "70vw",
