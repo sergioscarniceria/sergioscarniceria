@@ -38,6 +38,11 @@ type Order = {
   loyalty_points_earned?: number;
   created_at?: string;
   delivery_date?: string | null;
+  delivery_status?: string | null;
+  delivery_driver?: string | null;
+  delivery_started_at?: string | null;
+  delivered_at?: string | null;
+  payment_status?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -2249,12 +2254,46 @@ export default function ClientePage() {
                               color: statusColor.color,
                             }}
                           >
-                            {o.status === "nuevo" ? "🆕 Nuevo" :
-                             o.status === "proceso" ? "⏳ Proceso" :
-                             o.status === "terminado" ? "✓ Terminado" :
-                             o.status === "entregado" ? "📦 Entregado" : o.status}
+                            {o.delivery_status === "entregado" ? "📦 Entregado" :
+                             o.delivery_status === "en_camino" ? "🚗 En camino" :
+                             o.delivery_status === "no_entregado" ? "❌ No entregado" :
+                             o.status === "nuevo" ? "🆕 Nuevo" :
+                             o.status === "proceso" ? "⏳ En preparación" :
+                             o.status === "terminado" ? "✅ Listo para entrega" :
+                             o.payment_status === "pagado" ? "💰 Pagado" : o.status}
                           </div>
                         </div>
+
+                        {/* Delivery tracking banner */}
+                        {o.delivery_status === "en_camino" && (
+                          <div style={{
+                            background: "linear-gradient(135deg, #1a7a3a 0%, #2d8a54 100%)",
+                            color: "white", borderRadius: 14, padding: "14px 16px",
+                            marginBottom: 12, display: "flex", alignItems: "center", gap: 12,
+                          }}>
+                            <div style={{ fontSize: 28, lineHeight: 1 }}>🚗</div>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: 15 }}>Tu pedido va en camino</div>
+                              {o.delivery_driver && (
+                                <div style={{ fontSize: 13, opacity: 0.9 }}>Repartidor: {o.delivery_driver}</div>
+                              )}
+                              {o.delivery_started_at && (
+                                <div style={{ fontSize: 12, opacity: 0.8 }}>
+                                  Salió: {new Date(o.delivery_started_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {o.delivery_status === "entregado" && o.delivered_at && (
+                          <div style={{
+                            background: "rgba(45,138,84,0.08)", borderRadius: 14, padding: "10px 14px",
+                            marginBottom: 12, color: COLORS.success, fontSize: 13, fontWeight: 600,
+                          }}>
+                            📦 Entregado el {new Date(o.delivered_at).toLocaleDateString("es-MX")} a las {new Date(o.delivered_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        )}
 
                         <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
                           <div style={orderInfoPillStyle}>
