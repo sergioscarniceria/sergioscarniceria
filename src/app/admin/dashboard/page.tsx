@@ -74,12 +74,14 @@ export default function AdminDashboardPage() {
   const [complementos, setComplementos] = useState<{ name: string; stock: number; purchase_price: number }[]>([]);
 
   // Utilidades data
+  const [showUtilities, setShowUtilities] = useState(false);
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevYearExpenses, setPrevYearExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
   const [prevYearOrders, setPrevYearOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
   const [cxcNotes, setCxcNotes] = useState<{ customer_name: string; total_amount: number; balance_due: number; status: string; due_date: string }[]>([]);
+  const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
 
   const today = new Date();
   const todayStr = toDateInputValue(today);
@@ -199,6 +201,31 @@ export default function AdminDashboardPage() {
       .select("customer_name, total_amount, balance_due, status, due_date")
       .eq("status", "abierta");
     setCxcNotes((cxcData as any[]) || []);
+
+    // Deuda a proveedores (lo que yo debo)
+    const [suppRes, purchRes, suppExpRes, suppPayRes] = await Promise.all([
+      supabase.from("suppliers").select("id, name"),
+      supabase.from("livestock_purchases").select("supplier_id, total_cost, total_live"),
+      supabase.from("supplier_expenses").select("supplier_id, amount"),
+      supabase.from("supplier_payments").select("supplier_id, amount"),
+    ]);
+    const suppList = (suppRes.data || []) as { id: string; name: string }[];
+    const suppMap: Record<string, { name: string; cargos: number; pagos: number }> = {};
+    for (const s of suppList) suppMap[s.id] = { name: s.name, cargos: 0, pagos: 0 };
+    for (const p of (purchRes.data || []) as any[]) {
+      if (suppMap[p.supplier_id]) suppMap[p.supplier_id].cargos += Number(p.total_cost || p.total_live || 0);
+    }
+    for (const e of (suppExpRes.data || []) as any[]) {
+      if (suppMap[e.supplier_id]) suppMap[e.supplier_id].cargos += Number(e.amount || 0);
+    }
+    for (const p of (suppPayRes.data || []) as any[]) {
+      if (suppMap[p.supplier_id]) suppMap[p.supplier_id].pagos += Number(p.amount || 0);
+    }
+    const debts = Object.values(suppMap)
+      .map((s) => ({ name: s.name, debt: Math.max(0, s.cargos - s.pagos) }))
+      .filter((s) => s.debt > 0)
+      .sort((a, b) => b.debt - a.debt);
+    setSupplierDebt(debts);
 
     setLoading(false);
   }
@@ -360,14 +387,17 @@ export default function AdminDashboardPage() {
     const pm = new Date(cm.getFullYear(), cm.getMonth() - 1, 1);
     const py = new Date(cm.getFullYear() - 1, cm.getMonth(), 1);
 
+    const totalDebt = supplierDebt.reduce((s, d) => s + d.debt, 0);
+
     return {
       current: { sales: currentSales, expenses: currentExpenses, utility: currentUtility, margin: currentMargin, label: monthNames[cm.getMonth()] },
       prevMonth: { sales: prevMSales, expenses: prevMExpenses, utility: prevMUtility, margin: prevMMargin, label: monthNames[pm.getMonth()] },
       prevYear: { sales: prevYSales, expenses: prevYExpenses, utility: prevYUtility, margin: prevYMargin, label: `${monthNames[py.getMonth()]} ${py.getFullYear()}` },
       cxc: { total: totalCxC, count: cxcCount, vencidas: cxcVencidas },
+      debt: { total: totalDebt, count: supplierDebt.length },
       categories,
     };
-  }, [salesThisMonth, ownerExpenses, prevMonthOrders, prevMonthExpenses, prevYearOrders, prevYearExpenses, cxcNotes]);
+  }, [salesThisMonth, ownerExpenses, prevMonthOrders, prevMonthExpenses, prevYearOrders, prevYearExpenses, cxcNotes, supplierDebt]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -527,6 +557,17 @@ export default function AdminDashboardPage() {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button
+              onClick={() => setShowUtilities(!showUtilities)}
+              style={{
+                ...secondaryButtonStyle,
+                background: showUtilities ? COLORS.primary : COLORS.cardStrong,
+                color: showUtilities ? "white" : COLORS.text,
+                border: `1px solid ${showUtilities ? COLORS.primary : COLORS.border}`,
+              }}
+            >
+              {showUtilities ? "Cerrar Utilidades" : "Utilidades"}
+            </button>
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
@@ -811,7 +852,7 @@ export default function AdminDashboardPage() {
           )}
         </div>
         {/* ─── Panel de Utilidades ─── */}
-        <div style={panelStyle}>
+        {showUtilities && <div style={panelStyle}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
             <div>
               <h2 style={panelTitleStyle}>Utilidades del Mes</h2>
@@ -891,8 +932,8 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* CxC + Desglose gastos */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          {/* CxC + Lo que debo + Desglose gastos */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
             {/* Lo que me deben */}
             <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que me deben (CxC)</div>
@@ -916,7 +957,44 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            {/* Desglose de gastos */}
+            {/* Lo que yo debo */}
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Lo que yo debo (Proveedores)</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: COLORS.danger, marginBottom: 4 }}>${fmt(utilityStats.debt.total)}</div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>{utilityStats.debt.count} proveedores con saldo</div>
+              {supplierDebt.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  {supplierDebt.slice(0, 5).map((s, i) => (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: `1px solid ${COLORS.border}` }}>
+                      <span style={{ color: COLORS.text }}>{s.name}</span>
+                      <span style={{ fontWeight: 700, color: COLORS.danger }}>${fmt(s.debt)}</span>
+                    </div>
+                  ))}
+                  {supplierDebt.length > 5 && <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>y {supplierDebt.length - 5} más...</div>}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Balance neto */}
+          <div style={{ marginTop: 12, background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}`, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, textAlign: "center" }}>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Me deben</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.success }}>${fmt(utilityStats.cxc.total)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Yo debo</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.danger }}>${fmt(utilityStats.debt.total)}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>Balance neto</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: (utilityStats.cxc.total - utilityStats.debt.total) >= 0 ? COLORS.success : COLORS.danger }}>
+                ${fmt(utilityStats.cxc.total - utilityStats.debt.total)}
+              </div>
+            </div>
+          </div>
+
+          {/* Desglose de gastos */}
             <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Desglose gastos externos</div>
               {utilityStats.categories.length === 0 ? (
@@ -944,7 +1022,7 @@ export default function AdminDashboardPage() {
               )}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Panel de salud del sistema */}
         <SystemHealthPanel />
@@ -962,7 +1040,7 @@ function SystemHealthPanel() {
     setLoading(true);
     setShow(true);
     try {
-      const res = await fetch("/api/health?secret=" + (process.env.NEXT_PUBLIC_ADMIN_SECRET || ""));
+      const res = await fetch("/api/health?secret=sergios2026");
       const data = await res.json();
       setHealth(data);
     } catch {
@@ -984,7 +1062,7 @@ function SystemHealthPanel() {
           <button onClick={checkHealth} disabled={loading} style={{ padding: "10px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
             {loading ? "Verificando..." : "Verificar ahora"}
           </button>
-          <a href={`/api/backup?secret=${process.env.NEXT_PUBLIC_ADMIN_SECRET || ""}`} target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+          <a href="/api/backup?secret=sergios2026" target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
             Descargar backup
           </a>
         </div>
