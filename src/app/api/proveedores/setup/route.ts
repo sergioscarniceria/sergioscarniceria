@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 
 /**
- * GET /api/proveedores/setup?secret=sergios2026
+ * GET /api/proveedores/setup?secret=<ADMIN_SECRET>
  * Inserta proveedores iniciales y datos base.
  * Las tablas deben crearse primero en Supabase SQL Editor.
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== "sergios2026") {
+  if (searchParams.get("secret") !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

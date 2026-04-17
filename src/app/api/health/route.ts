@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
  * Health check: verifica el estado del sistema y cuenta registros.
  * Útil para detectar si la base se está llenando.
  *
- * GET /api/health?secret=sergios2026
+ * GET /api/health?secret=<ADMIN_SECRET>
  */
 
 const TABLES = [
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
 
-  if (secret !== "sergios2026") {
+  if (secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Secret inválido" }, { status: 401 });
   }
 

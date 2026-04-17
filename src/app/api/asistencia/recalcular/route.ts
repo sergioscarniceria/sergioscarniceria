@@ -142,7 +142,7 @@ function buildSummary(empleado: Empleado, fecha: string, eventos: Evento[]) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
-    if (body?.secret !== "sergios2026") {
+    if (body?.secret !== process.env.ADMIN_SECRET) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

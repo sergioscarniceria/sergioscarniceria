@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
  * API de backup: exporta TODAS las tablas principales a JSON.
  * Úsalo como respaldo diario. Se puede automatizar con Vercel cron.
  *
- * GET /api/backup?secret=sergios2026
+ * GET /api/backup?secret=<ADMIN_SECRET>
  * → Devuelve JSON con todos los datos del sistema
  *
  * Puedes guardarlo manualmente o configurar un cron para que se ejecute diario.
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
 
-  if (secret !== "sergios2026") {
+  if (secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Secret inválido" }, { status: 401 });
   }
 

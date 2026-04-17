@@ -1147,7 +1147,7 @@ function SystemHealthPanel() {
     setLoading(true);
     setShow(true);
     try {
-      const res = await fetch("/api/health?secret=sergios2026");
+      const res = await fetch(`/api/health?secret=${process.env.NEXT_PUBLIC_ADMIN_SECRET}`);
       const data = await res.json();
       setHealth(data);
     } catch {
@@ -1169,7 +1169,7 @@ function SystemHealthPanel() {
           <button onClick={checkHealth} disabled={loading} style={{ padding: "10px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
             {loading ? "Verificando..." : "Verificar ahora"}
           </button>
-          <a href="/api/backup?secret=sergios2026" target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+          <a href={`/api/backup?secret=${process.env.NEXT_PUBLIC_ADMIN_SECRET}`} target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
             Descargar backup
           </a>
         </div>

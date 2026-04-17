@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase";
 
 /**
- * POST /api/auth/setup-pins?secret=sergios2026
+ * POST /api/auth/setup-pins?secret=<ADMIN_SECRET>
  * Crea la tabla app_pins e inserta los 3 roles con PINs por defecto.
  * Solo ejecutar UNA vez.
  */
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
 async function handler(req: Request) {
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== "sergios2026") {
+  if (searchParams.get("secret") !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

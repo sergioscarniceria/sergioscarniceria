@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    if (body.secret !== "sergios2026") {
+    if (body.secret !== process.env.ADMIN_SECRET) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

@@ -128,7 +128,7 @@ export default function AdminClientesPage() {
           phone: portalCustomer.phone || "",
           email: portalEmail.trim() || portalCustomer.email || "",
           password: portalPassword,
-          secret: "sergios2026",
+          secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
         }),
       });
 
@@ -170,7 +170,7 @@ export default function AdminClientesPage() {
         body: JSON.stringify({
           customer_id: passwordCustomer.id,
           new_password: newPassword,
-          secret: "sergios2026",
+          secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
         }),
       });
 
@@ -263,7 +263,7 @@ export default function AdminClientesPage() {
       const res = await fetch("/api/portal/eliminar-cliente", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: id, secret: "sergios2026" }),
+        body: JSON.stringify({ customer_id: id, secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "" }),
       });
       const result = await res.json();
 

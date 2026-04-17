@@ -50,11 +50,10 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
 
-  if (secret !== "sergios2026") {
+  if (secret !== process.env.ADMIN_SECRET) {
     return NextResponse.json(
       {
         error: "Secret inválido",
-        hint: "Agrega ?secret=sergios2026",
         sql: SQL_TABLES,
       },
       { status: 401 }
