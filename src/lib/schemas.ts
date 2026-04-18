@@ -82,7 +82,7 @@ export const mpWebhookSchema = z.object({
  * Returns { data } on success or { error, status: 400 } on failure.
  */
 export function validateBody<T>(
-  schema: z.ZodSchema<T>,
+  schema: z.ZodType<T>,
   body: unknown
 ): { data: T; error?: never } | { data?: never; error: string } {
   const result = schema.safeParse(body);
