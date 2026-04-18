@@ -1105,6 +1105,87 @@ export default function AdminDashboardPage() {
           )}
         </div>
 
+        {/* ═══ PANEL: TICKETS EDITADOS ═══ */}
+        {(() => {
+          const editedOrders = orders.filter((o) => o.edited_at);
+          if (editedOrders.length === 0) return null;
+          return (
+            <div style={{ ...panelStyle, marginTop: 20, borderLeft: `4px solid ${COLORS.danger}` }}>
+              <h2 style={{ ...panelTitleStyle, color: COLORS.danger }}>
+                Tickets editados ({editedOrders.length})
+              </h2>
+              <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
+                Tickets modificados en caja durante el rango seleccionado
+              </p>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {editedOrders.map((order) => {
+                  const currentTotal = orderTotal(order);
+                  const origItems = (order.original_items || []) as OrderItem[];
+                  const originalTotal = origItems.reduce(
+                    (s, i) => s + Number(i.kilos || 0) * Number(i.price || 0),
+                    0
+                  );
+                  const diff = currentTotal - originalTotal;
+
+                  return (
+                    <div key={order.id} style={{ padding: 14, borderRadius: 14, background: "rgba(180,35,24,0.04)", border: "1px solid rgba(180,35,24,0.12)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 15 }}>
+                            TK-{order.id.slice(0, 6).toUpperCase()} — {order.customer_name || "Mostrador"}
+                          </div>
+                          <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 4 }}>
+                            Editado por: <b style={{ color: COLORS.danger }}>{order.edited_by || "cajera"}</b>
+                            {order.edited_at && (
+                              <span> — {new Date(order.edited_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: 18, color: COLORS.text }}>${fmt(currentTotal)}</div>
+                          {origItems.length > 0 && (
+                            <div style={{ fontSize: 13, color: COLORS.danger, textDecoration: "line-through" }}>
+                              ${fmt(originalTotal)}
+                            </div>
+                          )}
+                          {origItems.length > 0 && diff !== 0 && (
+                            <div style={{ fontSize: 13, fontWeight: 700, color: diff > 0 ? COLORS.success : COLORS.danger, marginTop: 2 }}>
+                              {diff > 0 ? "+" : ""}${fmt(diff)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Detalle de cambios */}
+                      {origItems.length > 0 && (
+                        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.danger, marginBottom: 4 }}>ORIGINAL</div>
+                            {origItems.map((item, i) => (
+                              <div key={i} style={{ fontSize: 12, color: COLORS.muted, padding: "2px 0" }}>
+                                {item.product}: {item.kilos} kg × ${Number(item.price || 0).toFixed(2)}
+                              </div>
+                            ))}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: COLORS.success, marginBottom: 4 }}>ACTUAL</div>
+                            {(order.order_items || []).map((item, i) => (
+                              <div key={i} style={{ fontSize: 12, color: COLORS.text, padding: "2px 0" }}>
+                                {item.product}: {item.kilos} kg × ${Number(item.price || 0).toFixed(2)}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         <div style={{ ...panelStyle, marginTop: 20 }}>
           <h2 style={panelTitleStyle}>Pedidos recientes</h2>
 
