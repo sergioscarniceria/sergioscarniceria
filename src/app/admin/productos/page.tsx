@@ -38,6 +38,7 @@ const CATEGORY_OPTIONS = [
   "Carne para asar",
   "Cerdo",
   "Embutidos",
+  "Preparados",
   "Complementos",
 ];
 
