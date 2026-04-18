@@ -30,6 +30,7 @@ type OrderItem = {
   price?: number | null;
   quantity?: number | null;
   sale_type?: string | null;
+  prepared_kilos?: number | null;
 };
 
 type CashClosure = {
@@ -229,6 +230,8 @@ export default function CajaPage() {
   const [desgloseMovement, setDesgloseMovement] = useState<Movement | null>(null);
   const [desgloseItems, setDesgloseItems] = useState<OrderItem[]>([]);
   const [desgloseLoading, setDesgloseLoading] = useState(false);
+  const [desgloseEditInfo, setDesgloseEditInfo] = useState<{ edited_at: string; edited_by: string; original_items: OrderItem[] } | null>(null);
+  const [editedOrderIds, setEditedOrderIds] = useState<Set<string>>(new Set());
 
   // Cancel modal
   const [cancelMovement, setCancelMovement] = useState<Movement | null>(null);
@@ -263,6 +266,15 @@ export default function CajaPage() {
       .lte("created_at", end)
       .order("created_at", { ascending: false });
     setMovements((data as Movement[]) || []);
+
+    // Cargar IDs de órdenes editadas en el mismo rango
+    const { data: editedOrders } = await supabase
+      .from("orders")
+      .select("id")
+      .not("edited_at", "is", null)
+      .gte("created_at", start)
+      .lte("created_at", end);
+    setEditedOrderIds(new Set((editedOrders || []).map((o: { id: string }) => o.id)));
   }, [dateFrom, dateTo]);
 
   const loadTodayClosure = useCallback(async () => {
@@ -346,6 +358,7 @@ export default function CajaPage() {
     setDesgloseMovement(m);
     setDesgloseLoading(true);
     setDesgloseItems([]);
+    setDesgloseEditInfo(null);
 
     const { data } = await supabase
       .from("order_items")
@@ -353,6 +366,22 @@ export default function CajaPage() {
       .eq("order_id", m.reference_id);
 
     setDesgloseItems((data as OrderItem[]) || []);
+
+    // Traer info de edición de la orden
+    const { data: orderData } = await supabase
+      .from("orders")
+      .select("edited_at, edited_by, original_items")
+      .eq("id", m.reference_id)
+      .maybeSingle();
+
+    if (orderData?.edited_at) {
+      setDesgloseEditInfo({
+        edited_at: orderData.edited_at,
+        edited_by: orderData.edited_by || "cajera",
+        original_items: (orderData.original_items as OrderItem[]) || [],
+      });
+    }
+
     setDesgloseLoading(false);
   }
 
@@ -1096,7 +1125,12 @@ export default function CajaPage() {
                       <div key={m.id} style={movCard}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 800, color: C.text }}>{typeName(m.type)}</div>
+                            <div style={{ fontWeight: 800, color: C.text }}>
+                              {typeName(m.type)}
+                              {m.reference_id && editedOrderIds.has(m.reference_id) && (
+                                <span style={{ marginLeft: 8, display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(180,35,24,0.12)", color: C.danger }}>Editado</span>
+                              )}
+                            </div>
                             <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
                               {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
                               {m.cashier_name && <span> — {m.cashier_name}</span>}
@@ -1600,6 +1634,39 @@ export default function CajaPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Sección: Ticket fue editado */}
+            {desgloseEditInfo && (
+              <div style={{ marginTop: 16, padding: 14, borderRadius: 14, background: "rgba(180,35,24,0.06)", border: "1px solid rgba(180,35,24,0.15)" }}>
+                <div style={{ fontWeight: 800, color: C.danger, fontSize: 15, marginBottom: 6 }}>
+                  Ticket editado
+                </div>
+                <div style={{ color: C.muted, fontSize: 13, marginBottom: 10 }}>
+                  Por: <b>{desgloseEditInfo.edited_by}</b> — {new Date(desgloseEditInfo.edited_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}
+                </div>
+
+                {desgloseEditInfo.original_items.length > 0 && (
+                  <>
+                    <div style={{ fontWeight: 700, color: C.text, fontSize: 13, marginBottom: 6 }}>Items originales (antes de edición):</div>
+                    <div style={{ display: "grid", gap: 4 }}>
+                      {desgloseEditInfo.original_items.map((item, i) => {
+                        const qty = Number(item.prepared_kilos || item.kilos || 0);
+                        const subtotal = qty * Number(item.price || 0);
+                        return (
+                          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "rgba(180,35,24,0.04)", fontSize: 13 }}>
+                            <span style={{ color: C.text }}>{item.product} — {qty} kg × ${Number(item.price || 0).toFixed(2)}</span>
+                            <span style={{ fontWeight: 700, color: C.danger, textDecoration: "line-through" }}>${subtotal.toFixed(2)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ marginTop: 8, fontWeight: 800, color: C.danger, fontSize: 14, textAlign: "right" }}>
+                      Total original: ${desgloseEditInfo.original_items.reduce((s, i) => s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0), 0).toFixed(2)}
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

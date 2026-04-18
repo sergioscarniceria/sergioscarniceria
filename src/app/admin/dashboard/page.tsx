@@ -36,6 +36,9 @@ type Order = {
   delivery_driver?: string | null;
   delivery_started_at?: string | null;
   delivered_at?: string | null;
+  edited_at?: string | null;
+  edited_by?: string | null;
+  original_items?: OrderItem[] | null;
 };
 
 type ProductStats = {
@@ -1116,6 +1119,11 @@ export default function AdminDashboardPage() {
                   </div>
                   <div style={{ color: COLORS.muted, marginTop: 4 }}>
                     Estado: {order.status || "Sin estado"} · Carnicero: {order.butcher_name || "Sin asignar"}
+                    {order.edited_at && (
+                      <span style={{ display: "inline-block", marginLeft: 8, padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(180,35,24,0.12)", color: COLORS.danger }}>
+                        Editado por {order.edited_by || "cajera"}
+                      </span>
+                    )}
                   </div>
                   {order.created_at ? (
                     <div style={{ color: COLORS.muted, marginTop: 4, fontSize: 13 }}>

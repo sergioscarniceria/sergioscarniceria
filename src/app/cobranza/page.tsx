@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit-log";
 import QrScanner from "@/components/QrScanner";
 import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
@@ -162,6 +163,17 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [showCreditPrint, setShowCreditPrint] = useState(false);
   const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
+
+  // Modo edición de ticket
+  const [editMode, setEditMode] = useState(false);
+  const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Reset edit mode cuando cambia el ticket seleccionado
+  useEffect(() => {
+    setEditMode(false);
+    setEditedItems([]);
+  }, [selectedTicket?.id]);
 
   // Modo fullscreen POS
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -565,6 +577,129 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     setSelectedTicket(null);
     await loadData();
     setSaving(false);
+  }
+
+  // ── Edición de ticket ──────────────────────────────────────
+  function startEditMode() {
+    if (!selectedTicket?.order_items) return;
+    setEditedItems(selectedTicket.order_items.map((item) => ({ ...item })));
+    setEditMode(true);
+  }
+
+  function cancelEditMode() {
+    setEditMode(false);
+    setEditedItems([]);
+  }
+
+  function updateEditedItem(index: number, field: "kilos" | "price", value: string) {
+    setEditedItems((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], [field]: Number(value) || 0 };
+      // Si editan kilos, también actualizar prepared_kilos para que el total refleje el cambio
+      if (field === "kilos") {
+        copy[index].prepared_kilos = Number(value) || 0;
+      }
+      return copy;
+    });
+  }
+
+  function removeEditedItem(index: number) {
+    setEditedItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function editedTotal() {
+    return editedItems.reduce((sum, item) => {
+      const qty = Number(item.prepared_kilos || item.kilos || 0);
+      return sum + qty * Number(item.price || 0);
+    }, 0);
+  }
+
+  async function saveTicketEdits() {
+    if (!selectedTicket) return;
+    if (editedItems.length === 0) {
+      alert("No puedes dejar el ticket sin productos. Mejor cancélalo.");
+      return;
+    }
+
+    setSavingEdit(true);
+
+    try {
+      const originalItems = selectedTicket.order_items || [];
+
+      // 1. Borrar items actuales de este order
+      await supabase.from("order_items").delete().eq("order_id", selectedTicket.id);
+
+      // 2. Insertar items editados
+      const newItems = editedItems.map((item) => ({
+        order_id: selectedTicket.id,
+        product: item.product,
+        kilos: item.kilos,
+        price: item.price,
+        prepared_kilos: item.prepared_kilos || null,
+        sale_type: item.sale_type || null,
+      }));
+
+      const { error: insertError } = await supabase.from("order_items").insert(newItems);
+
+      if (insertError) {
+        alert("Error guardando items: " + insertError.message);
+        setSavingEdit(false);
+        return;
+      }
+
+      // 3. Marcar orden como editada + guardar snapshot original
+      await supabase
+        .from("orders")
+        .update({
+          edited_at: new Date().toISOString(),
+          edited_by: cashierName || "cajera",
+          original_items: originalItems,
+        })
+        .eq("id", selectedTicket.id);
+
+      // 4. Registrar en audit_log
+      logAudit({
+        action: "orden_editada",
+        user_role: "cajera",
+        user_label: cashierName || "cajera",
+        entity_type: "order",
+        entity_id: selectedTicket.id,
+        amount: editedTotal(),
+        details: {
+          original_items: originalItems.map((i) => ({
+            product: i.product,
+            kilos: i.kilos,
+            price: i.price,
+            prepared_kilos: i.prepared_kilos,
+          })),
+          edited_items: editedItems.map((i) => ({
+            product: i.product,
+            kilos: i.kilos,
+            price: i.price,
+            prepared_kilos: i.prepared_kilos,
+          })),
+          original_total: ticketTotal(selectedTicket),
+          new_total: editedTotal(),
+          difference: editedTotal() - ticketTotal(selectedTicket),
+        },
+      });
+
+      // 5. Actualizar estado local
+      const updatedTicket: Ticket = {
+        ...selectedTicket,
+        order_items: editedItems,
+      };
+      setSelectedTicket(updatedTicket);
+      setEditMode(false);
+      setEditedItems([]);
+      await loadData();
+
+      alert("Ticket actualizado correctamente");
+    } catch (err) {
+      alert("Error al guardar: " + String(err));
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function sendTicketToCredit() {
@@ -1347,31 +1482,108 @@ if (cashError) {
                         )}
                       </div>
 
-                      <div style={ticketTotalStyle}>
-                        ${money(ticketFinalTotal(selectedTicket))}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={ticketTotalStyle}>
+                          ${money(editMode ? editedTotal() : ticketFinalTotal(selectedTicket))}
+                        </div>
+                        {!editMode && (
+                          <button
+                            onClick={startEditMode}
+                            style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "6px 14px", cursor: "pointer", fontSize: 14, fontWeight: 600, color: COLORS.primary }}
+                            title="Editar ticket"
+                          >
+                            ✏️ Editar
+                          </button>
+                        )}
                       </div>
                     </div>
 
+                    {/* Barra de edición activa */}
+                    {editMode && (
+                      <div style={{ background: "rgba(37,99,235,0.08)", border: `1px solid ${COLORS.primary}`, borderRadius: 12, padding: "10px 16px", marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 700, color: COLORS.primary, fontSize: 14 }}>Modo edición activo</span>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <button onClick={cancelEditMode} style={{ background: "white", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}>
+                            Cancelar
+                          </button>
+                          <button onClick={saveTicketEdits} disabled={savingEdit} style={{ background: COLORS.success, color: "white", border: "none", borderRadius: 8, padding: "6px 14px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}>
+                            {savingEdit ? "Guardando..." : "Guardar cambios"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div style={{ marginTop: 12 }}>
-                      {(selectedTicket.order_items || []).length === 0 ? (
-                        <div style={emptyBoxStyle}>Este ticket no tiene artículos</div>
-                      ) : (
-                        (selectedTicket.order_items || []).map((item, index) => (
-                          <div key={index} style={itemRowStyle}>
-                            <div>
-                              <div style={itemNameStyle}>{item.product}</div>
-                              <div style={itemMetaStyle}>
-                                {item.prepared_kilos && item.prepared_kilos !== item.kilos
-                                  ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
-                                  : `${item.kilos} kg`} · ${money(item.price)}
+                      {editMode ? (
+                        /* ── Items en modo edición ── */
+                        editedItems.length === 0 ? (
+                          <div style={emptyBoxStyle}>Sin productos — agrega al menos uno</div>
+                        ) : (
+                          editedItems.map((item, index) => (
+                            <div key={index} style={{ ...itemRowStyle, flexDirection: "column", gap: 8 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                <div style={itemNameStyle}>{item.product}</div>
+                                <button
+                                  onClick={() => removeEditedItem(index)}
+                                  style={{ background: "rgba(220,38,38,0.1)", color: COLORS.danger, border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
+                                >
+                                  Quitar
+                                </button>
+                              </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>
+                                    {item.sale_type === "pieza" ? "Cantidad" : "Kilos"}
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={item.prepared_kilos ?? item.kilos}
+                                    onChange={(e) => updateEditedItem(index, "kilos", e.target.value)}
+                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 16, fontWeight: 600 }}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>Precio</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={item.price}
+                                    onChange={(e) => updateEditedItem(index, "price", e.target.value)}
+                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 16, fontWeight: 600 }}
+                                  />
+                                </div>
+                                <div style={{ minWidth: 80, textAlign: "right", fontWeight: 800, fontSize: 16 }}>
+                                  ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                                </div>
                               </div>
                             </div>
+                          ))
+                        )
+                      ) : (
+                        /* ── Items en modo lectura ── */
+                        (selectedTicket.order_items || []).length === 0 ? (
+                          <div style={emptyBoxStyle}>Este ticket no tiene artículos</div>
+                        ) : (
+                          (selectedTicket.order_items || []).map((item, index) => (
+                            <div key={index} style={itemRowStyle}>
+                              <div>
+                                <div style={itemNameStyle}>{item.product}</div>
+                                <div style={itemMetaStyle}>
+                                  {item.prepared_kilos && item.prepared_kilos !== item.kilos
+                                    ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
+                                    : `${item.kilos} kg`} · ${money(item.price)}
+                                </div>
+                              </div>
 
-                            <div style={itemTotalStyle}>
-                              ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                              <div style={itemTotalStyle}>
+                                ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          ))
+                        )
                       )}
                     </div>
 
@@ -1382,7 +1594,8 @@ if (cashError) {
                       </div>
                     )}
 
-                    {/* Sección de descuento */}
+                    {/* Sección de descuento y cobro — ocultar en modo edición */}
+                    {!editMode && (<>
                     <div style={discountSectionStyle}>
                       <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
                         Descuento adicional
@@ -1493,6 +1706,7 @@ if (cashError) {
                     >
                       ❌ Cancelar ticket
                     </button>
+                    </>)}
 
                     {/* Modal escáner QR */}
                     {showQrScanner && (
