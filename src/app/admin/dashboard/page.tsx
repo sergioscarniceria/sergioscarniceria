@@ -72,6 +72,9 @@ export default function AdminDashboardPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Secciones colapsables
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+
   // Inventory data
   const [bodegaItems, setBodegaItems] = useState<{ name: string; stock: number; cost: number; unit: string }[]>([]);
   const [complementos, setComplementos] = useState<{ name: string; stock: number; purchase_price: number }[]>([]);
@@ -650,6 +653,30 @@ export default function AdminDashboardPage() {
     );
   }
 
+  function toggleSection(key: string) {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function Section({ id, title, count, danger, children }: { id: string; title: string; count?: number; danger?: boolean; children: React.ReactNode }) {
+    const isOpen = openSections[id] || false;
+    return (
+      <div style={{ ...panelStyle, marginTop: 20, ...(danger ? { borderLeft: `4px solid ${COLORS.danger}` } : {}) }}>
+        <button
+          onClick={() => toggleSection(id)}
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}
+        >
+          <h2 style={{ ...panelTitleStyle, margin: 0, color: danger ? COLORS.danger : COLORS.text }}>
+            {title}{count !== undefined ? ` (${count})` : ""}
+          </h2>
+          <span style={{ fontSize: 18, color: COLORS.muted, transition: "transform 0.2s", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+            ▼
+          </span>
+        </button>
+        {isOpen && <div style={{ marginTop: 14 }}>{children}</div>}
+      </div>
+    );
+  }
+
   return (
     <div style={pageStyle}>
       <div style={glowTopLeft} />
@@ -933,11 +960,8 @@ export default function AdminDashboardPage() {
 
         {/* ─── Entregas KPIs ─── */}
         {deliveryStats.total > 0 && (
-          <>
-            <div style={{ marginBottom: 8, marginTop: 8 }}>
-              <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Entregas</h2>
-              <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 14 }}>Métricas de reparto en el rango seleccionado</p>
-            </div>
+          <Section id="entregas" title="Entregas" count={deliveryStats.total}>
+            <div></div>
             <div style={statsGridStyle}>
               <div style={heroCardStyle}>
                 <div style={smallLabelStyle}>Entregados</div>
@@ -991,14 +1015,11 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
             )}
-          </>
+          </Section>
         )}
 
         {/* ─── Inventario KPIs ─── */}
-        <div style={{ marginBottom: 8, marginTop: 8 }}>
-          <h2 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Inventario</h2>
-          <p style={{ margin: "4px 0 0", color: COLORS.muted, fontSize: 14 }}>Valor del inventario en bodega y complementos</p>
-        </div>
+        <Section id="inventario" title="Inventario">
         <div style={statsGridStyle}>
           <div style={heroCardStyle}>
             <div style={smallLabelStyle}>Valor total inventario</div>
@@ -1015,8 +1036,10 @@ export default function AdminDashboardPage() {
             <div style={heroMetaStyle}>{inventoryStats.complementosCount} items</div>
           </div>
         </div>
+        </Section>
 
-        <div style={panelStyle}>
+        <Section id="graficas" title="Gráficas de ventas y pedidos">
+          <div style={panelStyle}>
           <h2 style={panelTitleStyle}>Ventas por día</h2>
           <div style={{ width: "100%", height: 280 }}>
             <ResponsiveContainer>
@@ -1045,7 +1068,9 @@ export default function AdminDashboardPage() {
             </ResponsiveContainer>
           </div>
         </div>
+        </Section>
 
+        <Section id="rankings" title="Clientes y carniceros">
         <div style={doubleGridStyle}>
           <div style={panelStyle}>
             <h2 style={panelTitleStyle}>Clientes que más compran</h2>
@@ -1079,9 +1104,9 @@ export default function AdminDashboardPage() {
             )}
           </div>
         </div>
+        </Section>
 
-        <div style={{ ...panelStyle, marginTop: 20 }}>
-          <h2 style={panelTitleStyle}>Ventas por producto</h2>
+        <Section id="productos" title="Ventas por producto" count={productStats.length}>
 
           {productStats.length === 0 ? (
             <div style={emptyBoxStyle}>No hay datos</div>
@@ -1103,17 +1128,14 @@ export default function AdminDashboardPage() {
               </div>
             ))
           )}
-        </div>
+        </Section>
 
         {/* ═══ PANEL: TICKETS EDITADOS ═══ */}
         {(() => {
           const editedOrders = orders.filter((o) => o.edited_at);
           if (editedOrders.length === 0) return null;
           return (
-            <div style={{ ...panelStyle, marginTop: 20, borderLeft: `4px solid ${COLORS.danger}` }}>
-              <h2 style={{ ...panelTitleStyle, color: COLORS.danger }}>
-                Tickets editados ({editedOrders.length})
-              </h2>
+            <Section id="editados" title="Tickets editados" count={editedOrders.length} danger>
               <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
                 Tickets modificados en caja durante el rango seleccionado
               </p>
@@ -1182,12 +1204,11 @@ export default function AdminDashboardPage() {
                   );
                 })}
               </div>
-            </div>
+            </Section>
           );
         })()}
 
-        <div style={{ ...panelStyle, marginTop: 20 }}>
-          <h2 style={panelTitleStyle}>Pedidos recientes</h2>
+        <Section id="recientes" title="Pedidos recientes" count={recentOrders.length}>
 
           {recentOrders.length === 0 ? (
             <div style={emptyBoxStyle}>No hay pedidos</div>
@@ -1219,7 +1240,7 @@ export default function AdminDashboardPage() {
               </div>
             ))
           )}
-        </div>
+        </Section>
         {/* Panel de salud del sistema */}
         <SystemHealthPanel />
       </div>
