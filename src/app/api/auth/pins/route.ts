@@ -52,7 +52,7 @@ export async function PUT(req: Request) {
     if (v.error) {
       return NextResponse.json({ error: v.error }, { status: 400 });
     }
-    const { role, pin } = v.data;
+    const { role, pin } = v.data!;
 
     const supabase = getSupabaseClient();
 

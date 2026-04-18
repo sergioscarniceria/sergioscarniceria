@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     if (v.error) {
       return NextResponse.json({ error: v.error }, { status: 400 });
     }
-    const { pin } = v.data;
+    const { pin } = v.data!;
 
     const supabase = getSupabaseClient();
     const { data, error } = await supabase

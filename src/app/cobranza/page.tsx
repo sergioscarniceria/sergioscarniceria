@@ -1765,7 +1765,7 @@ if (cashError) {
               </div>
             </div>
           </div>
-        ) : (
+        ) : tab === "manual" ? (
           <div style={mainGridStyle}>
             <div style={leftColumnStyle}>
               <div style={panelStyle}>
