@@ -293,6 +293,9 @@ if (cashMovementError) {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/admin/cxc/nueva" style={secondaryButtonStyle}>
+              Nueva nota
+            </Link>
             <Link href="/admin/cxc/pagos" style={secondaryButtonStyle}>
               Volver a pagos
             </Link>
