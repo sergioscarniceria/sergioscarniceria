@@ -4,8 +4,9 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 
-function fmt(n: number, decimals = 2): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+function fmt(n: number, decimals = 0): string {
+  const v = decimals === 0 ? Math.ceil(n) : n;
+  return v.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
 
 const CATEGORIES = [

@@ -246,7 +246,7 @@ export type TicketData = {
 };
 
 function money(n: number): string {
-  return n.toFixed(2);
+  return String(Math.ceil(n));
 }
 
 function itemTotal(item: TicketItem): number {

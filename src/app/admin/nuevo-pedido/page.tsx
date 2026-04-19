@@ -721,7 +721,7 @@ export default function NuevoPedidoPage() {
                               {product.name}
                             </div>
                             <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4 }}>
-                              ${getPrice(product).toFixed(2)}
+                              ${Math.ceil(getPrice(product))}
                             </div>
                           </div>
 
@@ -760,7 +760,7 @@ export default function NuevoPedidoPage() {
                           <div style={productNameStyle}>{product.name}</div>
                         </div>
 
-                        <div style={productPriceStyle}>${getPrice(product).toFixed(2)}</div>
+                        <div style={productPriceStyle}>${Math.ceil(getPrice(product))}</div>
 
                         <div style={{ minHeight: 28, marginBottom: 10 }}>
                           {selectedCustomer?.customer_type === "mayoreo" &&
@@ -879,7 +879,7 @@ export default function NuevoPedidoPage() {
 
                           {item.sale_type === "kg" ? (
                             <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
-                              {item.kilos} kg · ${item.price.toFixed(2)}/kg
+                              {item.kilos} kg · ${Math.ceil(item.price)}/kg
                             </div>
                           ) : (
                             <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
@@ -931,7 +931,7 @@ export default function NuevoPedidoPage() {
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
                             {item.sale_type === "kg"
-                              ? `$${(item.kilos * item.price).toFixed(2)}`
+                              ? `$${Math.ceil(item.kilos * item.price)}`
                               : "Se pesa después"}
                           </div>
 
@@ -948,7 +948,7 @@ export default function NuevoPedidoPage() {
 
                                     <div style={totalBoxStyle}>
                     <span>Total estimado</span>
-                    <span>${cartTotal().toFixed(2)}</span>
+                    <span>${Math.ceil(cartTotal())}</span>
                   </div>
 
                   <button

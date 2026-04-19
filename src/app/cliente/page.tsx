@@ -1312,7 +1312,7 @@ export default function ClientePage() {
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
             <h2 style={{ margin: "0 0 8px", color: COLORS.text }}>Pedido enviado</h2>
-            <p style={{ color: COLORS.muted, margin: 0 }}>Total: <b style={{ color: COLORS.primary, fontSize: 20 }}>${lastOrderTotal.toFixed(2)}</b></p>
+            <p style={{ color: COLORS.muted, margin: 0 }}>Total: <b style={{ color: COLORS.primary, fontSize: 20 }}>${Math.ceil(lastOrderTotal)}</b></p>
           </div>
 
           <p style={{ color: COLORS.text, textAlign: "center", marginBottom: 20, fontWeight: 600 }}>
@@ -1758,7 +1758,7 @@ export default function ClientePage() {
 
               <div style={heroCardStyle}>
                 <div style={smallLabelStyle}>Resumen del pedido</div>
-                <div style={heroValueStyle}>${cartTotal().toFixed(2)}</div>
+                <div style={heroValueStyle}>${Math.ceil(cartTotal())}</div>
                 <div style={heroMetaStyle}>
                   {cart.length} artículo{cart.length === 1 ? "" : "s"}
                 </div>
@@ -1766,7 +1766,7 @@ export default function ClientePage() {
 
               <div style={heroCardStyle}>
                 <div style={smallLabelStyle}>Adeudo pendiente</div>
-                <div style={heroValueStyle}>${totalDebt.toFixed(2)}</div>
+                <div style={heroValueStyle}>${Math.ceil(totalDebt)}</div>
                 <div style={heroMetaStyle}>
                   {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta
                 </div>
@@ -1776,7 +1776,7 @@ export default function ClientePage() {
                 <div style={smallLabelStyle}>Tu crédito</div>
                 <div style={heroValueStyle}>{creditEnabled ? "✓" : "—"}</div>
                 <div style={heroMetaStyle}>
-                  Límite: ${creditLimit.toFixed(2)} · {creditDays} días
+                  Límite: ${Math.ceil(creditLimit)} · {creditDays} días
                 </div>
               </div>
             </div>
@@ -1829,8 +1829,8 @@ export default function ClientePage() {
                               <div style={productNameStyle}>{getCategoryEmoji(p.category)} {p.name}</div>
                               <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4, fontSize: 16 }}>
                                 {isPieceProduct(p)
-                                  ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
-                                  : `$${getPrice(p).toFixed(2)}/kg`}
+                                  ? `$${Math.ceil(Number(p.fixed_piece_price))}/pza`
+                                  : `$${Math.ceil(getPrice(p))}/kg`}
                               </div>
                             </div>
 
@@ -1894,8 +1894,8 @@ export default function ClientePage() {
 
                           <div style={productPriceStyle}>
                             {isPieceProduct(p)
-                              ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
-                              : `$${getPrice(p).toFixed(2)}/kg`}
+                              ? `$${Math.ceil(Number(p.fixed_piece_price))}/pza`
+                              : `$${Math.ceil(getPrice(p))}/kg`}
                           </div>
 
                           <div style={{ minHeight: 28, marginBottom: 10 }}>
@@ -1996,14 +1996,14 @@ export default function ClientePage() {
                               <div style={{ fontWeight: 700, color: COLORS.text }}>{emoji} {c.name}</div>
                               <div style={{ color: COLORS.muted, fontSize: 14 }}>
                                 {isPiece
-                                  ? `${c.kilos} pza · $${c.price.toFixed(2)}/pza`
-                                  : `${c.kilos} kg · $${c.price.toFixed(2)}/kg`}
+                                  ? `${c.kilos} pza · $${Math.ceil(c.price)}/pza`
+                                  : `${c.kilos} kg · $${Math.ceil(c.price)}/kg`}
                               </div>
                             </div>
 
                             <div style={{ textAlign: "right", flexShrink: 0 }}>
                               <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                                ${(c.kilos * c.price).toFixed(2)}
+                                ${Math.ceil(c.kilos * c.price)}
                               </div>
                               <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
                                 ✕
@@ -2015,7 +2015,7 @@ export default function ClientePage() {
 
                         <div style={totalBoxStyle}>
                           <span>Total del pedido</span>
-                          <span>${cartTotal().toFixed(2)}</span>
+                          <span>${Math.ceil(cartTotal())}</span>
                         </div>
                       </>
                     )}
@@ -2035,7 +2035,7 @@ export default function ClientePage() {
                                 <div style={{ fontSize: 22, textAlign: "center", marginBottom: 6 }}>{getCategoryEmoji(p.category)}</div>
                                 <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 13, textAlign: "center", marginBottom: 4, minHeight: 34 }}>{p.name}</div>
                                 <div style={{ color: COLORS.primary, fontWeight: 800, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
-                                  ${price.toFixed(2)}{piece ? "/pza" : "/kg"}
+                                  ${Math.ceil(price)}{piece ? "/pza" : "/kg"}
                                 </div>
                                 <button
                                   onClick={() => addProduct(p, piece ? "pieza" : "kg")}
@@ -2142,8 +2142,8 @@ export default function ClientePage() {
 
                       <div style={productPriceStyle}>
                         {isPieceProduct(p)
-                          ? `$${Number(p.fixed_piece_price).toFixed(2)}/pza`
-                          : `$${getPrice(p).toFixed(2)}/kg`}
+                          ? `$${Math.ceil(Number(p.fixed_piece_price))}/pza`
+                          : `$${Math.ceil(getPrice(p))}/kg`}
                       </div>
 
                       <div style={{ minHeight: 32, marginBottom: 12 }}>
@@ -2320,8 +2320,8 @@ export default function ClientePage() {
                                 <span style={{ minWidth: 0 }}>{getCategoryEmoji(mp?.category)} {item.product}</span>
                                 <span style={{ flexShrink: 0, fontWeight: 700 }}>
                                   {isPiece
-                                    ? `${item.kilos} pza · $${(item.kilos * item.price).toFixed(2)}`
-                                    : `${item.kilos} kg · $${(item.kilos * item.price).toFixed(2)}`}
+                                    ? `${item.kilos} pza · $${Math.ceil(item.kilos * item.price)}`
+                                    : `${item.kilos} kg · $${Math.ceil(item.kilos * item.price)}`}
                                 </span>
                               </div>
                               );
@@ -2495,12 +2495,12 @@ export default function ClientePage() {
                                         </div>
                                         <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 2 }}>
                                           {isPiece
-                                            ? `${item.kilos} pza × $${Number(item.price || 0).toFixed(2)}`
-                                            : `${item.kilos} kg × $${Number(item.price || 0).toFixed(2)}`}
+                                            ? `${item.kilos} pza × $${Math.ceil(Number(item.price || 0))}`
+                                            : `${item.kilos} kg × $${Math.ceil(Number(item.price || 0))}`}
                                         </div>
                                       </div>
                                       <div style={{ fontWeight: 800, color: COLORS.primary, fontSize: 14, flexShrink: 0 }}>
-                                        ${(Number(item.kilos || 0) * Number(item.price || 0)).toFixed(2)}
+                                        ${Math.ceil(Number(item.kilos || 0) * Number(item.price || 0))}
                                       </div>
                                     </div>
                                     );
@@ -2534,7 +2534,7 @@ export default function ClientePage() {
                                     fontSize: 12,
                                     fontWeight: 600,
                                   }}>
-                                    Subtotal productos: ${itemsTotal.toFixed(2)} (se aplico descuento o ajuste)
+                                    Subtotal productos: ${Math.ceil(itemsTotal)} (se aplico descuento o ajuste)
                                   </div>
                                 )}
                               </div>
@@ -2745,7 +2745,7 @@ export default function ClientePage() {
                                     </div>
                                   </div>
                                   <div style={{ fontWeight: 800, color: COLORS.primary, fontSize: 15, flexShrink: 0 }}>
-                                    {price > 0 ? `$${(qty * price).toFixed(2)}` : "—"}
+                                    {price > 0 ? `$${Math.ceil(qty * price)}` : "—"}
                                   </div>
                                 </div>
                               );
@@ -2774,7 +2774,7 @@ export default function ClientePage() {
                                   marginTop: 6,
                                 }}>
                                   <span>Estimado</span>
-                                  <span>${total.toFixed(2)}</span>
+                                  <span>${Math.ceil(total)}</span>
                                 </div>
                               ) : null;
                             })()}
@@ -2893,14 +2893,14 @@ export default function ClientePage() {
                     <div style={accountValueStyle}>{creditEnabled ? "✓ Activo" : "No"}</div>
                     {creditEnabled && (
                       <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>
-                        Límite: ${creditLimit.toFixed(2)} · {creditDays} días
+                        Límite: ${Math.ceil(creditLimit)} · {creditDays} días
                       </div>
                     )}
                   </div>
 
                   <div style={accountItemStyle}>
                     <div style={accountLabelStyle}>Adeudo pendiente</div>
-                    <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
+                    <div style={accountValueStyle}>${Math.ceil(totalDebt)}</div>
                     {totalDebt > 0 && (
                       <div style={{ fontSize: 13, color: COLORS.danger, marginTop: 4 }}>
                         {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta{openNotes.length === 1 ? "" : "s"}
@@ -2944,7 +2944,7 @@ export default function ClientePage() {
                   <div style={accountSummaryGridStyle}>
                     <div style={accountSummaryCardStyle}>
                       <div style={smallLabelStyle}>Saldo pendiente</div>
-                      <div style={accountValueStyle}>${totalDebt.toFixed(2)}</div>
+                      <div style={accountValueStyle}>${Math.ceil(totalDebt)}</div>
                     </div>
 
                     <div style={accountSummaryCardStyle}>
@@ -3000,10 +3000,10 @@ export default function ClientePage() {
 
                             <div style={accountMetaWrapStyle}>
                               <span style={metaPillStyle}>
-                                Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                                Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                               </span>
                               <span style={metaPillStyle}>
-                                Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                                Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                               </span>
                               <span style={metaPillStyle}>
                                 Origen: <b>{note.source_type || "manual"}</b>
@@ -3012,7 +3012,7 @@ export default function ClientePage() {
 
                             {Number(note.discount_amount || 0) > 0 ? (
                               <div style={accountMetaStyle}>
-                                Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
+                                Descuento: <b>${Math.ceil(Number(note.discount_amount || 0))}</b>
                               </div>
                             ) : null}
 
@@ -3051,7 +3051,7 @@ export default function ClientePage() {
                                   color: COLORS.success,
                                 }}
                               >
-                                ${Number(payment.amount || 0).toFixed(2)}
+                                ${Math.ceil(Number(payment.amount || 0))}
                               </div>
                             </div>
 
@@ -3102,10 +3102,10 @@ export default function ClientePage() {
 
                             <div style={accountMetaWrapStyle}>
                               <span style={metaPillStyle}>
-                                Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                                Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                               </span>
                               <span style={metaPillStyle}>
-                                Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                                Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                               </span>
                             </div>
                           </div>
@@ -3158,7 +3158,7 @@ export default function ClientePage() {
               onClick={() => setShowCart(true)}
               style={floatingCartButtonStyle}
             >
-              Ver pedido ({cart.length}) · ${cartTotal().toFixed(2)}
+              Ver pedido ({cart.length}) · ${Math.ceil(cartTotal())}
             </button>
           )}
         </>
@@ -3283,14 +3283,14 @@ function CartPanel({
                 <div style={{ fontWeight: 700, color: COLORS.text }}>{emoji} {c.name}</div>
                 <div style={{ color: COLORS.muted, fontSize: 14 }}>
                   {isPiece
-                    ? `${c.kilos} pza · $${c.price.toFixed(2)}/pza`
-                    : `${c.kilos} kg · $${c.price.toFixed(2)}/kg`}
+                    ? `${c.kilos} pza · $${Math.ceil(c.price)}/pza`
+                    : `${c.kilos} kg · $${Math.ceil(c.price)}/kg`}
                 </div>
               </div>
 
               <div style={{ textAlign: "right", flexShrink: 0 }}>
                 <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                  ${(c.kilos * c.price).toFixed(2)}
+                  ${Math.ceil(c.kilos * c.price)}
                 </div>
                 <button onClick={() => removeCartItem(i)} style={removeButtonStyle}>
                   ✕
@@ -3302,7 +3302,7 @@ function CartPanel({
 
           <div style={totalBoxStyle}>
             <span>Total del pedido</span>
-            <span>${cartTotal().toFixed(2)}</span>
+            <span>${Math.ceil(cartTotal())}</span>
           </div>
         </>
       )}
@@ -3322,7 +3322,7 @@ function CartPanel({
                   <div style={{ fontSize: 22, textAlign: "center", marginBottom: 6 }}>{getCategoryEmoji(p.category)}</div>
                   <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 13, textAlign: "center", marginBottom: 4, minHeight: 34 }}>{p.name}</div>
                   <div style={{ color: COLORS.primary, fontWeight: 800, fontSize: 13, textAlign: "center", marginBottom: 8 }}>
-                    ${price.toFixed(2)}{piece ? "/pza" : "/kg"}
+                    ${Math.ceil(price)}{piece ? "/pza" : "/kg"}
                   </div>
                   <button
                     onClick={() => addProduct(p, piece ? "pieza" : "kg")}
