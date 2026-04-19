@@ -1251,20 +1251,39 @@ export default function AdminDashboardPage() {
 function SystemHealthPanel() {
   const [health, setHealth] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState(true);
+  const [errorMsg, setErrorMsg] = useState("");
 
   async function checkHealth() {
     setLoading(true);
     setShow(true);
+    setErrorMsg("");
     try {
-      const res = await fetch(`/api/health?secret=${process.env.NEXT_PUBLIC_ADMIN_SECRET}`);
-      const data = await res.json();
-      setHealth(data);
-    } catch {
-      setHealth({ status: "error", database: { usage_percent: -1 } });
+      const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET || "";
+      const res = await fetch(`/api/health?secret=${encodeURIComponent(secret)}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        setErrorMsg(`Error ${res.status}: ${errText}`);
+        setHealth(null);
+      } else {
+        const data = await res.json();
+        if (data.error) {
+          setErrorMsg(data.error);
+          setHealth(null);
+        } else {
+          setHealth(data);
+        }
+      }
+    } catch (err) {
+      setErrorMsg("No se pudo conectar: " + String(err));
+      setHealth(null);
     }
     setLoading(false);
   }
+
+  useEffect(() => {
+    checkHealth();
+  }, []);
 
   const statusColor = health?.status === "ok" ? COLORS.success : health?.status === "warning" ? COLORS.warning : COLORS.danger;
 
@@ -1284,6 +1303,14 @@ function SystemHealthPanel() {
           </a>
         </div>
       </div>
+
+      {loading && <div style={{ padding: 16, textAlign: "center", color: COLORS.muted }}>Verificando salud del sistema...</div>}
+
+      {errorMsg && (
+        <div style={{ padding: 14, borderRadius: 14, background: "rgba(180,35,24,0.08)", border: "1px solid rgba(180,35,24,0.15)", color: COLORS.danger, fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+          {errorMsg}
+        </div>
+      )}
 
       {show && health && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
