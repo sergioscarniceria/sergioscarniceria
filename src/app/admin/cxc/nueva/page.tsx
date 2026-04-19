@@ -106,6 +106,8 @@ export default function NuevaNotaCxcPage() {
   const [notes, setNotes] = useState("");
   const [showCustomerCatalog, setShowCustomerCatalog] = useState(false);
   const [showProductCatalog, setShowProductCatalog] = useState(false);
+  const [customerDebt, setCustomerDebt] = useState<number>(0);
+  const [customerNotes, setCustomerNotes] = useState<number>(0);
 
   const [items, setItems] = useState<NoteItem[]>([]);
 
@@ -146,7 +148,7 @@ export default function NuevaNotaCxcPage() {
     setLoading(false);
   }
 
-  function selectCustomer(customer: Customer) {
+  async function selectCustomer(customer: Customer) {
     setSelectedCustomer(customer);
     setCustomerSearch("");
     setShowCustomerCatalog(false);
@@ -154,11 +156,29 @@ export default function NuevaNotaCxcPage() {
     const creditDays = Number(customer.credit_days || 0);
     const safeDays = creditDays > 0 ? creditDays : 7;
     setDueDate(addDaysToDate(noteDate, safeDays));
+
+    // Cargar deuda actual del cliente
+    const { data: pendingNotes, error } = await supabase
+      .from("cxc_notes")
+      .select("balance_due")
+      .eq("customer_id", customer.id)
+      .gt("balance_due", 0);
+
+    if (!error && pendingNotes) {
+      const totalDebt = pendingNotes.reduce((acc: number, n: { balance_due: number }) => acc + Number(n.balance_due || 0), 0);
+      setCustomerDebt(totalDebt);
+      setCustomerNotes(pendingNotes.length);
+    } else {
+      setCustomerDebt(0);
+      setCustomerNotes(0);
+    }
   }
 
   function removeCustomer() {
     setSelectedCustomer(null);
     setCustomerSearch("");
+    setCustomerDebt(0);
+    setCustomerNotes(0);
   }
 
   function addProduct(product: Product) {
@@ -391,6 +411,8 @@ export default function NuevaNotaCxcPage() {
     setNoteNumber(makeNoteNumber());
     setShowCustomerCatalog(false);
     setShowProductCatalog(false);
+    setCustomerDebt(0);
+    setCustomerNotes(0);
     setSaving(false);
   }
 
@@ -464,11 +486,37 @@ export default function NuevaNotaCxcPage() {
                     {selectedCustomer.phone ? (
                       <div style={metaTextStyle}>Tel: {selectedCustomer.phone}</div>
                     ) : null}
+                    {customerDebt > 0 ? (
+                      <div style={{ ...metaTextStyle, color: COLORS.danger, fontWeight: 600, marginTop: 6 }}>
+                        Adeuda: ${money(customerDebt)} ({customerNotes} nota{customerNotes !== 1 ? "s" : ""})
+                      </div>
+                    ) : (
+                      <div style={{ ...metaTextStyle, color: COLORS.success, marginTop: 6 }}>
+                        Sin adeudo
+                      </div>
+                    )}
                   </div>
 
-                  <button onClick={removeCustomer} style={dangerSoftButtonStyle}>
-                    Quitar
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <Link
+                      href="/admin/cxc/pagos/nuevo"
+                      style={{
+                        ...secondaryButtonStyle,
+                        fontSize: 13,
+                        padding: "6px 14px",
+                        background: COLORS.success,
+                        color: "#fff",
+                        border: "none",
+                        textDecoration: "none",
+                        textAlign: "center" as const,
+                      }}
+                    >
+                      Registrar pago
+                    </Link>
+                    <button onClick={removeCustomer} style={dangerSoftButtonStyle}>
+                      Quitar
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
