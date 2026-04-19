@@ -18,6 +18,8 @@ type Product = {
   id: string;
   name: string;
   price: number | null;
+  fixed_piece_price?: number | null;
+  sale_type?: string | null;
   is_active?: boolean | null;
   is_excluded_from_discount?: boolean | null;
 };
@@ -121,7 +123,7 @@ export default function NuevaNotaCxcPage() {
 
     const { data: productsData, error: productsError } = await supabase
       .from("products")
-      .select("id, name, price, is_active, is_excluded_from_discount")
+      .select("id, name, price, fixed_piece_price, sale_type, is_active, is_excluded_from_discount")
       .eq("is_active", true)
       .order("name", { ascending: true });
 
@@ -160,14 +162,18 @@ export default function NuevaNotaCxcPage() {
   }
 
   function addProduct(product: Product) {
+    const isPieza = product.sale_type === "pieza" || (product.fixed_piece_price != null && product.fixed_piece_price > 0);
+    const priceToUse = isPieza ? (product.fixed_piece_price || 0) : (product.price || 0);
+    const unitToUse = isPieza ? "pieza" : "kg";
+
     setItems((prev) => [
       ...prev,
       {
         product_id: product.id,
         product: product.name,
         quantity: "1",
-        unit: "kg",
-        price: String(Number(product.price || 0)),
+        unit: unitToUse,
+        price: String(Number(priceToUse)),
       },
     ]);
 
