@@ -32,8 +32,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
 
-  const validSecret = process.env.ADMIN_SECRET || process.env.NEXT_PUBLIC_ADMIN_SECRET;
-  if (!validSecret || secret !== validSecret) {
+  // Aceptar cualquiera de los dos secrets
+  const secrets = [process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean);
+  if (secrets.length === 0 || !secrets.includes(secret || "")) {
     return NextResponse.json({ error: "Secret inválido" }, { status: 401 });
   }
 
