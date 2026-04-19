@@ -320,17 +320,17 @@ export default function EstadoCuentaAdminPage() {
 
                   <div style={summaryCardStyle}>
                     <div style={summaryLabelStyle}>Saldo pendiente</div>
-                    <div style={summaryValueStyle}>${totalDebt.toFixed(2)}</div>
+                    <div style={summaryValueStyle}>${Math.ceil(totalDebt)}</div>
                   </div>
 
                   <div style={summaryCardStyle}>
                     <div style={summaryLabelStyle}>Total facturado</div>
-                    <div style={summaryValueStyle}>${totalInvoiced.toFixed(2)}</div>
+                    <div style={summaryValueStyle}>${Math.ceil(totalInvoiced)}</div>
                   </div>
 
                   <div style={summaryCardStyle}>
                     <div style={summaryLabelStyle}>Total pagado</div>
-                    <div style={summaryValueStyle}>${totalPaid.toFixed(2)}</div>
+                    <div style={summaryValueStyle}>${Math.ceil(totalPaid)}</div>
                   </div>
 
                   <div style={summaryCardStyle}>
@@ -359,7 +359,7 @@ export default function EstadoCuentaAdminPage() {
                       Crédito: <b>{selectedCustomer.credit_enabled ? "Sí" : "No"}</b>
                     </span>
                     <span style={metaPillStyle}>
-                      Límite: <b>${Number(selectedCustomer.credit_limit || 0).toFixed(2)}</b>
+                      Límite: <b>${Math.ceil(Number(selectedCustomer.credit_limit || 0))}</b>
                     </span>
                     <span style={metaPillStyle}>
                       Días: <b>{Number(selectedCustomer.credit_days || 0)}</b>
@@ -426,13 +426,13 @@ export default function EstadoCuentaAdminPage() {
 
                             <div style={metaWrapStyle}>
                               <span style={metaPillStyle}>
-                                Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                                Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                               </span>
                               <span style={metaPillStyle}>
-                                Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                                Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                               </span>
                               <span style={metaPillStyle}>
-                                Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
+                                Descuento: <b>${Math.ceil(Number(note.discount_amount || 0))}</b>
                               </span>
                             </div>
 
@@ -480,7 +480,7 @@ export default function EstadoCuentaAdminPage() {
                                   color: COLORS.success,
                                 }}
                               >
-                                ${Number(payment.amount || 0).toFixed(2)}
+                                ${Math.ceil(Number(payment.amount || 0))}
                               </div>
                             </div>
 
@@ -541,10 +541,10 @@ export default function EstadoCuentaAdminPage() {
 
                           <div style={metaWrapStyle}>
                             <span style={metaPillStyle}>
-                              Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                              Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                             </span>
                             <span style={metaPillStyle}>
-                              Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                              Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                             </span>
                           </div>
                         </div>

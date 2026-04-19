@@ -378,12 +378,12 @@ export default function AdminCxcPage() {
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Saldo pendiente</div>
-            <div style={summaryValueStyle}>${stats.totalDue.toFixed(2)}</div>
+            <div style={summaryValueStyle}>${Math.ceil(stats.totalDue)}</div>
           </div>
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Saldo vencido</div>
-            <div style={summaryValueStyle}>${stats.overdueDue.toFixed(2)}</div>
+            <div style={summaryValueStyle}>${Math.ceil(stats.overdueDue)}</div>
           </div>
         </div>
 
@@ -443,7 +443,7 @@ export default function AdminCxcPage() {
 
                       <div style={customerMetaWrapStyle}>
                         <span style={metaPillStyle}>
-                          Saldo: <b>${customer.total_due.toFixed(2)}</b>
+                          Saldo: <b>${Math.ceil(customer.total_due)}</b>
                         </span>
 
                         <span style={metaPillStyle}>
@@ -459,7 +459,7 @@ export default function AdminCxcPage() {
                         </span>
 
                         <span style={metaPillStyle}>
-                          Límite: <b>${customer.credit_limit.toFixed(2)}</b>
+                          Límite: <b>${Math.ceil(customer.credit_limit)}</b>
                         </span>
                       </div>
 
@@ -473,7 +473,7 @@ export default function AdminCxcPage() {
 
                       {customer.overdue_due > 0 ? (
                         <div style={dangerTextStyle}>
-                          Vencido: ${customer.overdue_due.toFixed(2)}
+                          Vencido: ${Math.ceil(customer.overdue_due)}
                         </div>
                       ) : null}
                     </div>
@@ -533,16 +533,16 @@ export default function AdminCxcPage() {
                               Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
                             </div>
                             <div style={metaPillStyle}>
-                              Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                              Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                             </div>
                             <div style={metaPillStyle}>
-                              Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                              Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                             </div>
                           </div>
 
                           {Number(note.discount_amount || 0) > 0 ? (
                             <div style={metaTextStyle}>
-                              Descuento aplicado: ${Number(note.discount_amount || 0).toFixed(2)}
+                              Descuento aplicado: ${Math.ceil(Number(note.discount_amount || 0))}
                             </div>
                           ) : null}
 
@@ -627,7 +627,7 @@ export default function AdminCxcPage() {
                       </div>
                     </div>
                     <div style={{ fontWeight: 800, color: COLORS.success, fontSize: 18 }}>
-                      ${Number(p.amount).toFixed(2)}
+                      ${Math.ceil(Number(p.amount))}
                     </div>
                   </div>
                 ))}

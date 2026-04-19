@@ -6,6 +6,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
+import { moneyRound } from "@/lib/money";
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {
@@ -115,7 +116,7 @@ const C = {
 
 // ─── Helpers ───────────────────────────────────────────────────
 function money(v?: number | null) {
-  return Number(v || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return String(Math.ceil(Number(v || 0)));
 }
 
 function todayStr() {
@@ -1628,9 +1629,9 @@ export default function CajaPage() {
                     <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, background: "white", border: `1px solid ${C.border}` }}>
                       <div>
                         <div style={{ fontWeight: 700, color: C.text }}>{item.product}</div>
-                        <div style={{ color: C.muted, fontSize: 13 }}>{qty} {unit} × ${Number(item.price || 0).toFixed(2)}</div>
+                        <div style={{ color: C.muted, fontSize: 13 }}>{qty} {unit} × ${Math.ceil(Number(item.price || 0))}</div>
                       </div>
-                      <div style={{ fontWeight: 800, color: C.text }}>${subtotal.toFixed(2)}</div>
+                      <div style={{ fontWeight: 800, color: C.text }}>${Math.ceil(subtotal)}</div>
                     </div>
                   );
                 })}
@@ -1656,14 +1657,14 @@ export default function CajaPage() {
                         const subtotal = qty * Number(item.price || 0);
                         return (
                           <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "rgba(180,35,24,0.04)", fontSize: 13 }}>
-                            <span style={{ color: C.text }}>{item.product} — {qty} kg × ${Number(item.price || 0).toFixed(2)}</span>
-                            <span style={{ fontWeight: 700, color: C.danger, textDecoration: "line-through" }}>${subtotal.toFixed(2)}</span>
+                            <span style={{ color: C.text }}>{item.product} — {qty} kg × ${Math.ceil(Number(item.price || 0))}</span>
+                            <span style={{ fontWeight: 700, color: C.danger, textDecoration: "line-through" }}>${Math.ceil(subtotal)}</span>
                           </div>
                         );
                       })}
                     </div>
                     <div style={{ marginTop: 8, fontWeight: 800, color: C.danger, fontSize: 14, textAlign: "right" }}>
-                      Total original: ${desgloseEditInfo.original_items.reduce((s, i) => s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0), 0).toFixed(2)}
+                      Total original: ${Math.ceil(desgloseEditInfo.original_items.reduce((s, i) => s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0), 0))}
                     </div>
                   </>
                 )}

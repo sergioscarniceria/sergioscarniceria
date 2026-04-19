@@ -46,7 +46,7 @@ const COLORS = {
 };
 
 function money(value?: number | null) {
-  return Number(value || 0).toFixed(2);
+  return String(Math.ceil(Number(value || 0)));
 }
 
 function todayDateString() {

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 
-/** Formato contable: $1,234.56 (sin el $, solo el número) */
-function fmt(n: number, decimals = 2): string {
-  return n.toLocaleString("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+/** Formato contable sin decimales: $1,235 */
+function fmt(n: number): string {
+  return Math.ceil(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 import {
   LineChart,
@@ -88,6 +88,8 @@ export default function AdminDashboardPage() {
   const [prevYearOrders, setPrevYearOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
   const [cxcNotes, setCxcNotes] = useState<{ customer_name: string; total_amount: number; balance_due: number; status: string; due_date: string }[]>([]);
   const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
+  const [roundingTotal, setRoundingTotal] = useState(0);
+  const [roundingCount, setRoundingCount] = useState(0);
 
   const today = new Date();
   const todayStr = toDateInputValue(today);
@@ -232,6 +234,18 @@ export default function AdminDashboardPage() {
       .filter((s) => s.debt > 0)
       .sort((a, b) => b.debt - a.debt);
     setSupplierDebt(debts);
+
+    // Cargar total de redondeo (para donación)
+    const { data: roundingData } = await supabase
+      .from("cash_movements")
+      .select("rounding_amount")
+      .gt("rounding_amount", 0);
+
+    if (roundingData) {
+      const totalRounding = roundingData.reduce((acc: number, r: { rounding_amount: number }) => acc + Number(r.rounding_amount || 0), 0);
+      setRoundingTotal(totalRounding);
+      setRoundingCount(roundingData.length);
+    }
 
     setLoading(false);
   }
@@ -1241,6 +1255,31 @@ export default function AdminDashboardPage() {
             ))
           )}
         </Section>
+        {/* Panel de redondeo para donación */}
+        <Section id="donacion" title="Redondeo solidario" count={roundingCount}>
+          <div style={{ padding: "10px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <div style={{ fontSize: 13, color: COLORS.muted }}>Total acumulado de redondeo</div>
+                <div style={{ fontSize: 32, fontWeight: 800, color: COLORS.success, marginTop: 4 }}>
+                  ${fmt(roundingTotal)}
+                </div>
+                <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>
+                  De {roundingCount} transaccion{roundingCount !== 1 ? "es" : ""}
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 200, background: "rgba(31,122,77,0.08)", borderRadius: 12, padding: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: COLORS.success }}>
+                  Para causas benéficas
+                </div>
+                <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 6 }}>
+                  Cada venta se redondea al peso superior. La diferencia se acumula aquí para donación.
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
         {/* Panel de salud del sistema */}
         <SystemHealthPanel />
       </div>

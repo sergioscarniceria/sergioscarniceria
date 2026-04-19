@@ -261,7 +261,7 @@ export default function CxcVencidosPage() {
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Monto vencido</div>
-            <div style={summaryValueStyle}>${stats.overdueAmount.toFixed(2)}</div>
+            <div style={summaryValueStyle}>${Math.ceil(stats.overdueAmount)}</div>
           </div>
         </div>
 
@@ -315,7 +315,7 @@ export default function CxcVencidosPage() {
 
                     <div style={metaWrapStyle}>
                       <span style={metaPillStyle}>
-                        Monto vencido: <b>${customer.overdue_amount.toFixed(2)}</b>
+                        Monto vencido: <b>${Math.ceil(customer.overdue_amount)}</b>
                       </span>
                       <span style={metaPillStyle}>
                         Notas: <b>{customer.overdue_notes}</b>
@@ -326,7 +326,7 @@ export default function CxcVencidosPage() {
                     </div>
 
                     <div style={metaTextStyle}>
-                      Límite: <b>${customer.credit_limit.toFixed(2)}</b> · Días:{" "}
+                      Límite: <b>${Math.ceil(customer.credit_limit)}</b> · Días:{" "}
                       <b>{customer.credit_days}</b>
                     </div>
                   </div>
@@ -380,13 +380,13 @@ export default function CxcVencidosPage() {
 
                     <div style={metaWrapStyle}>
                       <span style={metaPillStyle}>
-                        Total: <b>${Number(note.total_amount || 0).toFixed(2)}</b>
+                        Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
                       </span>
                       <span style={metaPillStyle}>
-                        Saldo: <b>${Number(note.balance_due || 0).toFixed(2)}</b>
+                        Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
                       </span>
                       <span style={metaPillStyle}>
-                        Descuento: <b>${Number(note.discount_amount || 0).toFixed(2)}</b>
+                        Descuento: <b>${Math.ceil(Number(note.discount_amount || 0))}</b>
                       </span>
                     </div>
 

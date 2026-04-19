@@ -346,7 +346,7 @@ const [changingId, setChangingId] = useState<string | null>(null);
     !Number(i.prepared_kilos || 0)
 )
   ? "Por pesar"
-  : `$${total(o).toFixed(2)}`}
+  : `$${Math.ceil(total(o))}`}
           </div>
         </div>
 
@@ -542,9 +542,8 @@ const [changingId, setChangingId] = useState<string | null>(null);
             <div style={summaryLabelStyle}>Total visible hoy</div>
             <div style={summaryValueStyle}>
               $
-              {todayOrders
-                .reduce((acc, order) => acc + total(order), 0)
-                .toFixed(2)}
+              {Math.ceil(todayOrders
+                .reduce((acc, order) => acc + total(order), 0))}
             </div>
           </div>
         </div>

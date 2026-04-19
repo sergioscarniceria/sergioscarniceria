@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { moneyRound, roundingDiff } from "@/lib/money";
 
 type Customer = {
   id: string;
@@ -70,7 +71,7 @@ function addDaysToDate(dateString: string, days: number) {
 }
 
 function money(value: number) {
-  return Number(value || 0).toFixed(2);
+  return String(Math.ceil(Number(value || 0)));
 }
 
 function makeNoteNumber() {
@@ -333,10 +334,10 @@ export default function NuevaNotaCxcPage() {
         if (projected > creditLimit) {
           alert(
             `⚠️ Límite de crédito excedido\n\n` +
-              `Límite: $${creditLimit.toFixed(2)}\n` +
-              `Debe actualmente: $${currentBalance.toFixed(2)}\n` +
-              `Nuevo total: $${total.toFixed(2)}\n\n` +
-              `Se pasaría a: $${projected.toFixed(2)}`
+              `Límite: $${Math.ceil(creditLimit)}\n` +
+              `Debe actualmente: $${Math.ceil(currentBalance)}\n` +
+              `Nuevo total: $${Math.ceil(total)}\n\n` +
+              `Se pasaría a: $${Math.ceil(projected)}`
           );
           setSaving(false);
           return;
@@ -354,10 +355,11 @@ export default function NuevaNotaCxcPage() {
           note_date: noteDate,
           due_date: dueDate,
           source_type: "manual",
-          subtotal: Number(subtotal.toFixed(2)),
-          discount_amount: Number(finalDiscount.toFixed(2)),
-          total_amount: Number(total.toFixed(2)),
-          balance_due: Number(total.toFixed(2)),
+          subtotal: moneyRound(subtotal),
+          discount_amount: Math.ceil(finalDiscount),
+          total_amount: moneyRound(total),
+          balance_due: moneyRound(total),
+          rounding_amount: roundingDiff(total),
           status: total > 0 ? "abierta" : "pagada",
           notes: notes.trim() || null,
         },
@@ -439,6 +441,13 @@ export default function NuevaNotaCxcPage() {
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <Link href="/admin/cxc/pagos/nuevo" style={{
+              ...secondaryButtonStyle,
+              background: COLORS.success,
+              color: "#fff",
+              border: "none",
+              textDecoration: "none",
+            }}>Registrar pago</Link>
             <Link href="/admin/cxc" style={secondaryButtonStyle}>Volver a CxC</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
           </div>
@@ -497,26 +506,9 @@ export default function NuevaNotaCxcPage() {
                     )}
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <Link
-                      href="/admin/cxc/pagos/nuevo"
-                      style={{
-                        ...secondaryButtonStyle,
-                        fontSize: 13,
-                        padding: "6px 14px",
-                        background: COLORS.success,
-                        color: "#fff",
-                        border: "none",
-                        textDecoration: "none",
-                        textAlign: "center" as const,
-                      }}
-                    >
-                      Registrar pago
-                    </Link>
-                    <button onClick={removeCustomer} style={dangerSoftButtonStyle}>
-                      Quitar
-                    </button>
-                  </div>
+                  <button onClick={removeCustomer} style={dangerSoftButtonStyle}>
+                    Quitar
+                  </button>
                 </div>
               ) : null}
 

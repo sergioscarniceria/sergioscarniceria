@@ -7,6 +7,7 @@ import { logAudit } from "@/lib/audit-log";
 import QrScanner from "@/components/QrScanner";
 import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
+import { moneyRound, roundingDiff } from "@/lib/money";
 
 type TabMode = "ticket" | "manual" | "historial";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -67,7 +68,7 @@ const COLORS = {
 };
 
 function money(value?: number | null) {
-  return Number(value || 0).toFixed(2);
+  return String(Math.ceil(Number(value || 0)));
 }
 function shortId(id: string) {
   return id.slice(0, 6);
@@ -466,8 +467,8 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     // Guardar info de descuento en notes si existe
     if (descuento > 0) {
       const discountNote = discountMode === "percent"
-        ? `Descuento ${discountValue}% = -$${descuento.toFixed(2)}`
-        : `Descuento -$${descuento.toFixed(2)}`;
+        ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}`
+        : `Descuento -$${Math.ceil(descuento)}`;
       const existing = selectedTicket.notes || "";
       orderUpdate.notes = existing ? `${existing} | ${discountNote}` : discountNote;
     }
@@ -490,7 +491,8 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
         {
           type: "venta",
           source: "cobranza",
-          amount: Number(finalTotal.toFixed(2)),
+          amount: moneyRound(finalTotal),
+          rounding_amount: roundingDiff(finalTotal),
           payment_method: method,
           reference_id: selectedTicket.id,
           cashier_name: cashierName || null,
@@ -741,10 +743,10 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
           note_date: noteDate,
           due_date: dueDate,
           source_type: "ticket",
-          subtotal: Number(total.toFixed(2)),
+          subtotal: moneyRound(total),
           discount_amount: 0,
-          total_amount: Number(total.toFixed(2)),
-          balance_due: Number(total.toFixed(2)),
+          total_amount: moneyRound(total),
+          balance_due: moneyRound(total),
           status: "abierta",
           notes: selectedTicket.notes || null,
         },
@@ -991,10 +993,10 @@ async function saveManualCredit() {
         note_date: noteDate,
         due_date: dueDate,
         source_type: "venta_manual",
-        subtotal: Number(manualTotal.toFixed(2)),
+        subtotal: moneyRound(manualTotal),
         discount_amount: 0,
-        total_amount: Number(manualTotal.toFixed(2)),
-        balance_due: Number(manualTotal.toFixed(2)),
+        total_amount: moneyRound(manualTotal),
+        balance_due: moneyRound(manualTotal),
         status: "abierta",
         notes: manualNotes.trim() || null,
       },
@@ -1144,7 +1146,8 @@ if (customerMode === "existente" && selectedCustomerId) {
     {
       type: "venta",
       source: "cobranza",
-      amount: Number(manualTotal.toFixed(2)),
+      amount: moneyRound(manualTotal),
+      rounding_amount: roundingDiff(manualTotal),
       payment_method: method,
       reference_id: orderData.id,
       cashier_name: cashierName || null,
