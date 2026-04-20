@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { getAdminSecret } from "@/lib/admin-secret";
 
 type PinEntry = {
   role: string;
@@ -55,7 +56,7 @@ export default function AdminPinsPage() {
   async function fetchPins() {
     try {
       const res = await fetch("/api/auth/pins", {
-        headers: { "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET || "" },
+        headers: { "x-admin-secret": getAdminSecret() },
       });
       if (res.ok) {
         const data = await res.json();
@@ -81,7 +82,7 @@ export default function AdminPinsPage() {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "x-admin-secret": process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
+          "x-admin-secret": getAdminSecret(),
         },
         body: JSON.stringify({ role, pin: newPin }),
       });

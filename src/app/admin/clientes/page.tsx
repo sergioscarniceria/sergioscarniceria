@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { exportToExcel } from "@/lib/exportExcel";
+import { getAdminSecret } from "@/lib/admin-secret";
 import CustomerCard from "@/components/CustomerCard";
 
 type Customer = {
@@ -128,7 +129,7 @@ export default function AdminClientesPage() {
           phone: portalCustomer.phone || "",
           email: portalEmail.trim() || portalCustomer.email || "",
           password: portalPassword,
-          secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
+          secret: getAdminSecret(),
         }),
       });
 
@@ -170,7 +171,7 @@ export default function AdminClientesPage() {
         body: JSON.stringify({
           customer_id: passwordCustomer.id,
           new_password: newPassword,
-          secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "",
+          secret: getAdminSecret(),
         }),
       });
 
@@ -263,7 +264,7 @@ export default function AdminClientesPage() {
       const res = await fetch("/api/portal/eliminar-cliente", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: id, secret: process.env.NEXT_PUBLIC_ADMIN_SECRET || "" }),
+        body: JSON.stringify({ customer_id: id, secret: getAdminSecret() }),
       });
       const result = await res.json();
 

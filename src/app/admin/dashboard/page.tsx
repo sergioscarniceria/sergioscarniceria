@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
+import { getAdminSecret } from "@/lib/admin-secret";
 
 /** Formato contable sin decimales: $1,235 */
 function fmt(n: number): string {
@@ -1298,7 +1299,7 @@ function SystemHealthPanel() {
     setShow(true);
     setErrorMsg("");
     try {
-      const secret = process.env.NEXT_PUBLIC_ADMIN_SECRET || "";
+      const secret = getAdminSecret();
       const res = await fetch(`/api/health?secret=${encodeURIComponent(secret)}`);
       if (!res.ok) {
         const errText = await res.text();
@@ -1337,7 +1338,7 @@ function SystemHealthPanel() {
           <button onClick={checkHealth} disabled={loading} style={{ padding: "10px 16px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(255,255,255,0.75)", color: COLORS.text, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
             {loading ? "Verificando..." : "Verificar ahora"}
           </button>
-          <a href={`/api/backup?secret=${process.env.NEXT_PUBLIC_ADMIN_SECRET}`} target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+          <a href={`/api/backup?secret=${getAdminSecret()}`} target="_blank" rel="noopener" style={{ padding: "10px 16px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
             Descargar backup
           </a>
         </div>
