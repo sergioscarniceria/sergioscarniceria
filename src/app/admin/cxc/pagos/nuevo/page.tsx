@@ -186,7 +186,7 @@ export default function NuevoPagoCxcPage() {
     0
   );
 
-  if (paymentAmount > totalPendingAmount) {
+  if (paymentAmount > Math.ceil(totalPendingAmount)) {
     alert("El monto es mayor al saldo pendiente del cliente");
     return;
   }
