@@ -108,32 +108,45 @@ export default function AdminDashboardPage() {
   async function loadDashboard() {
     setLoading(true);
 
-    let query = supabase
-      .from("orders")
-      .select(`
-        *,
-        order_items (*)
-      `)
-      .order("created_at", { ascending: false });
+    // Fetch ALL orders in range (Supabase default limit = 1000, paginate to get all)
+    let allOrders: any[] = [];
+    let page = 0;
+    const PAGE_SIZE = 1000;
+    let hasMore = true;
 
-    if (dateFrom) {
-      query = query.gte("created_at", `${dateFrom}T00:00:00`);
+    while (hasMore) {
+      let query = supabase
+        .from("orders")
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .order("created_at", { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      if (dateFrom) {
+        query = query.gte("created_at", `${dateFrom}T00:00:00`);
+      }
+
+      if (dateTo) {
+        query = query.lte("created_at", `${dateTo}T23:59:59`);
+      }
+
+      const { data: pageData, error: pageError } = await query;
+
+      if (pageError) {
+        console.log(pageError);
+        alert("No se pudo cargar el dashboard");
+        setLoading(false);
+        return;
+      }
+
+      allOrders = allOrders.concat(pageData || []);
+      hasMore = (pageData || []).length === PAGE_SIZE;
+      page++;
     }
 
-    if (dateTo) {
-      query = query.lte("created_at", `${dateTo}T23:59:59`);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.log(error);
-      alert("No se pudo cargar el dashboard");
-      setLoading(false);
-      return;
-    }
-
-    setOrders((data as Order[]) || []);
+    setOrders((allOrders as Order[]) || []);
 
     // Load inventory data
     const { data: bodData } = await supabase
