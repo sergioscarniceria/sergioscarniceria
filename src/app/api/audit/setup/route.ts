@@ -23,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity
 export async function POST(req: Request) {
   try {
     const { secret } = await req.json();
-    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret)) {
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

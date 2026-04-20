@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     // Simple auth check - require a secret or just allow it (one-time use)
     const body = await req.json().catch(() => ({}));
     const secret = body?.secret || "";
-    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret)) {
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
