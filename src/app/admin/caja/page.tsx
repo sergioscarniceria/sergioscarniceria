@@ -608,7 +608,7 @@ export default function CajaPage() {
   const weekTotal = useMemo(() => weekReport.reduce((a, d) => a + d.total, 0), [weekReport]);
 
   const difference = useMemo(() => {
-    return Number((Number(countedCash || 0) - stats.efectivoEsperado).toFixed(2));
+    return Math.ceil(Number(countedCash || 0)) - Math.ceil(stats.efectivoEsperado);
   }, [countedCash, stats.efectivoEsperado]);
 
   // ─── Opening helpers ───────────────────────────────────────
@@ -646,7 +646,7 @@ export default function CajaPage() {
   }, [reconteoDenoms]);
 
   const reconteoDifference = useMemo(() => {
-    return Number((reconteoDenomTotal - stats.efectivoEsperado).toFixed(2));
+    return Math.ceil(reconteoDenomTotal) - Math.ceil(stats.efectivoEsperado);
   }, [reconteoDenomTotal, stats.efectivoEsperado]);
 
   async function saveReconteo() {
@@ -752,16 +752,16 @@ export default function CajaPage() {
 
     const payload: any = {
       closure_date: today,
-      expected_cash: Number(stats.efectivoEsperado.toFixed(2)),
-      counted_cash: Number(counted.toFixed(2)),
-      difference: Number(difference.toFixed(2)),
+      expected_cash: Math.ceil(stats.efectivoEsperado),
+      counted_cash: Math.ceil(counted),
+      difference: difference,
       notes: closureNotes.trim() || null,
-      total_sales: Number(stats.totalVentas.toFixed(2)),
-      total_cxc: Number(stats.totalCxc.toFixed(2)),
-      total_card: Number(stats.totalTarjeta.toFixed(2)),
-      total_transfer: Number(stats.totalTransferencia.toFixed(2)),
-      total_general: Number(stats.totalGeneral.toFixed(2)),
-      total_expenses: Number(stats.totalGastos.toFixed(2)),
+      total_sales: Math.ceil(stats.totalVentas),
+      total_cxc: Math.ceil(stats.totalCxc),
+      total_card: Math.ceil(stats.totalTarjeta),
+      total_transfer: Math.ceil(stats.totalTransferencia),
+      total_general: Math.ceil(stats.totalGeneral),
+      total_expenses: Math.ceil(stats.totalGastos),
       initial_amount: Number(stats.fondoInicial.toFixed(2)),
       closed_by: closedBy,
     };
