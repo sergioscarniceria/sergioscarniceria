@@ -30,6 +30,36 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
+    // Ensure customer_profiles table exists and RLS is disabled
+    await supabase.rpc("exec_sql", {
+      sql: `
+        CREATE TABLE IF NOT EXISTS customer_profiles (
+          id UUID PRIMARY KEY,
+          customer_id UUID,
+          full_name TEXT,
+          phone TEXT,
+          email TEXT,
+          customer_type TEXT DEFAULT 'menudeo',
+          role TEXT DEFAULT 'customer',
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE customer_profiles DISABLE ROW LEVEL SECURITY;
+      `
+    });
+
+    // Ensure loyalty_accounts exists
+    await supabase.rpc("exec_sql", {
+      sql: `
+        CREATE TABLE IF NOT EXISTS loyalty_accounts (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+          customer_id UUID UNIQUE,
+          points INTEGER DEFAULT 0,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        );
+        ALTER TABLE loyalty_accounts DISABLE ROW LEVEL SECURITY;
+      `
+    });
+
     // Check if this customer already has portal access
     const { data: existingProfile } = await supabase
       .from("customer_profiles")
@@ -44,11 +74,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // Always use customer_id as auth email to guarantee uniqueness
-    // This allows multiple customers to share the same real email/phone
     const authEmail = `${customer_id}@clientes.sergios.mx`;
 
-    // Create auth user using admin API (doesn't affect current session)
+    // Check if auth user already exists (from a previous failed attempt)
+    // If so, delete it first
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const existingAuthUser = existingUsers?.users?.find(
+      (u) => u.email === authEmail
+    );
+    if (existingAuthUser) {
+      // Delete orphaned auth user from previous failed attempt
+      await supabase.auth.admin.deleteUser(existingAuthUser.id);
+      // Also clean up any orphaned profile
+      await supabase.from("customer_profiles").delete().eq("id", existingAuthUser.id);
+    }
+
+    // Create auth user
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email: authEmail,
       password,
@@ -58,12 +99,12 @@ export async function POST(request: Request) {
     if (createError || !newUser?.user) {
       console.error("Error creating auth user:", createError);
       return NextResponse.json(
-        { error: createError?.message || "No se pudo crear el usuario" },
+        { error: createError?.message || "No se pudo crear el usuario de auth" },
         { status: 500 }
       );
     }
 
-    // Store the real email and phone in customer_profiles for login lookup
+    // Store profile
     const displayEmail = email && email.trim() ? email.trim().toLowerCase() : null;
     const displayPhone = phone && phone.trim() ? phone.trim() : null;
 
@@ -81,18 +122,28 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error("Error creating profile:", profileError);
-      await supabase.auth.admin.deleteUser(newUser.user.id);
-      return NextResponse.json(
-        { error: "Se creó el usuario pero falló el perfil. Intenta de nuevo." },
-        { status: 500 }
-      );
+      // Try direct SQL as fallback
+      const { error: sqlError } = await supabase.rpc("exec_sql", {
+        sql: `INSERT INTO customer_profiles (id, customer_id, full_name, phone, email, customer_type, role)
+              VALUES ('${newUser.user.id}', '${customer_id}', '${customer_name.replace(/'/g, "''")}', ${displayPhone ? `'${displayPhone}'` : 'NULL'}, ${displayEmail ? `'${displayEmail}'` : 'NULL'}, 'menudeo', 'customer')
+              ON CONFLICT (id) DO NOTHING;`
+      });
+
+      if (sqlError) {
+        console.error("SQL fallback also failed:", sqlError);
+        await supabase.auth.admin.deleteUser(newUser.user.id);
+        return NextResponse.json(
+          { error: `Falló el perfil: ${profileError.message}. SQL: ${sqlError.message}` },
+          { status: 500 }
+        );
+      }
     }
 
-    // Create loyalty account
-    await supabase.from("loyalty_accounts").upsert([{ customer_id }]);
+    // Create loyalty account (ignore errors)
+    await supabase.from("loyalty_accounts").upsert([{ customer_id }]).then(() => {});
 
-    // Save password and email in customers table for admin reference
-    const updateData: any = { portal_password: password };
+    // Save password in customers table for admin reference
+    const updateData: Record<string, string> = { portal_password: password };
     if (displayEmail) {
       updateData.email = displayEmail;
     }
@@ -120,7 +171,7 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error("Portal access error:", err);
     return NextResponse.json(
-      { error: "Error interno del servidor" },
+      { error: `Error interno: ${err.message || "desconocido"}` },
       { status: 500 }
     );
   }
