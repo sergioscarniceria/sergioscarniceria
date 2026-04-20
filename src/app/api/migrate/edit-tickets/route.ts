@@ -15,7 +15,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_edited ON orders(edited_at) WHERE edited_a
 export async function POST(req: Request) {
   try {
     const { secret } = await req.json();
-    if (secret !== process.env.ADMIN_SECRET) {
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

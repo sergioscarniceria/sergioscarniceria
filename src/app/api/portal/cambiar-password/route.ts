@@ -6,7 +6,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { customer_id, new_password, secret } = body;
 
-    if (secret !== process.env.ADMIN_SECRET) {
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 

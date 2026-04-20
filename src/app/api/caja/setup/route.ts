@@ -50,7 +50,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
 
-  if (secret !== process.env.ADMIN_SECRET) {
+  if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret)) {
     return NextResponse.json(
       {
         error: "Secret inválido",
