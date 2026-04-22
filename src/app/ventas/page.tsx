@@ -373,6 +373,9 @@ const isFixedPieceProduct =
   selectedProductData?.fixed_piece_price !== null &&
   selectedProductData?.fixed_piece_price !== undefined;
 
+  // Estado para leyenda de báscula vacía
+  const [scaleZeroWarning, setScaleZeroWarning] = useState(false);
+
   function addItem() {
   const product = products.find((p) => p.name === selectedProduct);
 
@@ -385,6 +388,10 @@ const isFixedPieceProduct =
     alert("No encontramos el producto");
     return;
   }
+
+  // Limpiar warning de báscula
+  setScaleZeroWarning(false);
+
 if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
   alert("Este producto se vende por pieza, no por kilos");
   return;
@@ -414,11 +421,25 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
     return;
   }
 
-  const cleanKilos = Number(kilos);
+  // --- Lógica de báscula como principal ---
+  // Si la báscula está conectada, usarla automáticamente
+  let finalKilos: number;
 
-  if (!cleanKilos || cleanKilos <= 0) {
-    alert("Captura kilos válidos");
-    return;
+  if (scaleConnected) {
+    // Báscula conectada: usar peso de la báscula
+    if (scaleWeight <= 0) {
+      // Báscula en 0: mostrar leyenda y no agregar
+      setScaleZeroWarning(true);
+      return;
+    }
+    finalKilos = scaleWeight;
+  } else {
+    // Sin báscula: usar input manual como antes
+    finalKilos = Number(kilos);
+    if (!finalKilos || finalKilos <= 0) {
+      alert("Captura kilos válidos");
+      return;
+    }
   }
 
   setItems((prev) => [
@@ -426,7 +447,7 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
     {
       id: makeId(),
       product: product.name,
-      kilos: Number(cleanKilos.toFixed(3)),
+      kilos: Number(finalKilos.toFixed(3)),
       price: Number(Number(product.price || 0).toFixed(2)),
       sale_type: "kg",
       quantity: null,
@@ -435,6 +456,7 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
   ]);
 
   setKilos("");
+  setScaleZeroWarning(false);
 }
 
   function removeItem(id: string) {
@@ -873,43 +895,113 @@ const paidTickets = useMemo(() => {
       <label style={fieldLabelStyle}>
   {isFixedPieceProduct ? "Piezas" : "Kilos"}
 </label>
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+
+      {/* Báscula conectada y producto por kg: mostrar peso como principal */}
+      {scaleConnected && !isFixedPieceProduct ? (
+        <div>
+          <div style={{
+            padding: "16px 18px",
+            borderRadius: 16,
+            border: scaleWeight > 0 ? `2px solid ${COLORS.success}` : `2px dashed ${COLORS.warning}`,
+            background: scaleWeight > 0 ? "rgba(31,122,77,0.08)" : "rgba(166,106,16,0.06)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            marginBottom: 8,
+          }}>
+            <span style={{ fontSize: 24 }}>⚖</span>
+            <span style={{
+              fontSize: 32,
+              fontWeight: 900,
+              color: scaleWeight > 0 ? COLORS.success : COLORS.warning,
+            }}>
+              {scaleWeight.toFixed(3)} kg
+            </span>
+            {scaleWeight > 0 && (
+              <span style={{ fontSize: 16, color: COLORS.success, fontWeight: 700 }}>
+                {scaleStable ? "✓" : "~"}
+              </span>
+            )}
+          </div>
+
+          {/* Warning: báscula en 0 */}
+          {scaleZeroWarning && (
+            <div style={{
+              padding: "10px 14px",
+              borderRadius: 12,
+              background: "rgba(180,35,24,0.10)",
+              color: COLORS.danger,
+              fontWeight: 700,
+              fontSize: 14,
+              textAlign: "center",
+              marginBottom: 8,
+            }}>
+              Sube el artículo a la báscula
+            </div>
+          )}
+
+          {/* Input manual como respaldo colapsado */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              placeholder="Manual (respaldo)"
+              value={kilos}
+              onChange={(e) => setKilos(e.target.value)}
+              style={{ ...inputStyle, flex: 1, fontSize: 14, padding: 10, opacity: 0.7 }}
+              inputMode="decimal"
+            />
+            {kilos && Number(kilos) > 0 && (
+              <button
+                onClick={() => {
+                  // Forzar usar el manual: desconecta temporalmente la referencia
+                  const manualKilos = Number(kilos);
+                  if (manualKilos > 0) {
+                    const product = products.find((p) => p.name === selectedProduct);
+                    if (product) {
+                      setItems((prev) => [
+                        ...prev,
+                        {
+                          id: makeId(),
+                          product: product.name,
+                          kilos: Number(manualKilos.toFixed(3)),
+                          price: Number(Number(product.price || 0).toFixed(2)),
+                          sale_type: "kg" as const,
+                          quantity: null,
+                          is_fixed_price_piece: false,
+                        },
+                      ]);
+                      setKilos("");
+                      setScaleZeroWarning(false);
+                    }
+                  }
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: `1px solid ${COLORS.border}`,
+                  background: "white",
+                  color: COLORS.text,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Usar manual
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Sin báscula o producto por pieza: input normal */
         <input
           placeholder={isFixedPieceProduct ? "Ejemplo: 2" : "Ejemplo: 1.250"}
           value={kilos}
           onChange={(e) => setKilos(e.target.value)}
-          style={{ ...inputStyle, flex: 1 }}
+          style={inputStyle}
           inputMode="decimal"
         />
-        {scaleConnected && !isFixedPieceProduct && (
-          <button
-            onClick={() => {
-              if (scaleWeight > 0) {
-                setKilos(scaleWeight.toFixed(3));
-              }
-            }}
-            style={{
-              padding: "16px 14px",
-              borderRadius: 16,
-              border: "none",
-              background: scaleStable && scaleWeight > 0
-                ? "rgba(31,122,77,0.15)"
-                : "rgba(166,106,16,0.12)",
-              color: scaleStable && scaleWeight > 0 ? COLORS.success : COLORS.warning,
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: scaleWeight > 0 ? "pointer" : "default",
-              whiteSpace: "nowrap",
-              minHeight: 56,
-              opacity: scaleWeight > 0 ? 1 : 0.6,
-            }}
-            disabled={scaleWeight <= 0}
-            title="Tomar peso de la báscula"
-          >
-            ⚖ {scaleWeight.toFixed(3)} kg{scaleStable ? " ✓" : " ~"}
-          </button>
-        )}
-      </div>
+      )}
     </div>
 
     <button onClick={addItem} style={addButtonStyle}>
