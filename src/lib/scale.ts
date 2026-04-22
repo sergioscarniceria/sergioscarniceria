@@ -33,6 +33,7 @@ class TorreyScale {
   private _lastWeight: number = 0;
   private _lastStable: boolean = false;
   private _rawBuffer: string = "";
+  private _writing: boolean = false;
 
   status: ScaleStatus = "disconnected";
   error: string = "";
@@ -83,19 +84,23 @@ class TorreyScale {
     try {
       this.status = "connecting";
 
-      // Filtro por VID/PID confirmado de la Torrey PCR (STM32 Virtual COM)
-      const TORREY_FILTERS = [{ usbVendorId: 0x0483, usbProductId: 0x5740 }];
-
       // Intentar reconectar a puerto previamente autorizado
       const ports = await navigator.serial!.getPorts();
-      let port = ports.find((p: any) => {
-        const info = p.getInfo?.() || {};
-        return info.usbVendorId === 0x0483 && info.usbProductId === 0x5740;
-      }) || null;
+      let port = ports.length > 0 ? ports[0] : null;
 
       if (!port) {
-        // Solicitar puerto al usuario (filtrado a solo la Torrey)
-        port = await navigator.serial!.requestPort({ filters: TORREY_FILTERS });
+        // Mostrar TODOS los dispositivos serial (no filtrar por VID/PID
+        // porque puede variar según el driver de Windows)
+        port = await navigator.serial!.requestPort();
+      }
+
+      // Si el puerto ya está abierto, cerrarlo primero
+      try {
+        if (port.readable || port.writable) {
+          await port.close();
+        }
+      } catch {
+        // ignore - puede que no esté abierto
       }
 
       // Configuración Torrey PCR-40: 115200 baud, 8N1 (confirmado con hardware real)
@@ -168,13 +173,21 @@ class TorreyScale {
   }
 
   // Enviar comando a la báscula (ej: "P" para solicitar peso)
+  // Lock para evitar race condition cuando el interval y una llamada manual coinciden
   async sendCommand(cmd: string): Promise<void> {
-    if (!this.port || !this.port.writable) return;
+    if (!this.port || !this.port.writable || this._writing) return;
 
-    const writer = this.port.writable.getWriter();
-    const encoder = new TextEncoder();
-    await writer.write(encoder.encode(cmd));
-    writer.releaseLock();
+    this._writing = true;
+    try {
+      const writer = this.port.writable.getWriter();
+      const encoder = new TextEncoder();
+      await writer.write(encoder.encode(cmd));
+      writer.releaseLock();
+    } catch (err: any) {
+      console.warn("Error enviando comando a báscula:", err.message);
+    } finally {
+      this._writing = false;
+    }
   }
 
   // Solicitar lectura de peso
