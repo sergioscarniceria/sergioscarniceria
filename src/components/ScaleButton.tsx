@@ -76,8 +76,8 @@ export default function ScaleButton() {
       onClick={toggleScale}
       style={{
         position: "fixed",
-        bottom: 70,
-        right: 20,
+        bottom: 16,
+        right: 16,
         zIndex: 900,
         display: "flex",
         alignItems: "center",

@@ -611,7 +611,6 @@ const paidTickets = useMemo(() => {
 
   return (
     <div style={pageStyle}>
-      <PrinterButton />
       <ScaleButton />
       <div style={shellStyle}>
         <div style={headerStyle}>
