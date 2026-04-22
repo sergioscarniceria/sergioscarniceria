@@ -584,7 +584,29 @@ export function browserPrintTicket(ticket: TicketData): void {
   if (win) {
     win.document.write(html);
     win.document.close();
-    setTimeout(() => win.print(), 400);
+    // Esperar a que carguen las imágenes (logo + QR) antes de imprimir
+    const images = win.document.querySelectorAll("img");
+    if (images.length > 0) {
+      let loaded = 0;
+      const tryPrint = () => {
+        loaded++;
+        if (loaded >= images.length) {
+          setTimeout(() => win.print(), 200);
+        }
+      };
+      images.forEach((img: HTMLImageElement) => {
+        if (img.complete) {
+          tryPrint();
+        } else {
+          img.onload = tryPrint;
+          img.onerror = tryPrint;
+        }
+      });
+      // Fallback: imprimir después de 3s si las imágenes no cargan
+      setTimeout(() => win.print(), 3000);
+    } else {
+      setTimeout(() => win.print(), 400);
+    }
   }
 }
 
@@ -884,7 +906,27 @@ function browserPrintCreditTicket(ticket: TicketData): void {
   if (win) {
     win.document.write(html);
     win.document.close();
-    setTimeout(() => win.print(), 400);
+    const images = win.document.querySelectorAll("img");
+    if (images.length > 0) {
+      let loaded = 0;
+      const tryPrint = () => {
+        loaded++;
+        if (loaded >= images.length) {
+          setTimeout(() => win.print(), 200);
+        }
+      };
+      images.forEach((img: HTMLImageElement) => {
+        if (img.complete) {
+          tryPrint();
+        } else {
+          img.onload = tryPrint;
+          img.onerror = tryPrint;
+        }
+      });
+      setTimeout(() => win.print(), 3000);
+    } else {
+      setTimeout(() => win.print(), 400);
+    }
   }
 }
 

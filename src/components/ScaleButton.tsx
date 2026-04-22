@@ -76,8 +76,8 @@ export default function ScaleButton() {
       onClick={toggleScale}
       style={{
         position: "fixed",
-        bottom: 20,
-        right: status === "disconnected" ? 20 : 220,
+        bottom: 70,
+        right: 20,
         zIndex: 900,
         display: "flex",
         alignItems: "center",
