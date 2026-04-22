@@ -1,16 +1,15 @@
 /**
  * Servicio de lectura de báscula Torrey PCR-40
  * Usa Web Serial API para comunicación directa desde Chrome en Windows
- * Conexión: RS232 vía adaptador USB-Serial (PL2303, CH340, FT232, etc.)
  *
- * Protocolo Torrey PCR-40:
- * - Baudrate: 9600, 8N1
- * - Envía peso en ASCII al recibir comando "P" o en modo continuo
- * - Formato respuesta: cadena ASCII con peso en kg, ej: "+  0.450 kg\r\n"
- *
- * NOTA: El formato exacto puede variar. Este servicio intenta parsear
- * múltiples formatos comunes de Torrey. Cuando llegue la báscula real,
- * se puede ajustar el parser conectándola y leyendo los datos raw.
+ * Hardware confirmado (2026-04-22):
+ * - Chip: STMicroelectronics STM32 Virtual COM Port
+ * - VID/PID USB: 0x0483 / 0x5740
+ * - Baudrate: 115200, 8N1, sin flow control
+ * - Comando para pedir peso: "P" (0x50)
+ * - Terminador de respuesta: CR (0x0D)
+ * - Formato respuesta: "  0.278 kg\r" (2 espacios + número 3 decimales + espacio + kg + CR)
+ * - Posibles prefijos: "SOBRE PESO", "NEG", "NETO"
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -83,18 +82,24 @@ class TorreyScale {
     try {
       this.status = "connecting";
 
+      // Filtro por VID/PID confirmado de la Torrey PCR (STM32 Virtual COM)
+      const TORREY_FILTERS = [{ usbVendorId: 0x0483, usbProductId: 0x5740 }];
+
       // Intentar reconectar a puerto previamente autorizado
       const ports = await navigator.serial!.getPorts();
-      let port = ports.length > 0 ? ports[0] : null;
+      let port = ports.find((p: any) => {
+        const info = p.getInfo?.() || {};
+        return info.usbVendorId === 0x0483 && info.usbProductId === 0x5740;
+      }) || null;
 
       if (!port) {
-        // Solicitar puerto al usuario
-        port = await navigator.serial!.requestPort();
+        // Solicitar puerto al usuario (filtrado a solo la Torrey)
+        port = await navigator.serial!.requestPort({ filters: TORREY_FILTERS });
       }
 
-      // Configuración Torrey PCR-40: 9600 baud, 8N1
+      // Configuración Torrey PCR-40: 115200 baud, 8N1 (confirmado con hardware real)
       await port.open({
-        baudRate: 9600,
+        baudRate: 115200,
         dataBits: 8,
         stopBits: 1,
         parity: "none",
@@ -213,58 +218,38 @@ class TorreyScale {
   }
 
   /**
-   * Parser de datos de la báscula Torrey.
-   * Intenta múltiples formatos porque el protocolo exacto puede variar:
-   *
-   * Formato 1 (Torrey estándar): "ST,GS, 0.450kg"
-   * Formato 2 (con signo):       "+  0.450 kg"
-   * Formato 3 (solo número):     "0.450"
-   * Formato 4 (con estado):      "ST,GS,+  0.450kg"
-   * Formato 5 (con ceros):       "00.450"
-   *
-   * ST = Stable, US = Unstable, OL = Overload
-   * GS = Gross, NT = Net, TF = Tare
+   * Parser confirmado con hardware real (2026-04-22).
+   * Formato: "  0.278 kg\r"
+   * Posibles: "SOBRE PESO", "NEG  0.120 kg", "NETO  0.300 kg"
    */
   private parseLine(line: string): void {
-    let weight = 0;
-    let stable = true;
-    let unit = "kg";
+    const unit = "kg";
 
-    // Detectar estabilidad
-    if (line.includes("US") || line.includes("MO")) {
-      stable = false;
-    }
-    if (line.includes("ST")) {
-      stable = true;
-    }
-
-    // Detectar sobrecarga
-    if (line.includes("OL") || line.includes("OVER")) {
+    // Sobrecarga
+    if (line.includes("SOBRE PESO")) {
       this.notifyListeners(-1, unit, false);
       return;
     }
 
-    // Extraer número: buscar patrón numérico con punto decimal
-    const numMatch = line.match(/[+-]?\s*(\d+\.?\d*)/);
-    if (numMatch) {
-      weight = parseFloat(numMatch[1]);
+    // Peso negativo (tara y quitas algo)
+    const negativo = line.includes("NEG");
 
-      // Verificar signo negativo
-      if (line.includes("-")) {
-        weight = -weight;
-      }
+    // NETO = modo tara activo (peso estable)
+    const neto = line.includes("NETO");
+
+    // Extraer número: buscar patrón "X.XXX kg"
+    const match = line.match(/([\d.]+)\s*kg/i);
+    if (!match) {
+      // Línea no reconocida, ignorar
+      return;
     }
 
-    // Detectar unidad
-    if (line.toLowerCase().includes("lb")) {
-      unit = "lb";
-    } else if (line.toLowerCase().includes("oz")) {
-      unit = "oz";
-    } else {
-      unit = "kg";
-    }
+    let weight = parseFloat(match[1]);
+    if (negativo) weight = -weight;
 
-    // Solo notificar si el peso cambió o es relevante
+    const stable = true; // La Torrey PCR responde solo cuando tiene lectura estable
+
+    // Solo notificar si el peso cambió
     if (weight !== this._lastWeight || stable !== this._lastStable) {
       this.notifyListeners(weight, unit, stable);
     }

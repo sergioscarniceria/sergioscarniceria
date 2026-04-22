@@ -540,16 +540,19 @@ export function browserPrintTicket(ticket: TicketData): void {
 <style>
   @page{size:80mm auto;margin:0}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',monospace;font-size:12px;width:80mm;padding:4mm}
-  h1{font-size:18px;text-align:center;margin-bottom:2px}
-  h2{font-size:13px;text-align:center;margin-bottom:8px;font-weight:400}
-  .sep{border-top:1px dashed #000;margin:6px 0}
+  body{font-family:'Courier New',Consolas,monospace;font-size:13px;font-weight:700;width:80mm;padding:4mm;color:#000;-webkit-print-color-adjust:exact}
+  h1{font-size:22px;text-align:center;margin-bottom:2px;font-weight:900;letter-spacing:1px}
+  h2{font-size:14px;text-align:center;margin-bottom:8px;font-weight:700}
+  .logo{text-align:center;margin-bottom:6px}
+  .logo img{width:50mm;height:auto}
+  .sep{border-top:2px dashed #000;margin:6px 0}
   table{width:100%;border-collapse:collapse}
-  td{padding:2px 0;vertical-align:top}
-  .total{font-size:16px;font-weight:700}
-  .footer{text-align:center;font-size:10px;margin-top:8px}
-  small{color:#555}
+  td{padding:3px 0;vertical-align:top;font-weight:700}
+  .total{font-size:20px;font-weight:900}
+  .footer{text-align:center;font-size:11px;margin-top:8px;font-weight:600}
+  small{color:#333;font-weight:600}
 </style></head><body>
+  <div class="logo"><img src="/logo.png" alt="Sergio's Carniceria" onerror="this.style.display='none'"/></div>
   <h1>SERGIO'S</h1>
   <h2>CARNICERIA</h2>
   <div class="sep"></div>
@@ -809,6 +812,7 @@ function browserPrintCreditTicket(ticket: TicketData): void {
   function copyBlock(label: string) {
     return `
       <div class="copy">
+        <div class="logo"><img src="/logo.png" alt="Sergio's" onerror="this.style.display='none'"/></div>
         <h1>SERGIO'S CARNICERIA</h1>
         <div class="credit-label">CREDITO (${label})</div>
         <div class="sep"></div>
@@ -851,24 +855,26 @@ function browserPrintCreditTicket(ticket: TicketData): void {
 <style>
   @page{size:80mm auto;margin:0}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',monospace;font-size:11px;width:80mm;padding:3mm}
+  body{font-family:'Courier New',Consolas,monospace;font-size:12px;font-weight:700;width:80mm;padding:3mm;color:#000;-webkit-print-color-adjust:exact}
   .copy{page-break-after:always;padding-bottom:4mm}
   .copy:last-child{page-break-after:auto}
-  h1{font-size:16px;text-align:center;margin-bottom:4px}
-  .credit-label{text-align:center;font-weight:700;font-size:13px;margin:4px 0;padding:4px;background:#f0f0f0;border-radius:4px}
-  .sep{border-top:1px dashed #000;margin:5px 0}
-  .sep-double{border-top:2px solid #000;margin:6px 0}
+  h1{font-size:20px;text-align:center;margin-bottom:4px;font-weight:900}
+  .logo{text-align:center;margin-bottom:4px}
+  .logo img{width:45mm;height:auto}
+  .credit-label{text-align:center;font-weight:900;font-size:14px;margin:4px 0;padding:4px;background:#f0f0f0;border-radius:4px}
+  .sep{border-top:2px dashed #000;margin:5px 0}
+  .sep-double{border-top:3px solid #000;margin:6px 0}
   table{width:100%;border-collapse:collapse}
-  td{padding:2px 0;vertical-align:top}
-  .total{font-size:15px;font-weight:700}
-  .pagare-title{text-align:center;font-size:16px;font-weight:900;letter-spacing:3px}
-  .acreedor{font-weight:700;font-size:13px;margin:4px 0}
-  .monto{font-size:16px;font-weight:900;margin:4px 0}
+  td{padding:3px 0;vertical-align:top;font-weight:700}
+  .total{font-size:18px;font-weight:900}
+  .pagare-title{text-align:center;font-size:18px;font-weight:900;letter-spacing:3px}
+  .acreedor{font-weight:900;font-size:14px;margin:4px 0}
+  .monto{font-size:18px;font-weight:900;margin:4px 0}
   .firma{text-align:center;margin:16px 0 8px}
-  .firma-linea{width:70%;margin:0 auto 4px;border-bottom:1px solid #000;height:30px}
-  .footer{text-align:center;font-size:9px;margin-top:6px}
-  p{margin:3px 0}
-  small{color:#555}
+  .firma-linea{width:70%;margin:0 auto 4px;border-bottom:2px solid #000;height:30px}
+  .footer{text-align:center;font-size:10px;margin-top:6px;font-weight:600}
+  p{margin:3px 0;font-weight:700}
+  small{color:#333;font-weight:600}
 </style></head><body>
   ${copyBlock("NEGOCIO")}
   ${copyBlock("CLIENTE")}

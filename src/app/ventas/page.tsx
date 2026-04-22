@@ -155,6 +155,7 @@ const [printTicketData, setPrintTicketData] = useState<{
   folio: string;
   orderId: string;
   customerName: string;
+  attendant: string;
   items: Item[];
   total: number;
 } | null>(null);
@@ -527,13 +528,36 @@ const { data: orderData, error: orderError } = await supabase
       return acc + Number(item.kilos || 0) * Number(item.price || 0);
     }, 0);
 
+   const savedItems = [...items];
+
    setPrintTicketData({
      folio,
      orderId: orderData.id,
      customerName: customerName,
-     items: [...items],
+     attendant: attendant || "",
+     items: savedItems,
      total: ticketTotal,
    });
+
+   // Auto-imprimir inmediatamente (sin doble clic)
+   const ticketForPrint: TicketData = {
+     folio,
+     customerName: customerName,
+     attendant: attendant || null,
+     items: savedItems.map((item) => ({
+       product: item.product,
+       kilos: item.kilos,
+       price: item.price,
+       quantity: item.quantity,
+       sale_type: item.sale_type,
+       is_fixed_price_piece: item.is_fixed_price_piece,
+     })),
+     subtotal: ticketTotal,
+     total: ticketTotal,
+     qrData: orderData.id,
+     type: "venta",
+   };
+   smartPrintTicket(ticketForPrint);
 
    setLastSavedFolio(folio);
 setItems([]);
@@ -1080,7 +1104,7 @@ const paidTickets = useMemo(() => {
         </div>
       </div>
 
-      {/* Modal imprimir ticket con QR */}
+      {/* Modal ticket guardado + impreso */}
       {printTicketData && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
@@ -1090,8 +1114,8 @@ const paidTickets = useMemo(() => {
             background: "white", borderRadius: 20, padding: 24, maxWidth: 380, width: "90%",
             textAlign: "center",
           }}>
-            <div style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-              Ticket guardado
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#1f7a4d", marginBottom: 8 }}>
+              Ticket guardado e impreso
             </div>
             <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.primary, marginBottom: 4 }}>
               {printTicketData.folio}
@@ -1106,12 +1130,21 @@ const paidTickets = useMemo(() => {
             />
             <div style={{ display: "flex", gap: 8 }}>
               <button
+                onClick={() => setPrintTicketData(null)}
+                style={{
+                  flex: 2, padding: "14px 16px", borderRadius: 12, border: "none",
+                  background: COLORS.primary, color: "white", fontWeight: 700, fontSize: 15, cursor: "pointer",
+                }}
+              >
+                Listo
+              </button>
+              <button
                 onClick={() => {
                   const d = printTicketData;
                   const ticketForPrint: TicketData = {
                     folio: d.folio,
                     customerName: d.customerName,
-                    attendant: (d as any).attendant || attendant || null,
+                    attendant: d.attendant || attendant || null,
                     items: d.items.map((item: any) => ({
                       product: item.product,
                       kilos: item.kilos,
@@ -1128,21 +1161,12 @@ const paidTickets = useMemo(() => {
                   smartPrintTicket(ticketForPrint);
                 }}
                 style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",
-                  background: COLORS.primary, color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer",
-                }}
-              >
-                Imprimir ticket
-              </button>
-              <button
-                onClick={() => setPrintTicketData(null)}
-                style={{
-                  flex: 1, padding: "12px 16px", borderRadius: 12,
+                  flex: 1, padding: "14px 16px", borderRadius: 12,
                   border: `1px solid ${COLORS.border}`, background: "white",
                   color: COLORS.text, fontWeight: 600, fontSize: 14, cursor: "pointer",
                 }}
               >
-                Cerrar
+                Reimprimir
               </button>
             </div>
           </div>
