@@ -127,20 +127,44 @@ class ThermalPrinter {
 
       await device.open();
 
-      // Find the right interface and endpoint
-      const iface = device.configuration?.interfaces.find((i: any) =>
-        i.alternate.endpoints.some((e: any) => e.direction === "out")
-      );
-
-      if (!iface) {
-        throw new Error("No se encontró interfaz de impresión");
+      // Seleccionar configuración si no hay una activa
+      if (!device.configuration) {
+        await device.selectConfiguration(1);
       }
 
-      await device.claimInterface(iface.interfaceNumber);
+      // Find the right interface and endpoint
+      let iface = null;
+      let endpoint = null;
 
-      const endpoint = iface.alternate.endpoints.find((e: any) => e.direction === "out");
-      if (!endpoint) {
-        throw new Error("No se encontró endpoint de salida");
+      for (const intf of device.configuration?.interfaces || []) {
+        const alt = intf.alternate || intf.alternates?.[0];
+        if (!alt) continue;
+        const ep = (alt.endpoints || []).find((e: any) => e.direction === "out");
+        if (ep) {
+          iface = intf;
+          endpoint = ep;
+          break;
+        }
+      }
+
+      if (!iface || !endpoint) {
+        throw new Error("No se encontró interfaz de impresión. Verifica que la Epson esté conectada por USB.");
+      }
+
+      try {
+        await device.claimInterface(iface.interfaceNumber);
+      } catch (claimErr: any) {
+        // En Windows, a veces necesita liberar la interfaz primero
+        console.warn("claimInterface falló, reintentando...", claimErr.message);
+        try {
+          await device.releaseInterface(iface.interfaceNumber);
+          await device.claimInterface(iface.interfaceNumber);
+        } catch {
+          throw new Error(
+            "No se pudo tomar la impresora. En Windows, ve a Administrador de dispositivos > " +
+            "busca la Epson > click derecho > Desinstalar dispositivo. Luego reconecta el USB."
+          );
+        }
       }
 
       this.device = device;

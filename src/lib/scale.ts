@@ -28,6 +28,7 @@ class TorreyScale {
   private port: any = null;
   private reader: any = null;
   private readLoop: boolean = false;
+  private pollInterval: any = null;
   private listeners: WeightCallback[] = [];
   private _lastWeight: number = 0;
   private _lastStable: boolean = false;
@@ -113,6 +114,14 @@ class TorreyScale {
       // Iniciar lectura continua
       this.startReading();
 
+      // Enviar "P" cada 800ms para pedir peso (la Torrey PCR solo responde bajo demanda)
+      this.pollInterval = setInterval(() => {
+        this.sendCommand("P").catch(() => {});
+      }, 800);
+
+      // Mandar el primer "P" inmediatamente
+      this.sendCommand("P").catch(() => {});
+
       console.log("Báscula conectada");
       return true;
     } catch (err: any) {
@@ -129,6 +138,11 @@ class TorreyScale {
 
   async disconnect(): Promise<void> {
     this.readLoop = false;
+
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
 
     if (this.reader) {
       try {
