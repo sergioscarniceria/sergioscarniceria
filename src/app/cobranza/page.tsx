@@ -1434,7 +1434,7 @@ if (cashError) {
                         >
                           <div style={{ textAlign: "left", minWidth: 0 }}>
                             <div style={searchTitleStyle}>{ticketFolio(ticket.id)}</div>
-                            {ticket.status !== "terminado" && (
+                            {ticket.status !== "terminado" && ticket.source !== "mostrador" && (
                               <div style={{ display: "inline-block", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(166,106,16,0.15)", color: COLORS.warning, marginTop: 4, marginBottom: 2 }}>
                                 Pendiente de preparación
                               </div>
@@ -1478,7 +1478,7 @@ if (cashError) {
                         <div style={ticketMetaStyle}>
                           Estado: <b>{selectedTicket.payment_status || "pendiente"}</b>
                         </div>
-                        {selectedTicket.status !== "terminado" && (
+                        {selectedTicket.status !== "terminado" && selectedTicket.source !== "mostrador" && (
                           <div style={{ display: "inline-block", padding: "5px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(166,106,16,0.15)", color: COLORS.warning, marginTop: 6 }}>
                             Pendiente de preparación
                           </div>
@@ -1598,7 +1598,43 @@ if (cashError) {
                     )}
 
                     {/* Sección de descuento y cobro — ocultar en modo edición */}
-                    {!editMode && (<>
+                    {!editMode && selectedTicket.payment_status === "pagado" && (
+                      <div style={{
+                        padding: "20px 16px",
+                        borderRadius: 18,
+                        background: "rgba(31,122,77,0.10)",
+                        border: `2px solid ${COLORS.success}`,
+                        textAlign: "center",
+                        marginTop: 12,
+                      }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.success, marginBottom: 4 }}>
+                          Ticket ya cobrado
+                        </div>
+                        <div style={{ fontSize: 14, color: COLORS.muted }}>
+                          Método: <b>{selectedTicket.payment_method || "—"}</b>
+                          {selectedTicket.paid_at ? ` · ${new Date(selectedTicket.paid_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}` : ""}
+                        </div>
+                      </div>
+                    )}
+
+                    {!editMode && selectedTicket.payment_status === "cancelado" && (
+                      <div style={{
+                        padding: "20px 16px",
+                        borderRadius: 18,
+                        background: "rgba(180,35,24,0.08)",
+                        border: `2px solid ${COLORS.danger}`,
+                        textAlign: "center",
+                        marginTop: 12,
+                      }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>❌</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.danger }}>
+                          Ticket cancelado
+                        </div>
+                      </div>
+                    )}
+
+                    {!editMode && selectedTicket.payment_status !== "pagado" && selectedTicket.payment_status !== "cancelado" && (<>
                     <div style={discountSectionStyle}>
                       <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
                         Descuento adicional
