@@ -299,6 +299,9 @@ export function buildTicketBytes(ticket: TicketData): number[] {
   b.push(...CMD.BOLD_ON);
   b.push(...line("CARNICERIA"));
   b.push(...CMD.BOLD_OFF);
+  b.push(...line("H. Colegio Militar 122"));
+  b.push(...line("Ezequiel Montes, Qro."));
+  b.push(...line("Tel: 441 115 3314 / 441 118 5767"));
   b.push(...line(""));
 
   // Folio + fecha
@@ -579,6 +582,10 @@ export function browserPrintTicket(ticket: TicketData): void {
   <div class="logo"><img src="/logo.png" alt="Sergio's Carniceria" onerror="this.style.display='none'"/></div>
   <h1>SERGIO'S</h1>
   <h2>CARNICERIA</h2>
+  <div style="text-align:center;font-size:10px;font-weight:600;line-height:1.4;margin-bottom:4px">
+    H. Colegio Militar No. 122, Ezequiel Montes, Qro.<br>
+    Tel: 441 115 3314 / 441 118 5767
+  </div>
   <div class="sep"></div>
   <table>
     <tr><td><strong>${ticket.folio}</strong></td><td style="text-align:right">${dateStr} ${timeStr}</td></tr>
@@ -674,6 +681,9 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
   b.push(...CMD.BOLD_ON);
   b.push(...line("CARNICERIA"));
   b.push(...CMD.BOLD_OFF);
+  b.push(...line("H. Colegio Militar 122"));
+  b.push(...line("Ezequiel Montes, Qro."));
+  b.push(...line("Tel: 441 115 3314 / 441 118 5767"));
   b.push(...line(""));
 
   // Copia
@@ -860,6 +870,10 @@ function browserPrintCreditTicket(ticket: TicketData): void {
       <div class="copy">
         <div class="logo"><img src="/logo.png" alt="Sergio's" onerror="this.style.display='none'"/></div>
         <h1>SERGIO'S CARNICERIA</h1>
+        <div style="text-align:center;font-size:9px;font-weight:600;line-height:1.4;margin-bottom:3px">
+          H. Colegio Militar No. 122, Ezequiel Montes, Qro.<br>
+          Tel: 441 115 3314 / 441 118 5767
+        </div>
         <div class="credit-label">CREDITO (${label})</div>
         <div class="sep"></div>
         <table>

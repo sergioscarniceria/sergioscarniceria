@@ -489,6 +489,11 @@ export default function NuevoPedidoPage() {
 
   return (
     <div style={pageStyle}>
+      <style>{`
+        @media (max-width: 800px) {
+          .pedido-main-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
       <div style={shellStyle}>
         <div style={topBarStyle}>
           <div>
@@ -507,7 +512,7 @@ export default function NuevoPedidoPage() {
           </div>
         </div>
 
-        <div style={mainGridStyle}>
+        <div className="pedido-main-grid" style={mainGridStyle}>
           <div style={leftColumnStyle}>
             <div style={panelStyle}>
               <div style={panelHeaderStyle}>

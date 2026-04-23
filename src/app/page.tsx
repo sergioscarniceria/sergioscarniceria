@@ -280,7 +280,7 @@ function QuickStats({ showInventory = false }: { showInventory?: boolean }) {
 
   const cols = showInventory ? 5 : 4;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 16 }}>
+    <div className="quick-stats-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 10, marginBottom: 16 }}>
       <div style={quickStatCardStyle}>
         <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>Pedidos hoy</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: COLORS.text }}>{stats.pedidosHoy}</div>
@@ -313,6 +313,7 @@ export default function HomePage() {
   const [scrolled, setScrolled] = useState(false);
   const [empRole, setEmpRole] = useState<string | null>(null); // "admin" | "cajera" | "carnicero"
   const [empName, setEmpName] = useState("");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Check if already logged in
   useEffect(() => {
@@ -331,26 +332,86 @@ export default function HomePage() {
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 
+      {/* Responsive CSS */}
+      <style>{`
+        @media (max-width: 700px) {
+          .nav-links-desktop { display: none !important; }
+          .nav-hamburger { display: flex !important; }
+          .nav-mobile-menu { display: flex !important; }
+          .location-grid { grid-template-columns: 1fr !important; }
+          .quick-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+        }
+        @media (min-width: 701px) {
+          .nav-links-desktop { display: flex !important; }
+          .nav-hamburger { display: none !important; }
+          .nav-mobile-menu { display: none !important; }
+        }
+      `}</style>
+
       {/* Sticky navigation */}
       <nav style={{
         ...stickyNavStyle,
-        background: scrolled ? "rgba(255,255,255,0.95)" : "transparent",
-        boxShadow: scrolled ? COLORS.shadow : "none",
-        borderBottom: scrolled ? `1px solid ${COLORS.border}` : "none",
+        background: scrolled || mobileMenuOpen ? "rgba(255,255,255,0.95)" : "transparent",
+        boxShadow: scrolled || mobileMenuOpen ? COLORS.shadow : "none",
+        borderBottom: scrolled || mobileMenuOpen ? `1px solid ${COLORS.border}` : "none",
       }}>
         <div style={navInnerStyle}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <img src="/logo-sm.png" alt="Sergio's" style={{ width: 40, height: "auto" }} loading="eager" fetchPriority="high" />
             <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 16 }}>Sergio&apos;s Carnicería</span>
           </Link>
-          <div style={navLinksStyle}>
+
+          {/* Desktop links */}
+          <div className="nav-links-desktop" style={navLinksStyle}>
             <a href="#inicio" style={navLinkStyle}>Inicio</a>
             <a href="#recetario" style={navLinkStyle}>Recetario</a>
             <a href="#ubicacion" style={navLinkStyle}>Ubicación</a>
             <a href="#contacto" style={navLinkStyle}>Contacto</a>
             <Link href="/cliente" style={navCtaStyle}>Hacer pedido</Link>
           </div>
+
+          {/* Hamburger button (mobile) */}
+          <button
+            className="nav-hamburger"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            style={{
+              display: "none",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              border: `1px solid ${COLORS.border}`,
+              background: "white",
+              cursor: "pointer",
+              fontSize: 22,
+              color: COLORS.text,
+            }}
+          >
+            {mobileMenuOpen ? "✕" : "☰"}
+          </button>
         </div>
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div
+            className="nav-mobile-menu"
+            style={{
+              display: "none",
+              flexDirection: "column",
+              gap: 4,
+              padding: "12px 16px 16px",
+              maxWidth: 1320,
+              margin: "0 auto",
+            }}
+          >
+            <a href="#inicio" onClick={() => setMobileMenuOpen(false)} style={{ ...navLinkStyle, padding: "12px 16px", fontSize: 16 }}>Inicio</a>
+            <a href="#recetario" onClick={() => setMobileMenuOpen(false)} style={{ ...navLinkStyle, padding: "12px 16px", fontSize: 16 }}>Recetario</a>
+            <a href="#ubicacion" onClick={() => setMobileMenuOpen(false)} style={{ ...navLinkStyle, padding: "12px 16px", fontSize: 16 }}>Ubicación</a>
+            <a href="#contacto" onClick={() => setMobileMenuOpen(false)} style={{ ...navLinkStyle, padding: "12px 16px", fontSize: 16 }}>Contacto</a>
+            <Link href="/cliente" onClick={() => setMobileMenuOpen(false)} style={{ ...navCtaStyle, padding: "14px 16px", fontSize: 16, textAlign: "center", display: "block", marginTop: 4 }}>Hacer pedido</Link>
+          </div>
+        )}
       </nav>
 
       <div style={shellStyle}>
@@ -552,7 +613,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div style={locationGridStyle}>
+          <div className="location-grid" style={locationGridStyle}>
             <div style={locationInfoCardStyle}>
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 18, marginBottom: 6 }}>Dirección</div>
