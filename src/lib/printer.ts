@@ -615,6 +615,8 @@ export function browserPrintTicket(ticket: TicketData): void {
   if (win) {
     win.document.write(html);
     win.document.close();
+    // Cerrar ventana automáticamente después de imprimir
+    win.addEventListener("afterprint", () => win.close());
     // Esperar a que carguen las imágenes (logo + QR) antes de imprimir
     const images = win.document.querySelectorAll("img");
     if (images.length > 0) {
@@ -944,6 +946,8 @@ function browserPrintCreditTicket(ticket: TicketData): void {
   if (win) {
     win.document.write(html);
     win.document.close();
+    // Cerrar ventana automáticamente después de imprimir
+    win.addEventListener("afterprint", () => win.close());
     const images = win.document.querySelectorAll("img");
     if (images.length > 0) {
       let loaded = 0;
