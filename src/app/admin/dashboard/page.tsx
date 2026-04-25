@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getAdminSecret } from "@/lib/admin-secret";
@@ -91,6 +91,10 @@ export default function AdminDashboardPage() {
   const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
   const [roundingTotal, setRoundingTotal] = useState(0);
   const [roundingCount, setRoundingCount] = useState(0);
+
+  // Market prices
+  const [marketPrices, setMarketPrices] = useState<{ id: string; product_name: string; our_price: number; market_avg: number; market_low: number; market_high: number; sources: string; category: string; updated_at: string }[]>([]);
+  const [marketLoading, setMarketLoading] = useState(false);
 
   const today = new Date();
   const todayStr = toDateInputValue(today);
@@ -260,6 +264,15 @@ export default function AdminDashboardPage() {
       setRoundingTotal(totalRounding);
       setRoundingCount(roundingData.length);
     }
+
+    // Load market prices
+    try {
+      const mpRes = await fetch("/api/admin/market-prices");
+      if (mpRes.ok) {
+        const mpData = await mpRes.json();
+        setMarketPrices(mpData.prices || []);
+      }
+    } catch { /* ignore */ }
 
     setLoading(false);
   }
@@ -1270,6 +1283,80 @@ export default function AdminDashboardPage() {
           )}
         </Section>
         {/* Panel de redondeo para donación */}
+        <Section id="precios-mercado" title="Precios de mercado" count={marketPrices.length}>
+          {marketPrices.length === 0 ? (
+            <div style={{ color: COLORS.muted, padding: "12px 0" }}>
+              No hay datos de precios de mercado todavía. Se actualizan periódicamente.
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10 }}>
+                Última actualización: {marketPrices[0]?.updated_at ? new Date(marketPrices[0].updated_at).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" }) : "---"}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "rgba(123,34,24,0.06)" }}>
+                    <th style={mpThStyle}>Producto</th>
+                    <th style={{ ...mpThStyle, textAlign: "right" }}>Tu precio</th>
+                    <th style={{ ...mpThStyle, textAlign: "right" }}>Mercado prom.</th>
+                    <th style={{ ...mpThStyle, textAlign: "right" }}>Rango mercado</th>
+                    <th style={{ ...mpThStyle, textAlign: "center" }}>Comparación</th>
+                    <th style={mpThStyle}>Fuentes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    let lastCat = "";
+                    return marketPrices.map((mp) => {
+                      const diff = mp.our_price - mp.market_avg;
+                      const pct = mp.market_avg > 0 ? ((diff / mp.market_avg) * 100) : 0;
+                      const showCatHeader = mp.category !== lastCat;
+                      lastCat = mp.category;
+                      return (
+                        <React.Fragment key={mp.id}>
+                          {showCatHeader && (
+                            <tr>
+                              <td colSpan={6} style={{ padding: "10px 8px 4px", fontWeight: 800, fontSize: 13, color: COLORS.primary, borderBottom: `2px solid ${COLORS.border}` }}>
+                                {mp.category || "Sin categoría"}
+                              </td>
+                            </tr>
+                          )}
+                          <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                            <td style={mpTdStyle}>{mp.product_name}</td>
+                            <td style={{ ...mpTdStyle, textAlign: "right", fontWeight: 700 }}>${fmt(mp.our_price)}</td>
+                            <td style={{ ...mpTdStyle, textAlign: "right" }}>${fmt(mp.market_avg)}</td>
+                            <td style={{ ...mpTdStyle, textAlign: "right", fontSize: 12, color: COLORS.muted }}>${fmt(mp.market_low)} - ${fmt(mp.market_high)}</td>
+                            <td style={{ ...mpTdStyle, textAlign: "center" }}>
+                              <span style={{
+                                display: "inline-block",
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                background: pct > 5 ? "rgba(180,35,24,0.10)" : pct < -5 ? "rgba(31,122,77,0.10)" : "rgba(166,106,16,0.10)",
+                                color: pct > 5 ? COLORS.danger : pct < -5 ? COLORS.success : COLORS.warning,
+                              }}>
+                                {pct > 0 ? "+" : ""}{pct.toFixed(0)}%
+                              </span>
+                            </td>
+                            <td style={{ ...mpTdStyle, fontSize: 11, color: COLORS.muted, maxWidth: 140 }}>{mp.sources}</td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+              <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: "rgba(123,34,24,0.04)", fontSize: 12, color: COLORS.muted }}>
+                <b>Leyenda:</b>{" "}
+                <span style={{ color: COLORS.danger }}>Rojo = tu precio es mayor al mercado</span>{" | "}
+                <span style={{ color: COLORS.success }}>Verde = tu precio es menor</span>{" | "}
+                <span style={{ color: COLORS.warning }}>Amarillo = similar (±5%)</span>
+              </div>
+            </div>
+          )}
+        </Section>
+
         <Section id="donacion" title="Redondeo solidario" count={roundingCount}>
           <div style={{ padding: "10px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -1608,6 +1695,21 @@ const recentOrderRowStyle: React.CSSProperties = {
   borderRadius: 18,
   marginBottom: 10,
   background: COLORS.bgSoft,
+};
+
+const mpThStyle: React.CSSProperties = {
+  padding: "10px 8px",
+  textAlign: "left",
+  fontSize: 12,
+  fontWeight: 700,
+  color: COLORS.muted,
+  borderBottom: `2px solid ${COLORS.border}`,
+};
+
+const mpTdStyle: React.CSSProperties = {
+  padding: "8px 8px",
+  fontSize: 14,
+  color: COLORS.text,
 };
 
 const emptyBoxStyle: React.CSSProperties = {
