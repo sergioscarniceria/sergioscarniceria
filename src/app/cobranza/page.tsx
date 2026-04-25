@@ -1478,6 +1478,11 @@ if (cashError) {
                         <div style={ticketMetaStyle}>
                           Estado: <b>{selectedTicket.payment_status || "pendiente"}</b>
                         </div>
+                        {selectedTicket.created_at && (
+                          <div style={ticketMetaStyle}>
+                            Creado: <b>{new Date(selectedTicket.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</b>
+                          </div>
+                        )}
                         {selectedTicket.status !== "terminado" && selectedTicket.source !== "mostrador" && (
                           <div style={{ display: "inline-block", padding: "5px 14px", borderRadius: 999, fontSize: 13, fontWeight: 700, background: "rgba(166,106,16,0.15)", color: COLORS.warning, marginTop: 6 }}>
                             Pendiente de preparación
