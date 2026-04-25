@@ -24,6 +24,9 @@ type OrderItem = {
   product: string;
   kilos: number;
   price: number;
+  sale_type?: string | null;
+  quantity?: number | null;
+  is_fixed_price_piece?: boolean | null;
 };
 
 type Order = {
@@ -85,8 +88,8 @@ export default function AdminDashboardPage() {
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevYearExpenses, setPrevYearExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
-  const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
-  const [prevYearOrders, setPrevYearOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number }[] }[]>([]);
+  const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number; sale_type?: string; quantity?: number; is_fixed_price_piece?: boolean }[] }[]>([]);
+  const [prevYearOrders, setPrevYearOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number; sale_type?: string; quantity?: number; is_fixed_price_piece?: boolean }[] }[]>([]);
   const [cxcNotes, setCxcNotes] = useState<{ customer_name: string; total_amount: number; balance_due: number; status: string; due_date: string }[]>([]);
   const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
   const [roundingTotal, setRoundingTotal] = useState(0);
@@ -197,7 +200,7 @@ export default function AdminDashboardPage() {
 
     const { data: pmOrders } = await supabase
       .from("orders")
-      .select("created_at, order_items(kilos, price)")
+      .select("created_at, order_items(kilos, price, sale_type, quantity, is_fixed_price_piece)")
       .gte("created_at", `${pmFirst}T00:00:00`)
       .lte("created_at", `${pmLastStr}T23:59:59`);
     setPrevMonthOrders((pmOrders as any[]) || []);
@@ -217,7 +220,7 @@ export default function AdminDashboardPage() {
 
     const { data: pyOrders } = await supabase
       .from("orders")
-      .select("created_at, order_items(kilos, price)")
+      .select("created_at, order_items(kilos, price, sale_type, quantity, is_fixed_price_piece)")
       .gte("created_at", `${pyFirst}T00:00:00`)
       .lte("created_at", `${pyLastStr}T23:59:59`);
     setPrevYearOrders((pyOrders as any[]) || []);
@@ -306,9 +309,18 @@ export default function AdminDashboardPage() {
     setMarketLoading(false);
   }
 
+  function itemSubtotal(item: { kilos?: number; price?: number; sale_type?: string | null; quantity?: number | null; is_fixed_price_piece?: boolean | null }) {
+    const price = Number(item.price || 0);
+    if (item.sale_type === "pieza" || item.is_fixed_price_piece) {
+      const qty = Number(item.quantity || item.kilos || 0);
+      return qty * price;
+    }
+    return Number(item.kilos || 0) * price;
+  }
+
   function orderTotal(order: Order) {
     return (order.order_items || []).reduce((acc, item) => {
-      return acc + Number(item.kilos || 0) * Number(item.price || 0);
+      return acc + itemSubtotal(item);
     }, 0);
   }
 
@@ -426,7 +438,7 @@ export default function AdminDashboardPage() {
   const utilityStats = useMemo(() => {
     const calcOrdersTotal = (ords: any[]) =>
       ords.reduce((acc: number, o: any) =>
-        acc + (o.order_items || []).reduce((s: number, i: any) => s + Number(i.kilos || 0) * Number(i.price || 0), 0), 0);
+        acc + (o.order_items || []).reduce((s: number, i: any) => s + itemSubtotal(i), 0), 0);
 
     const currentSales = salesThisMonth;
     const currentExpenses = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
@@ -553,8 +565,8 @@ export default function AdminDashboardPage() {
         if (!totals[key]) {
           totals[key] = { product: key, revenue: 0, kilos: 0, times: 0 };
         }
-        totals[key].revenue += Number(item.kilos || 0) * Number(item.price || 0);
-        totals[key].kilos += Number(item.kilos || 0);
+        totals[key].revenue += itemSubtotal(item);
+        totals[key].kilos += (item.sale_type === "pieza" || item.is_fixed_price_piece) ? 0 : Number(item.kilos || 0);
         totals[key].times += 1;
       }
     }
