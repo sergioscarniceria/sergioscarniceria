@@ -453,14 +453,15 @@ export default function ClientePage() {
   const [password, setPassword] = useState("");
   const [loginPhone, setLoginPhone] = useState("");
   const [loginMethod, setLoginMethod] = useState<"phone" | "email">("phone");
+  const [loginPin, setLoginPin] = useState("");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
 
-  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot" | "password">("login");
   const [loginError, setLoginError] = useState("");
   const [loginSuccess, setLoginSuccess] = useState("");
-  const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; customerId: string } | null>(null);
+  const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; pin?: string; customerId: string } | null>(null);
   const [forgotPhone, setForgotPhone] = useState("");
   const [forgotNewPass, setForgotNewPass] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -497,17 +498,28 @@ export default function ClientePage() {
   const [paymentResult, setPaymentResult] = useState<"success" | "failure" | "pending" | null>(null);
 
   useEffect(() => {
-    checkUser();
-    // Detectar regreso de Mercado Pago
+    // Detectar auto-login por URL: /cliente?tel=XXX&pin=YYYY
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
+
+      // Mercado Pago callback
       const paymentParam = params.get("payment");
       if (paymentParam === "success" || paymentParam === "failure" || paymentParam === "pending") {
         setPaymentResult(paymentParam);
-        // Limpiar URL sin recargar
         window.history.replaceState({}, "", "/cliente");
       }
+
+      // Auto-login por PIN desde URL (link de WhatsApp)
+      const urlTel = params.get("tel");
+      const urlPin = params.get("pin");
+      if (urlTel && urlPin) {
+        window.history.replaceState({}, "", "/cliente");
+        autoLoginWithPin(urlTel, urlPin);
+        return;
+      }
     }
+
+    checkUser();
   }, []);
 
   useEffect(() => {
@@ -696,6 +708,83 @@ export default function ClientePage() {
     await loadProducts();
   }
 
+  async function autoLoginWithPin(tel: string, pin: string) {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/portal/login-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: tel, pin }),
+      });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        const { error: err } = await supabase.auth.signInWithPassword({
+          email: result.auth_email,
+          password: result.auth_password,
+        });
+        if (!err) {
+          await checkUser();
+          return;
+        }
+      }
+    } catch {
+      // Fall through to normal login screen
+    }
+    setLoginPhone(tel);
+    setLoginPin(pin);
+    setLoginError("No pudimos entrar automáticamente. Intenta con tu PIN.");
+    setLoading(false);
+  }
+
+  async function loginWithPin() {
+    setLoginError("");
+
+    if (!loginPhone.trim()) {
+      setLoginError("Escribe tu teléfono");
+      return;
+    }
+    if (!loginPin.trim() || loginPin.trim().length < 4) {
+      setLoginError("Escribe tu PIN de 4 dígitos");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/portal/login-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: loginPhone.trim(), pin: loginPin.trim() }),
+      });
+      const result = await res.json();
+
+      if (!res.ok || !result.success) {
+        setLoginError(result.error || "No pudimos entrar");
+        setSaving(false);
+        return;
+      }
+
+      // Sign in with Supabase auth
+      const { error: err } = await supabase.auth.signInWithPassword({
+        email: result.auth_email,
+        password: result.auth_password,
+      });
+
+      if (err) {
+        setLoginError("Error al iniciar sesión. Intenta de nuevo.");
+        setSaving(false);
+        return;
+      }
+
+      await checkUser();
+    } catch {
+      setLoginError("Error de conexión. Intenta de nuevo.");
+    }
+
+    setSaving(false);
+  }
+
   async function register() {
     setLoginError("");
     if (!name || !phone || !password) {
@@ -732,13 +821,13 @@ export default function ClientePage() {
 
       if (signInError) {
         // Account created but login failed — show card and let them login manually
-        setNewCardData({ name, phone, email, password, customerId: result.customer_id });
+        setNewCardData({ name, phone, email, password, pin: result.client_pin, customerId: result.customer_id });
         setSaving(false);
         return;
       }
 
       // 3. Show customer card + load data (user is now logged in)
-      setNewCardData({ name, phone, email, password, customerId: result.customer_id });
+      setNewCardData({ name, phone, email, password, pin: result.client_pin, customerId: result.customer_id });
       await checkUser();
     } catch {
       setLoginError("Error de conexi\u00f3n. Intenta de nuevo.");
@@ -1406,8 +1495,8 @@ export default function ClientePage() {
               </p>
             </div>
 
-            {/* Tabs: Entrar / Crear cuenta */}
-            <div style={{ marginBottom: 22, display: "flex", gap: 12 }}>
+            {/* Tabs: PIN / Crear cuenta */}
+            <div style={{ marginBottom: 22, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button
                 onClick={() => { setMode("login"); setLoginError(""); setLoginSuccess(""); }}
                 style={{
@@ -1417,7 +1506,7 @@ export default function ClientePage() {
                   fontWeight: 800,
                 }}
               >
-                Entrar
+                Entrar con PIN
               </button>
               <button
                 onClick={() => { setMode("register"); setLoginError(""); setLoginSuccess(""); }}
@@ -1430,6 +1519,18 @@ export default function ClientePage() {
               >
                 Crear cuenta
               </button>
+              <button
+                onClick={() => { setMode("password"); setLoginError(""); setLoginSuccess(""); }}
+                style={{
+                  ...switchButtonStyle,
+                  background: mode === "password" ? COLORS.primary : "#efe8df",
+                  color: mode === "password" ? "white" : COLORS.text,
+                  fontWeight: 800,
+                  fontSize: 12,
+                }}
+              >
+                Contrase&ntilde;a
+              </button>
             </div>
 
             {loginError && (
@@ -1440,7 +1541,97 @@ export default function ClientePage() {
             )}
 
             {mode === "login" ? (
+              /* ── Login con PIN (modo principal) ── */
               <>
+                <div style={{ marginBottom: 12, fontSize: 14, color: COLORS.muted, lineHeight: 1.5 }}>
+                  Escribe tu tel&eacute;fono y el PIN de 4 d&iacute;gitos que te dieron en la carnicer&iacute;a.
+                </div>
+                <input
+                  placeholder="Tu n&uacute;mero de tel&eacute;fono"
+                  value={loginPhone}
+                  onChange={(e) => setLoginPhone(e.target.value)}
+                  style={inputStyle}
+                  type="tel"
+                  autoComplete="tel"
+                />
+                <input
+                  placeholder="PIN de 4 d&iacute;gitos"
+                  value={loginPin}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                    setLoginPin(v);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && loginWithPin()}
+                  style={{ ...inputStyle, textAlign: "center", letterSpacing: 8, fontSize: 24, fontWeight: 800 }}
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={4}
+                  autoComplete="one-time-code"
+                />
+                <button
+                  onClick={loginWithPin}
+                  disabled={saving}
+                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
+                >
+                  {saving ? "Entrando..." : "Entrar"}
+                </button>
+
+                <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", marginTop: 14, lineHeight: 1.5 }}>
+                  &iquest;No tienes PIN? P&iacute;delo en la carnicer&iacute;a o crea tu cuenta.
+                </div>
+              </>
+            ) : mode === "register" ? (
+              /* ── Registro simplificado ── */
+              <>
+                <input
+                  placeholder="Tu nombre *"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  style={inputStyle}
+                />
+                <input
+                  placeholder="Tu tel&eacute;fono (WhatsApp) *"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  style={inputStyle}
+                  type="tel"
+                />
+                <input
+                  placeholder="Correo electr&oacute;nico (opcional)"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={inputStyle}
+                  type="email"
+                />
+                <div style={{ position: "relative" }}>
+                  <input
+                    placeholder="Crea una contrase&ntilde;a *"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    style={{ ...inputStyle, paddingRight: 80 }}
+                  />
+                  <button onClick={() => setShowPassword(!showPassword)} type="button" style={showPassBtnStyle}>
+                    {showPassword ? "Ocultar" : "Mostrar"}
+                  </button>
+                </div>
+                <button
+                  onClick={register}
+                  disabled={saving}
+                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
+                >
+                  {saving ? "Creando tu cuenta..." : "Crear mi cuenta"}
+                </button>
+                <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", marginTop: 10 }}>
+                  Al crear tu cuenta recibes un PIN de 4 d&iacute;gitos para entrar f&aacute;cil
+                </div>
+              </>
+            ) : mode === "password" ? (
+              /* ── Login clásico con contraseña ── */
+              <>
+                <div style={{ marginBottom: 12, fontSize: 14, color: COLORS.muted, lineHeight: 1.5 }}>
+                  Si ya ten&iacute;as cuenta con contrase&ntilde;a, entra aqu&iacute;.
+                </div>
                 <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
                   <button
                     onClick={() => { setLoginMethod("phone"); setLoginError(""); }}
@@ -1486,7 +1677,7 @@ export default function ClientePage() {
 
                 <div style={{ position: "relative" }}>
                   <input
-                    placeholder="Contrase\u00f1a"
+                    placeholder="Contrase&ntilde;a"
                     type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -1504,7 +1695,6 @@ export default function ClientePage() {
                   {saving ? "Entrando..." : "Entrar"}
                 </button>
 
-                {/* Forgot password link */}
                 <button
                   onClick={() => { setMode("forgot"); setLoginError(""); setLoginSuccess(""); }}
                   style={{
@@ -1517,53 +1707,8 @@ export default function ClientePage() {
                   &iquest;Olvidaste tu contrase&ntilde;a?
                 </button>
               </>
-            ) : mode === "register" ? (
-              <>
-                <input
-                  placeholder="Tu nombre *"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  style={inputStyle}
-                />
-                <input
-                  placeholder="Tu tel&eacute;fono (WhatsApp) *"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  style={inputStyle}
-                  type="tel"
-                />
-                <input
-                  placeholder="Correo electr&oacute;nico (opcional)"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  style={inputStyle}
-                  type="email"
-                />
-                <div style={{ position: "relative" }}>
-                  <input
-                    placeholder="Crea una contrase\u00f1a *"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    style={{ ...inputStyle, paddingRight: 80 }}
-                  />
-                  <button onClick={() => setShowPassword(!showPassword)} type="button" style={showPassBtnStyle}>
-                    {showPassword ? "Ocultar" : "Mostrar"}
-                  </button>
-                </div>
-                <button
-                  onClick={register}
-                  disabled={saving}
-                  style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
-                >
-                  {saving ? "Creando tu cuenta..." : "Crear mi cuenta"}
-                </button>
-                <div style={{ fontSize: 12, color: COLORS.muted, textAlign: "center", marginTop: 10 }}>
-                  Al crear tu cuenta entras autom&aacute;ticamente
-                </div>
-              </>
             ) : (
-              /* Forgot password mode */
+              /* ── Forgot password mode ── */
               <>
                 <div style={{ marginBottom: 16, fontSize: 14, color: COLORS.muted, lineHeight: 1.5 }}>
                   Escribe tu n&uacute;mero de tel&eacute;fono y tu nueva contrase&ntilde;a.
@@ -1577,7 +1722,7 @@ export default function ClientePage() {
                 />
                 <div style={{ position: "relative" }}>
                   <input
-                    placeholder="Nueva contrase\u00f1a"
+                    placeholder="Nueva contrase&ntilde;a"
                     type={showPassword ? "text" : "password"}
                     value={forgotNewPass}
                     onChange={(e) => setForgotNewPass(e.target.value)}
@@ -1592,7 +1737,7 @@ export default function ClientePage() {
                   disabled={saving}
                   style={{ ...primaryButtonStyle, width: "100%", opacity: saving ? 0.65 : 1 }}
                 >
-                  {saving ? "Cambiando..." : "Cambiar contrase\u00f1a"}
+                  {saving ? "Cambiando..." : "Cambiar contrase&ntilde;a"}
                 </button>
                 <button
                   onClick={() => { setMode("login"); setLoginError(""); setLoginSuccess(""); }}

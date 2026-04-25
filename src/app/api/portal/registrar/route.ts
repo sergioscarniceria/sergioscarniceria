@@ -41,6 +41,9 @@ export async function POST(request: Request) {
       );
     }
 
+    // Generate 4-digit PIN
+    const clientPin = String(Math.floor(1000 + Math.random() * 9000));
+
     // 1. Create customer record
     const { data: customer, error: customerError } = await supabase
       .from("customers")
@@ -52,6 +55,7 @@ export async function POST(request: Request) {
         email: email?.trim() || null,
         address: "",
         portal_password: password,
+        client_pin: clientPin,
       }])
       .select()
       .single();
@@ -100,6 +104,7 @@ export async function POST(request: Request) {
       auth_email: authEmail,
       customer_id: customer.id,
       name: name.trim(),
+      client_pin: clientPin,
     });
   } catch (err) {
     console.error("Registration error:", err);
