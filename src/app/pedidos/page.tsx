@@ -29,6 +29,7 @@ type Order = {
   payment_status?: string | null;
   payment_method?: string | null;
   order_items?: OrderItem[];
+  captured_by?: string | null;
 };
 
 const COLORS = {
@@ -286,6 +287,11 @@ const [changingId, setChangingId] = useState<string | null>(null);
         <div style={cardHeaderStyle}>
           <div style={{ minWidth: 0 }}>
             <div style={customerNameStyle}>{o.customer_name}</div>
+            {o.captured_by && (
+              <div style={{ fontSize: 12, color: o.captured_by === "Cliente" ? "#355c7d" : "#7a5a52", fontWeight: 600, marginBottom: 4 }}>
+                Capturó: {o.captured_by}
+              </div>
+            )}
 
             <div
               style={{

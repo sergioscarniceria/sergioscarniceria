@@ -358,6 +358,11 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    if (!takenBy.trim()) {
+      alert("Selecciona quién capturó el pedido");
+      return;
+    }
+
     const captureTime = new Date();
     setSaving(true);
 
@@ -397,6 +402,7 @@ export default function NuevoPedidoPage() {
           delivery_status: "pendiente",
           delivery_address: deliveryAddress.trim(),
           delivery_date: deliveryDate,
+          captured_by: takenByText,
         },
       ])
       .select()
@@ -857,13 +863,18 @@ export default function NuevoPedidoPage() {
               </div>
 
               <div style={captureBlockStyle}>
-                <div style={fieldLabelStyle}>Capturó el pedido</div>
-                <input
-                  placeholder="Nombre de quien tomó el pedido"
+                <div style={fieldLabelStyle}>Capturó el pedido *</div>
+                <select
                   value={takenBy}
                   onChange={(e) => setTakenBy(e.target.value)}
-                  style={inputStyle}
-                />
+                  style={{ ...inputStyle, fontWeight: 700, color: takenBy ? COLORS.text : COLORS.muted }}
+                >
+                  <option value="">-- Selecciona quién captura --</option>
+                  <option value="Cari">Cari</option>
+                  <option value="Celeste">Celeste</option>
+                  <option value="Jessie">Jessie</option>
+                  <option value="Sergio">Sergio</option>
+                </select>
 
                 <div style={captureTimeBoxStyle}>
                   <b>Hora visible de captura:</b> {capturePreview}

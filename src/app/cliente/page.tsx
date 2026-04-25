@@ -1274,6 +1274,7 @@ export default function ClientePage() {
           delivery_address: address,
           delivery_date: deliveryDate,
           delivery_status: "pendiente",
+          captured_by: "Cliente",
         },
       ])
       .select()

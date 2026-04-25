@@ -509,6 +509,7 @@ const { data: orderData, error: orderError } = await supabase
       payment_status: "pendiente",
       notes: null,
       attendant_name: attendant || null,
+      captured_by: attendant || "Mostrador",
     },
   ])
       .select()

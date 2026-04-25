@@ -30,6 +30,7 @@ type Order = {
   created_at?: string;
   delivery_date?: string | null;
   order_items?: OrderItem[];
+  captured_by?: string | null;
 };
 
 type Butcher = {
@@ -589,6 +590,11 @@ function Section({
               <div style={orderHeaderStyle}>
                 <div style={{ minWidth: 0 }}>
                   <div style={customerNameStyle}>{o.customer_name}</div>
+                  {o.captured_by && (
+                    <div style={{ fontSize: 12, color: o.captured_by === "Cliente" ? "#355c7d" : COLORS.muted, fontWeight: 600, marginBottom: 4 }}>
+                      Capturó: {o.captured_by}
+                    </div>
+                  )}
                   <div
                     style={{
                       ...statusPillStyle,
