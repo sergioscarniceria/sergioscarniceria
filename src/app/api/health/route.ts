@@ -110,6 +110,63 @@ export async function GET(req: Request) {
     canWrite = false;
   }
 
+  // ─── Supabase Management API: Egress, Storage, DB size real ───
+  let quotaUsage: any = null;
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (accessToken && supabaseUrl) {
+    try {
+      // Extraer project ref del URL (ej: https://xxxxx.supabase.co)
+      const refMatch = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/);
+      const projectRef = refMatch ? refMatch[1] : null;
+
+      if (projectRef) {
+        // 1. Obtener org_id del proyecto
+        const projRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (projRes.ok) {
+          const projData = await projRes.json();
+          const orgId = projData.organization_id;
+
+          if (orgId) {
+            // 2. Obtener usage de la organización (ciclo de facturación actual)
+            const usageRes = await fetch(
+              `https://api.supabase.com/v1/organizations/${orgId}/usage`,
+              { headers: { Authorization: `Bearer ${accessToken}` } }
+            );
+            if (usageRes.ok) {
+              const usageData = await usageRes.json();
+              // usageData es un array de métricas con { metric, usage, limit, cost, ... }
+              const metrics: Record<string, { usage: number; limit: number; pct: number }> = {};
+              const metricNames: Record<string, string> = {
+                EGRESS: "Egress (transferencia)",
+                DB_SIZE: "Base de datos",
+                STORAGE_SIZE: "Almacenamiento",
+                FUNC_INVOCATIONS: "Edge Functions",
+                REALTIME_PEAK_CONNECTIONS: "Realtime conexiones",
+                MONTHLY_ACTIVE_USERS: "Usuarios activos",
+              };
+
+              if (Array.isArray(usageData)) {
+                for (const m of usageData) {
+                  const name = metricNames[m.metric] || m.metric;
+                  const usage = m.usage ?? 0;
+                  const limit = m.limit ?? 0;
+                  const pct = limit > 0 ? Number(((usage / limit) * 100).toFixed(1)) : 0;
+                  metrics[name] = { usage, limit, pct };
+                }
+              }
+              quotaUsage = { metrics, raw: usageData };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Si falla el management API, no romper el health check
+      console.error("Management API error:", e);
+    }
+  }
+
   return NextResponse.json({
     status,
     timestamp: new Date().toISOString(),
@@ -122,6 +179,7 @@ export async function GET(req: Request) {
       warning,
     },
     tables: tableCounts,
+    quota: quotaUsage,
     errors: errors.length > 0 ? errors : null,
     recommendations: [
       usagePercent > 50 ? "Considerar upgrade a Supabase Pro ($25/mes)" : null,

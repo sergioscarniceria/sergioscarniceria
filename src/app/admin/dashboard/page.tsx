@@ -1555,6 +1555,49 @@ function SystemHealthPanel() {
             </div>
           </div>
 
+          {health.quota?.metrics && (
+            <>
+              <div style={{ gridColumn: "1 / -1", marginTop: 4 }}>
+                <div style={{ color: COLORS.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>Cuota Supabase (ciclo actual)</div>
+              </div>
+              {Object.entries(health.quota.metrics).map(([name, m]: [string, any]) => {
+                const isOver = m.pct > 100;
+                const isWarning = m.pct > 80;
+                const barColor = isOver ? COLORS.danger : isWarning ? COLORS.warning : COLORS.success;
+                const bgColor = isOver ? "rgba(180,35,24,0.10)" : "rgba(255,255,255,0.5)";
+                // Formatear uso: si > 1GB mostrar en GB
+                const formatBytes = (bytes: number) => {
+                  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`;
+                  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(0)} MB`;
+                  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+                  return `${bytes}`;
+                };
+                const usageStr = m.limit > 10000 ? formatBytes(m.usage) : m.usage.toLocaleString();
+                const limitStr = m.limit > 10000 ? formatBytes(m.limit) : m.limit.toLocaleString();
+                return (
+                  <div key={name} style={{ background: bgColor, border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+                    <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 4 }}>{name}</div>
+                    <div style={{ color: isOver ? COLORS.danger : COLORS.text, fontSize: 18, fontWeight: 800 }}>
+                      {m.pct}%
+                    </div>
+                    <div style={{ color: COLORS.muted, fontSize: 11, marginTop: 2 }}>{usageStr} / {limitStr}</div>
+                    <div style={{ marginTop: 6, background: "rgba(0,0,0,0.08)", borderRadius: 6, height: 6, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.min(m.pct, 100)}%`, height: "100%", background: barColor, borderRadius: 6 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {!health.quota && (
+            <div style={{ gridColumn: "1 / -1", background: "rgba(166,106,16,0.06)", border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
+              <div style={{ color: COLORS.warning, fontSize: 13 }}>
+                Para ver cuota de Supabase (Egress, Storage), agrega <b>SUPABASE_ACCESS_TOKEN</b> en Vercel.
+              </div>
+            </div>
+          )}
+
           {health.recommendations && health.recommendations.length > 0 && (
             <div style={{ gridColumn: "1 / -1", background: "rgba(166,106,16,0.08)", border: `1px solid ${COLORS.border}`, borderRadius: 18, padding: 14 }}>
               <div style={{ color: COLORS.warning, fontWeight: 800, marginBottom: 6 }}>Recomendaciones</div>
