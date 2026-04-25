@@ -95,6 +95,7 @@ export default function AdminDashboardPage() {
   // Market prices
   const [marketPrices, setMarketPrices] = useState<{ id: string; product_name: string; our_price: number; market_avg: number; market_low: number; market_high: number; sources: string; category: string; updated_at: string }[]>([]);
   const [marketLoading, setMarketLoading] = useState(false);
+  const [marketRefreshResult, setMarketRefreshResult] = useState("");
 
   const today = new Date();
   const todayStr = toDateInputValue(today);
@@ -275,6 +276,34 @@ export default function AdminDashboardPage() {
     } catch { /* ignore */ }
 
     setLoading(false);
+  }
+
+  async function refreshMarketPrices() {
+    setMarketLoading(true);
+    setMarketRefreshResult("");
+    try {
+      const secret = getAdminSecret();
+      const res = await fetch("/api/admin/market-prices/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMarketRefreshResult(`Listo: ${data.updated} productos actualizados de ${data.scraped_total} precios encontrados`);
+        // Reload prices
+        const mpRes = await fetch("/api/admin/market-prices");
+        if (mpRes.ok) {
+          const mpData = await mpRes.json();
+          setMarketPrices(mpData.prices || []);
+        }
+      } else {
+        setMarketRefreshResult(data.error || "Error al actualizar");
+      }
+    } catch {
+      setMarketRefreshResult("Error de conexión");
+    }
+    setMarketLoading(false);
   }
 
   function orderTotal(order: Order) {
@@ -1284,9 +1313,34 @@ export default function AdminDashboardPage() {
         </Section>
         {/* Panel de redondeo para donación */}
         <Section id="precios-mercado" title="Precios de mercado" count={marketPrices.length}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <button
+              onClick={refreshMarketPrices}
+              disabled={marketLoading}
+              style={{
+                padding: "10px 18px",
+                borderRadius: 14,
+                border: "none",
+                background: marketLoading ? COLORS.muted : `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+                color: "white",
+                fontWeight: 700,
+                fontSize: 14,
+                cursor: marketLoading ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 12px rgba(123,34,24,0.2)",
+              }}
+            >
+              {marketLoading ? "Buscando precios..." : "Actualizar precios"}
+            </button>
+            {marketRefreshResult && (
+              <span style={{ fontSize: 13, color: marketRefreshResult.startsWith("Error") ? COLORS.danger : COLORS.success, fontWeight: 600 }}>
+                {marketRefreshResult}
+              </span>
+            )}
+          </div>
+
           {marketPrices.length === 0 ? (
             <div style={{ color: COLORS.muted, padding: "12px 0" }}>
-              No hay datos de precios de mercado todavía. Se actualizan periódicamente.
+              No hay datos de precios de mercado todavía. Presiona &quot;Actualizar precios&quot; para buscar.
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
