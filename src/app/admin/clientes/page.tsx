@@ -20,6 +20,7 @@ type Customer = {
   credit_limit?: number | null;
   credit_days?: number | null;
   portal_password?: string | null;
+  client_pin?: string | null;
 };
 
 const COLORS = {
@@ -507,6 +508,11 @@ export default function AdminClientesPage() {
                     <div style={{ color: COLORS.text, fontSize: 14, marginTop: 2 }}>
                       <b>Contraseña:</b> {c.portal_password || "(no guardada)"}
                     </div>
+                    {c.client_pin && (
+                      <div style={{ color: COLORS.text, fontSize: 14, marginTop: 2 }}>
+                        <b>PIN:</b> <span style={{ fontFamily: "monospace", fontSize: 18, fontWeight: 800, letterSpacing: 4 }}>{c.client_pin}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -558,6 +564,21 @@ export default function AdminClientesPage() {
                   >
                     Ver tarjeta
                   </button>
+
+                  {c.phone && c.client_pin && (
+                    <button
+                      onClick={() => {
+                        const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+                        const link = `${baseUrl}/cliente?tel=${encodeURIComponent(c.phone!)}&pin=${c.client_pin}`;
+                        const msg = `Hola ${c.name}, entra a tu portal de Sergio's Carnicería con este link:\n\n${link}\n\nTu PIN: ${c.client_pin}`;
+                        const waUrl = `https://wa.me/52${c.phone!.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`;
+                        window.open(waUrl, "_blank");
+                      }}
+                      style={whatsappButtonStyle}
+                    >
+                      Enviar link WhatsApp
+                    </button>
+                  )}
                 </div>
 
                 <div style={actionsWrapStyle}>
@@ -1424,4 +1445,18 @@ const portalPreviewBoxStyle: React.CSSProperties = {
   background: "rgba(53, 92, 125, 0.06)",
   border: "1px solid rgba(53, 92, 125, 0.15)",
   marginTop: 12,
+};
+
+const whatsappButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "8px 14px",
+  borderRadius: 12,
+  border: "none",
+  background: "#25D366",
+  color: "white",
+  textDecoration: "none",
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: "pointer",
+  boxShadow: "0 4px 12px rgba(37, 211, 102, 0.3)",
 };
