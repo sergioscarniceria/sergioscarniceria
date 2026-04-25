@@ -166,6 +166,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [showQrScanner, setShowQrScanner] = useState(false);
 
   // Modo edición de ticket
+  const [hideUnprepared, setHideUnprepared] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -352,13 +353,20 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   }
 
   const filteredTickets = useMemo(() => {
+  let result = tickets;
+
+  // Ocultar pendientes de preparación si el toggle está activo
+  if (hideUnprepared) {
+    result = result.filter((t) => t.status === "terminado" || t.source === "mostrador");
+  }
+
   const qRaw = ticketSearch.trim();
-  if (!qRaw) return tickets;
+  if (!qRaw) return result;
 
   const q = qRaw.toLowerCase();
   const { full, short: shortCode } = extractTicketId(qRaw);
 
-  return tickets.filter((ticket) => {
+  return result.filter((ticket) => {
     const id = String(ticket.id).toLowerCase();
     const short = id.slice(0, 6);
     const folio = `tk-${short}`;
@@ -377,7 +385,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
     return false;
   });
-}, [tickets, ticketSearch]);
+}, [tickets, ticketSearch, hideUnprepared]);
 
   async function openTicket(id: string) {
     const { data, error } = await supabase
@@ -1420,7 +1428,24 @@ if (cashError) {
                 </button>
                 </div>
                 <div style={{ marginTop: 14 }}>
-                  <div style={miniTitleStyle}>Pendientes recientes</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={miniTitleStyle}>Pendientes recientes</div>
+                    <button
+                      onClick={() => setHideUnprepared(!hideUnprepared)}
+                      style={{
+                        background: hideUnprepared ? COLORS.primary : "rgba(166,106,16,0.12)",
+                        color: hideUnprepared ? "#fff" : COLORS.warning,
+                        border: "none",
+                        borderRadius: 999,
+                        padding: "6px 14px",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {hideUnprepared ? "👁 Mostrar no preparados" : "🙈 Ocultar no preparados"}
+                    </button>
+                  </div>
 
                   <div style={listWrapStyle}>
                     {filteredTickets.length === 0 ? (
