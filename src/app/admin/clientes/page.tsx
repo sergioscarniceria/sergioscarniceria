@@ -399,7 +399,7 @@ export default function AdminClientesPage() {
             <Link href="/admin/nuevo-pedido" style={secondaryButtonStyle}>
               Nuevo pedido
             </Link>
-            <Link href="/admin/cxc" style={secondaryButtonStyle}>
+            <Link href="/cxc" style={secondaryButtonStyle}>
               CxC
             </Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>
@@ -538,21 +538,21 @@ export default function AdminClientesPage() {
                   )}
 
                   <Link
-                    href={`/admin/cxc/nueva-nota?customer_id=${c.id}`}
+                    href={`/cxc/nueva-nota?customer_id=${c.id}`}
                     style={miniLinkButtonStyle}
                   >
                     Nueva nota
                   </Link>
 
                   <Link
-                    href={`/admin/cxc/nuevo-pago?customer_id=${c.id}`}
+                    href={`/cxc/nuevo-pago?customer_id=${c.id}`}
                     style={miniLinkButtonStyle}
                   >
                     Nuevo pago
                   </Link>
 
                   <Link
-                    href={`/admin/cxc/estado-cuenta?customer_id=${c.id}`}
+                    href={`/cxc/estado-cuenta?customer_id=${c.id}`}
                     style={miniPrimaryLinkButtonStyle}
                   >
                     Estado de cuenta

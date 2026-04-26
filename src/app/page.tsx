@@ -54,7 +54,7 @@ const moduleCategories = {
     items: [
       { title: "Caja", icon: "💵", href: "/admin/caja", desc: "Flujo de efectivo" },
       { title: "Cobranza", icon: "🧾", href: "/cobranza", desc: "Cobrar tickets" },
-      { title: "CxC", icon: "📒", href: "/admin/cxc", desc: "Cuentas por cobrar" },
+      { title: "CxC", icon: "📒", href: "/cxc", desc: "Cuentas por cobrar" },
       { title: "Gastos Externos", icon: "📊", href: "/admin/gastos", desc: "Gastos fuera de caja" },
     ],
   },

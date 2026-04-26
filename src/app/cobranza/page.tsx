@@ -1287,7 +1287,7 @@ if (cashError) {
             </button>
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
-            <Link href="/admin/cxc" style={secondaryButtonStyle}>CxC</Link>
+            <Link href="/cxc" style={secondaryButtonStyle}>CxC</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
             <Link href="/admin/caja" style={secondaryButtonStyle}>Caja</Link>
           </div>
