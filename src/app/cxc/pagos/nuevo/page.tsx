@@ -94,10 +94,19 @@ export default function NuevoPagoCxcPage() {
   async function loadCustomers() {
     setLoading(true);
 
+    // Traer clientes que tengan notas abiertas (con saldo > 0), no solo los de crédito activo
+    const { data: notesWithBalance } = await supabase
+      .from("cxc_notes")
+      .select("customer_id")
+      .eq("status", "abierta")
+      .gt("balance_due", 0);
+
+    const customerIdsWithBalance = [...new Set((notesWithBalance || []).map((n: any) => n.customer_id).filter(Boolean))];
+
     const { data, error } = await supabase
       .from("customers")
       .select("id, name, phone, email, credit_enabled, credit_days")
-      .eq("credit_enabled", true)
+      .in("id", customerIdsWithBalance.length > 0 ? customerIdsWithBalance : ["__none__"])
       .order("name", { ascending: true });
 
     if (error) {
@@ -309,7 +318,7 @@ if (cashMovementError) {
               <div style={panelHeaderStyle}>
                 <div>
                   <h2 style={panelTitleStyle}>1. Cliente</h2>
-                  <p style={panelSubtitleStyle}>Busca un cliente con crédito activo</p>
+                  <p style={panelSubtitleStyle}>Busca un cliente con saldo pendiente</p>
                 </div>
               </div>
 
