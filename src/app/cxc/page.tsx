@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 
+function money(n: number) {
+  return Math.ceil(n).toLocaleString("en-US");
+}
+
 type Customer = {
   id: string;
   name: string;
@@ -378,12 +382,12 @@ export default function AdminCxcPage() {
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Saldo pendiente</div>
-            <div style={summaryValueStyle}>${Math.ceil(stats.totalDue)}</div>
+            <div style={summaryValueStyle}>${money(stats.totalDue)}</div>
           </div>
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Saldo vencido</div>
-            <div style={summaryValueStyle}>${Math.ceil(stats.overdueDue)}</div>
+            <div style={summaryValueStyle}>${money(stats.overdueDue)}</div>
           </div>
         </div>
 
@@ -443,7 +447,7 @@ export default function AdminCxcPage() {
 
                       <div style={customerMetaWrapStyle}>
                         <span style={metaPillStyle}>
-                          Saldo: <b>${Math.ceil(customer.total_due)}</b>
+                          Saldo: <b>${money(customer.total_due)}</b>
                         </span>
 
                         <span style={metaPillStyle}>
@@ -459,7 +463,7 @@ export default function AdminCxcPage() {
                         </span>
 
                         <span style={metaPillStyle}>
-                          Límite: <b>${Math.ceil(customer.credit_limit)}</b>
+                          Límite: <b>${money(customer.credit_limit)}</b>
                         </span>
                       </div>
 
@@ -473,7 +477,7 @@ export default function AdminCxcPage() {
 
                       {customer.overdue_due > 0 ? (
                         <div style={dangerTextStyle}>
-                          Vencido: ${Math.ceil(customer.overdue_due)}
+                          Vencido: ${money(customer.overdue_due)}
                         </div>
                       ) : null}
                     </div>
@@ -533,16 +537,16 @@ export default function AdminCxcPage() {
                               Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
                             </div>
                             <div style={metaPillStyle}>
-                              Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
+                              Total: <b>${money(Number(note.total_amount || 0))}</b>
                             </div>
                             <div style={metaPillStyle}>
-                              Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
+                              Saldo: <b>${money(Number(note.balance_due || 0))}</b>
                             </div>
                           </div>
 
                           {Number(note.discount_amount || 0) > 0 ? (
                             <div style={metaTextStyle}>
-                              Descuento aplicado: ${Math.ceil(Number(note.discount_amount || 0))}
+                              Descuento aplicado: ${money(Number(note.discount_amount || 0))}
                             </div>
                           ) : null}
 
@@ -627,7 +631,7 @@ export default function AdminCxcPage() {
                       </div>
                     </div>
                     <div style={{ fontWeight: 800, color: COLORS.success, fontSize: 18 }}>
-                      ${Math.ceil(Number(p.amount))}
+                      ${money(Number(p.amount))}
                     </div>
                   </div>
                 ))}

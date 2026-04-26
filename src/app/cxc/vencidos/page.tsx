@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 
+function money(n: number) { return Math.ceil(n).toLocaleString("en-US"); }
+
 type Customer = {
   id: string;
   name: string;
@@ -261,7 +263,7 @@ export default function CxcVencidosPage() {
 
           <div style={summaryCardStyle}>
             <div style={summaryLabelStyle}>Monto vencido</div>
-            <div style={summaryValueStyle}>${Math.ceil(stats.overdueAmount)}</div>
+            <div style={summaryValueStyle}>${money(stats.overdueAmount)}</div>
           </div>
         </div>
 
@@ -315,7 +317,7 @@ export default function CxcVencidosPage() {
 
                     <div style={metaWrapStyle}>
                       <span style={metaPillStyle}>
-                        Monto vencido: <b>${Math.ceil(customer.overdue_amount)}</b>
+                        Monto vencido: <b>${money(customer.overdue_amount)}</b>
                       </span>
                       <span style={metaPillStyle}>
                         Notas: <b>{customer.overdue_notes}</b>
@@ -326,7 +328,7 @@ export default function CxcVencidosPage() {
                     </div>
 
                     <div style={metaTextStyle}>
-                      Límite: <b>${Math.ceil(customer.credit_limit)}</b> · Días:{" "}
+                      Límite: <b>${money(customer.credit_limit)}</b> · Días:{" "}
                       <b>{customer.credit_days}</b>
                     </div>
                   </div>
@@ -380,13 +382,13 @@ export default function CxcVencidosPage() {
 
                     <div style={metaWrapStyle}>
                       <span style={metaPillStyle}>
-                        Total: <b>${Math.ceil(Number(note.total_amount || 0))}</b>
+                        Total: <b>${money(Number(note.total_amount || 0))}</b>
                       </span>
                       <span style={metaPillStyle}>
-                        Saldo: <b>${Math.ceil(Number(note.balance_due || 0))}</b>
+                        Saldo: <b>${money(Number(note.balance_due || 0))}</b>
                       </span>
                       <span style={metaPillStyle}>
-                        Descuento: <b>${Math.ceil(Number(note.discount_amount || 0))}</b>
+                        Descuento: <b>${money(Number(note.discount_amount || 0))}</b>
                       </span>
                     </div>
 

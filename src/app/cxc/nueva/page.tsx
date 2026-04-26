@@ -70,9 +70,7 @@ function addDaysToDate(dateString: string, days: number) {
   return `${year}-${month}-${day}`;
 }
 
-function money(value: number) {
-  return String(Math.ceil(Number(value || 0)));
-}
+function money(n: number) { return Math.ceil(n).toLocaleString("en-US"); }
 
 function makeNoteNumber() {
   const now = new Date();
@@ -334,10 +332,10 @@ export default function NuevaNotaCxcPage() {
         if (projected > creditLimit) {
           alert(
             `⚠️ Límite de crédito excedido\n\n` +
-              `Límite: $${Math.ceil(creditLimit)}\n` +
-              `Debe actualmente: $${Math.ceil(currentBalance)}\n` +
-              `Nuevo total: $${Math.ceil(total)}\n\n` +
-              `Se pasaría a: $${Math.ceil(projected)}`
+              `Límite: $${money(creditLimit)}\n` +
+              `Debe actualmente: $${money(currentBalance)}\n` +
+              `Nuevo total: $${money(total)}\n\n` +
+              `Se pasaría a: $${money(projected)}`
           );
           setSaving(false);
           return;

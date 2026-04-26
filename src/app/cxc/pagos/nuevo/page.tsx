@@ -45,9 +45,7 @@ const COLORS = {
   shadow: "0 10px 30px rgba(91, 25, 15, 0.08)",
 };
 
-function money(value?: number | null) {
-  return String(Math.ceil(Number(value || 0)));
-}
+function money(n: number) { return Math.ceil(n).toLocaleString("en-US"); }
 
 function todayDateString() {
   const now = new Date();
