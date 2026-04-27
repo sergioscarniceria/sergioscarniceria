@@ -41,9 +41,9 @@ const moduleCategories = {
     items: [
       { title: "Admin clientes", icon: "👥", href: "/admin/clientes", desc: "Altas y control" },
       { title: "Admin productos", icon: "🥩", href: "/admin/productos", desc: "Catálogo y precios" },
-      { title: "Inventario", icon: "📦", href: "/admin/inventario/complementos", desc: "Bodega y complementos" },
-      { title: "Compras", icon: "🛒", href: "/admin/inventario/compras", desc: "Órdenes a proveedores" },
-      { title: "Auditoría", icon: "✅", href: "/admin/inventario/auditoria", desc: "Conteo físico y pérdidas" },
+      { title: "Inventario", icon: "📦", href: "/inventario/complementos", desc: "Bodega y complementos" },
+      { title: "Compras", icon: "🛒", href: "/inventario/compras", desc: "Órdenes a proveedores" },
+      { title: "Auditoría", icon: "✅", href: "/inventario/auditoria", desc: "Conteo físico y pérdidas" },
       { title: "Dashboard asistencia", icon: "📅", href: "/admin/dashboard/asistencia", desc: "Control de asistencia" },
     ],
   },
