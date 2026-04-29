@@ -462,6 +462,46 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
+async function deleteTicket(id: string) {
+  const pin = prompt("Ingresa el PIN de administrador para eliminar este ticket:");
+  if (!pin) return;
+
+  try {
+    const verifyRes = await fetch("/api/auth/verify-pin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+
+    if (!verifyRes.ok) {
+      alert("PIN incorrecto");
+      return;
+    }
+
+    const verifyData = await verifyRes.json();
+    if (verifyData.role !== "admin") {
+      alert("Solo el administrador puede eliminar tickets");
+      return;
+    }
+  } catch {
+    alert("Error verificando PIN");
+    return;
+  }
+
+  if (!confirm("¿Seguro que quieres eliminar este ticket? Esta acción no se puede deshacer.")) return;
+
+  // Eliminar items y luego el order
+  await supabase.from("order_items").delete().eq("order_id", id);
+  const { error } = await supabase.from("orders").delete().eq("id", id);
+
+  if (error) {
+    alert("Error al eliminar: " + error.message);
+    return;
+  }
+
+  setTickets((prev) => prev.filter((t) => t.id !== id));
+}
+
 async function deliverTicket(id: string) {
   const { error } = await supabase
     .from("orders")
@@ -1130,18 +1170,27 @@ const paidTickets = useMemo(() => {
               <div style={ticketBottomStyle}>
                 <b>${money(getTicketTotal(ticket))}</b>
 
-                {ticket.payment_status === "pagado" ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {ticket.payment_status === "pagado" ? (
+                    <button
+                      onClick={() => deliverTicket(ticket.id)}
+                      style={deliverButtonStyle}
+                    >
+                      Entregar pedido
+                    </button>
+                  ) : (
+                    <div style={pendingBadgeStyle}>
+                      Pendiente de pago
+                    </div>
+                  )}
                   <button
-                    onClick={() => deliverTicket(ticket.id)}
-                    style={deliverButtonStyle}
+                    onClick={() => deleteTicket(ticket.id)}
+                    style={{ background: "none", border: `1px solid rgba(180,35,24,0.2)`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#b42318", fontWeight: 600 }}
+                    title="Eliminar ticket (admin)"
                   >
-                    Entregar pedido
+                    🗑
                   </button>
-                ) : (
-                  <div style={pendingBadgeStyle}>
-                    Pendiente de pago
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           ))}
@@ -1180,11 +1229,20 @@ const paidTickets = useMemo(() => {
 
               <div style={{ ...ticketBottomStyle, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                 <b style={{ fontSize: 18 }}>${money(getTicketTotal(ticket))}</b>
-                <button onClick={() => deliverTicket(ticket.id)} style={{
-                  padding: "14px 24px", borderRadius: 14, border: "none",
-                  background: "#1f7a4d", color: "white",
-                  fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48,
-                }}>Entregar</button>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button onClick={() => deliverTicket(ticket.id)} style={{
+                    padding: "14px 24px", borderRadius: 14, border: "none",
+                    background: "#1f7a4d", color: "white",
+                    fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48,
+                  }}>Entregar</button>
+                  <button
+                    onClick={() => deleteTicket(ticket.id)}
+                    style={{ background: "none", border: `1px solid rgba(180,35,24,0.2)`, borderRadius: 10, padding: "6px 10px", cursor: "pointer", fontSize: 13, color: "#b42318", fontWeight: 600 }}
+                    title="Eliminar ticket (admin)"
+                  >
+                    🗑
+                  </button>
+                </div>
               </div>
             </div>
           ))}
