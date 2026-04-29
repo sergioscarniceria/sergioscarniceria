@@ -171,10 +171,16 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Cambiar cliente del ticket
+  const [changingCustomer, setChangingCustomer] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState("");
+
   // Reset edit mode cuando cambia el ticket seleccionado
   useEffect(() => {
     setEditMode(false);
     setEditedItems([]);
+    setChangingCustomer(false);
+    setCustomerSearch("");
   }, [selectedTicket?.id]);
 
   // Modo fullscreen POS
@@ -710,6 +716,19 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     } finally {
       setSavingEdit(false);
     }
+  }
+
+  async function changeTicketCustomer(customerId: string | null, customerNameVal: string) {
+    if (!selectedTicket) return;
+    const { error } = await supabase
+      .from("orders")
+      .update({ customer_id: customerId, customer_name: customerNameVal })
+      .eq("id", selectedTicket.id);
+    if (error) { alert("Error al cambiar cliente: " + error.message); return; }
+    setSelectedTicket({ ...selectedTicket, customer_id: customerId, customer_name: customerNameVal });
+    setTickets((prev) => prev.map((t) => t.id === selectedTicket.id ? { ...t, customer_id: customerId, customer_name: customerNameVal } : t));
+    setChangingCustomer(false);
+    setCustomerSearch("");
   }
 
   async function sendTicketToCredit() {
@@ -1499,7 +1518,47 @@ if (cashError) {
                         <div style={ticketTitleStyle}>{ticketFolio(selectedTicket.id)}</div>
                         <div style={ticketMetaStyle}>
                           Cliente: <b>{selectedTicket.customer_name || "Mostrador"}</b>
+                          {!editMode && selectedTicket.payment_status !== "pagado" && (
+                            <button
+                              onClick={() => { setChangingCustomer(!changingCustomer); setCustomerSearch(""); }}
+                              style={{ marginLeft: 8, background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "2px 10px", cursor: "pointer", fontSize: 12, color: COLORS.primary, fontWeight: 600 }}
+                            >
+                              {changingCustomer ? "✕" : "Cambiar"}
+                            </button>
+                          )}
                         </div>
+                        {changingCustomer && (
+                          <div style={{ margin: "6px 0 8px", padding: 10, background: COLORS.bgSoft, borderRadius: 12, border: `1px solid ${COLORS.border}` }}>
+                            <input
+                              type="text"
+                              placeholder="Buscar cliente..."
+                              value={customerSearch}
+                              onChange={(e) => setCustomerSearch(e.target.value)}
+                              autoFocus
+                              style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.border}`, fontSize: 14, marginBottom: 6, boxSizing: "border-box" }}
+                            />
+                            <div style={{ maxHeight: 150, overflowY: "auto" }}>
+                              <button
+                                onClick={() => changeTicketCustomer(null, "")}
+                                style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, borderRadius: 8, color: COLORS.muted }}
+                              >
+                                Mostrador (sin cliente)
+                              </button>
+                              {customers
+                                .filter((c) => !customerSearch || c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+                                .slice(0, 15)
+                                .map((c) => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => changeTicketCustomer(c.id, c.name)}
+                                    style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", background: selectedTicket.customer_id === c.id ? "rgba(123,34,24,0.10)" : "transparent", cursor: "pointer", fontSize: 13, borderRadius: 8, fontWeight: selectedTicket.customer_id === c.id ? 700 : 400 }}
+                                  >
+                                    {c.name}
+                                  </button>
+                                ))}
+                            </div>
+                          </div>
+                        )}
                         <div style={ticketMetaStyle}>
                           Estado: <b>{selectedTicket.payment_status || "pendiente"}</b>
                         </div>
