@@ -451,11 +451,6 @@ export default function CajaPage() {
     await loadMovements();
   }
 
-  // Filtered movements
-  const activeMovements = useMemo(() => {
-    return movements.filter((m) => !m.is_cancelled);
-  }, [movements]);
-
   const cancelledMovements = useMemo(() => {
     return movements.filter((m) => m.is_cancelled);
   }, [movements]);
@@ -484,8 +479,18 @@ export default function CajaPage() {
   }, [dateFrom, dateTo]);
 
   // ─── Computed stats ────────────────────────────────────────
+  // Si ya hay un corte de hoy, solo contar movimientos DESPUÉS de ese corte
+  const activeMovements = useMemo(() => {
+    const all = movements.filter((m) => !m.is_cancelled);
+    if (todayClosure?.created_at) {
+      const cutoff = todayClosure.created_at;
+      return all.filter((m) => m.created_at && m.created_at > cutoff);
+    }
+    return all;
+  }, [movements, todayClosure]);
+
   const stats = useMemo(() => {
-    const active = movements.filter((m) => !m.is_cancelled);
+    const active = activeMovements;
     const ventas = active.filter((m) => m.type === "venta");
     const cxc = active.filter((m) => m.type === "cxc_pago");
 
@@ -506,8 +511,13 @@ export default function CajaPage() {
     const totalTransferencia = ventasTransferencia + cxcTransferencia;
     const totalGeneral = totalEfectivoIngreso + totalTarjeta + totalTransferencia;
 
-    const totalGastos = expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
-    const fondoInicial = todayOpening?.initial_amount || 0;
+    // Filtrar gastos posteriores al último corte (si existe)
+    const activeExpenses = todayClosure?.created_at
+      ? expenses.filter((e) => e.created_at && e.created_at > todayClosure.created_at!)
+      : expenses;
+    const totalGastos = activeExpenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+    // Si ya hay un corte previo, el fondo inicial del siguiente periodo es el contado del corte anterior
+    const fondoInicial = todayClosure?.counted_cash != null ? Number(todayClosure.counted_cash) : (todayOpening?.initial_amount || 0);
     const efectivoEsperado = fondoInicial + totalEfectivoIngreso - totalGastos;
 
     const ticketCount = ventas.length;
@@ -523,7 +533,7 @@ export default function CajaPage() {
       totalMovements: active.length,
       cancelledCount: movements.filter((m) => m.is_cancelled).length,
     };
-  }, [movements, expenses, todayOpening]);
+  }, [activeMovements, expenses, todayOpening, todayClosure]);
 
   // Fase 2 — Lista de cajeras únicas que han movido caja en el rango
   const cashiersInRange = useMemo(() => {
@@ -770,16 +780,17 @@ export default function CajaPage() {
       payload[d.key] = Number(closureDenoms[d.key] || 0);
     }
 
-    if (todayClosure?.id) {
-      const { error } = await supabase.from("cash_closures").update(payload).eq("id", todayClosure.id);
-      if (error) { alert("Error al actualizar cierre"); console.log(error); setSaving(false); return; }
-    } else {
-      const { error } = await supabase.from("cash_closures").insert([payload]);
-      if (error) { alert("Error al guardar cierre"); console.log(error); setSaving(false); return; }
-    }
+    // Siempre insertar un nuevo registro de cierre (cada corte es independiente)
+    const { error } = await supabase.from("cash_closures").insert([payload]);
+    if (error) { alert("Error al guardar cierre"); console.log(error); setSaving(false); return; }
 
     alert("Cierre de caja guardado");
-    await loadTodayClosure();
+    // Recargar para que el siguiente corte solo cuente movimientos nuevos
+    await Promise.all([loadTodayClosure(), loadClosureHistory()]);
+    // Limpiar formulario para el siguiente corte
+    setCountedCash("");
+    setClosureNotes("");
+    setClosureDenoms({});
     setSaving(false);
   }
 
@@ -978,7 +989,7 @@ export default function CajaPage() {
                     <div style={{ fontSize: 14, fontWeight: 700 }}>Efectivo que debe haber en caja ahora</div>
                   </div>
                   <div style={{ fontSize: 12, opacity: 0.75 }}>
-                    {todayClosure ? `Cierre guardado · diferencia ${Number(todayClosure.difference || 0) >= 0 ? "+" : ""}$${money(todayClosure.difference)}` : "Sin cierre aún"}
+                    {todayClosure ? `Último corte: ${fmtDateTime(todayClosure.created_at)} · dif ${Number(todayClosure.difference || 0) >= 0 ? "+" : ""}$${money(todayClosure.difference)}` : "Sin cierre aún"}
                   </div>
                 </div>
                 <div style={{ fontSize: 46, fontWeight: 800, lineHeight: 1, marginBottom: 12 }}>
@@ -1482,7 +1493,7 @@ export default function CajaPage() {
                 </button>
               )}
               <button onClick={saveClosure} disabled={saving} style={btnPri}>
-                {saving ? "Guardando..." : todayClosure ? "Actualizar cierre" : "Guardar cierre"}
+                {saving ? "Guardando..." : todayClosure ? "Nuevo corte de caja" : "Guardar cierre"}
               </button>
             </div>
 
