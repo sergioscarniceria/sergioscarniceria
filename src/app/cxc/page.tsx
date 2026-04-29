@@ -116,7 +116,7 @@ export default function AdminCxcPage() {
   const [noteItemsMap, setNoteItemsMap] = useState<Record<string, CxcNoteItem[]>>({});
   const [loadingItems, setLoadingItems] = useState<string | null>(null);
   const [showMovimientos, setShowMovimientos] = useState(false);
-  const [recentPayments, setRecentPayments] = useState<{ id: string; customer_name: string; amount: number; payment_method?: string | null; payment_date: string; notes?: string | null }[]>([]);
+  const [recentMovements, setRecentMovements] = useState<{ id: string; type: "pago" | "nota"; customer_name: string; amount: number; detail: string; date: string }[]>([]);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
 
   useEffect(() => {
@@ -126,19 +126,47 @@ export default function AdminCxcPage() {
   async function loadRecentPayments() {
     setLoadingMovimientos(true);
     setShowMovimientos(true);
-    const { data, error } = await supabase
-      .from("cxc_payments")
-      .select("id, customer_name, amount, payment_method, payment_date, notes")
-      .order("payment_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(25);
 
-    if (error) {
-      console.log(error);
+    const [paymentsRes, notesRes] = await Promise.all([
+      supabase
+        .from("cxc_payments")
+        .select("id, customer_name, amount, payment_method, payment_date, notes")
+        .order("created_at", { ascending: false })
+        .limit(20),
+      supabase
+        .from("cxc_notes")
+        .select("id, customer_name, total_amount, note_number, note_date, notes, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+
+    if (paymentsRes.error || notesRes.error) {
+      console.log(paymentsRes.error, notesRes.error);
       alert("No se pudieron cargar los movimientos");
-    } else {
-      setRecentPayments(data || []);
+      setLoadingMovimientos(false);
+      return;
     }
+
+    const payments = (paymentsRes.data || []).map((p: any) => ({
+      id: `pay-${p.id}`,
+      type: "pago" as const,
+      customer_name: p.customer_name,
+      amount: Number(p.amount || 0),
+      detail: `${p.payment_method || "efectivo"}${p.notes ? ` · ${p.notes}` : ""}`,
+      date: p.payment_date,
+    }));
+
+    const newNotes = (notesRes.data || []).map((n: any) => ({
+      id: `note-${n.id}`,
+      type: "nota" as const,
+      customer_name: n.customer_name,
+      amount: Number(n.total_amount || 0),
+      detail: `${n.note_number || "Sin folio"}${n.notes ? ` · ${n.notes}` : ""}`,
+      date: n.note_date || (n.created_at ? n.created_at.slice(0, 10) : ""),
+    }));
+
+    const combined = [...payments, ...newNotes].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
+    setRecentMovements(combined);
     setLoadingMovimientos(false);
   }
 
@@ -617,21 +645,25 @@ export default function AdminCxcPage() {
 
             {loadingMovimientos ? (
               <div style={{ padding: 20, textAlign: "center", color: COLORS.muted }}>Cargando...</div>
-            ) : recentPayments.length === 0 ? (
-              <div style={{ padding: 20, textAlign: "center", color: COLORS.muted }}>No hay pagos registrados</div>
+            ) : recentMovements.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: COLORS.muted }}>No hay movimientos registrados</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {recentPayments.map((p) => (
-                  <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 16, background: COLORS.bgSoft, border: `1px solid ${COLORS.border}` }}>
+                {recentMovements.map((m) => (
+                  <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderRadius: 16, background: m.type === "nota" ? "rgba(180,35,24,0.05)" : COLORS.bgSoft, border: `1px solid ${COLORS.border}` }}>
                     <div>
-                      <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 15 }}>{p.customer_name}</div>
-                      <div style={{ color: COLORS.muted, fontSize: 13 }}>
-                        {formatDate(p.payment_date)} · {p.payment_method || "efectivo"}
-                        {p.notes ? ` · ${p.notes}` : ""}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: m.type === "pago" ? "rgba(31,122,77,0.15)" : "rgba(180,35,24,0.12)", color: m.type === "pago" ? COLORS.success : COLORS.danger }}>
+                          {m.type === "pago" ? "Abono" : "Nota nueva"}
+                        </span>
+                        <span style={{ fontWeight: 700, color: COLORS.text, fontSize: 15 }}>{m.customer_name}</span>
+                      </div>
+                      <div style={{ color: COLORS.muted, fontSize: 13, marginTop: 2 }}>
+                        {formatDate(m.date)} · {m.detail}
                       </div>
                     </div>
-                    <div style={{ fontWeight: 800, color: COLORS.success, fontSize: 18 }}>
-                      ${money(Number(p.amount))}
+                    <div style={{ fontWeight: 800, color: m.type === "pago" ? COLORS.success : COLORS.danger, fontSize: 18, whiteSpace: "nowrap" }}>
+                      {m.type === "pago" ? "+" : "-"}${money(m.amount)}
                     </div>
                   </div>
                 ))}
