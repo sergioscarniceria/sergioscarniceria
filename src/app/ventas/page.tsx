@@ -462,6 +462,14 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
   function removeItem(id: string) {
     setItems((prev) => prev.filter((i) => i.id !== id));
   }
+
+  function changePieceQty(id: string, delta: number) {
+    setItems((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      const newQty = Math.max(1, Number(item.quantity || 0) + delta);
+      return { ...item, quantity: newQty };
+    }));
+  }
 async function deleteTicket(id: string) {
   const pin = prompt("Ingresa el PIN de administrador para eliminar este ticket:");
   if (!pin) return;
@@ -1068,10 +1076,19 @@ const paidTickets = useMemo(() => {
       </div>
     </div>
 
-    <div style={orderItemMetaStyle}>
-      {item.sale_type === "pieza" && item.is_fixed_price_piece
-        ? `${item.quantity} pieza(s) × $${money(item.price)}`
-        : `${item.kilos} kg × $${money(item.price)}`}
+    <div style={{ ...orderItemMetaStyle, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <span>
+        {item.sale_type === "pieza" && item.is_fixed_price_piece
+          ? `${item.quantity} pieza(s) × $${money(item.price)}`
+          : `${item.kilos} kg × $${money(item.price)}`}
+      </span>
+      {item.sale_type === "pieza" && item.is_fixed_price_piece && (
+        <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button onClick={() => changePieceQty(item.id, -1)} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.bgSoft, fontSize: 20, fontWeight: 700, cursor: "pointer", color: COLORS.primary, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+          <span style={{ fontWeight: 700, fontSize: 16, minWidth: 24, textAlign: "center" as const }}>{item.quantity}</span>
+          <button onClick={() => changePieceQty(item.id, 1)} style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: COLORS.bgSoft, fontSize: 20, fontWeight: 700, cursor: "pointer", color: COLORS.success, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+        </span>
+      )}
     </div>
 
               <button
