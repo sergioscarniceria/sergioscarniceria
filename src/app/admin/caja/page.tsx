@@ -7,7 +7,17 @@ import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
-// jsPDF se importa dinámicamente en exportClosurePDF() para evitar error SSR
+// jsPDF se carga desde CDN para evitar error SSR con Turbopack/fflate
+function loadJsPDF(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).jspdf) { resolve((window as any).jspdf.jsPDF); return; }
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js";
+    s.onload = () => resolve((window as any).jspdf.jsPDF);
+    s.onerror = () => reject(new Error("No se pudo cargar jsPDF"));
+    document.head.appendChild(s);
+  });
+}
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {
@@ -858,7 +868,7 @@ export default function CajaPage() {
 
   // ─── Exportar cierre a PDF ─────────────────────────────────
   async function exportClosurePDF(closure?: CashClosure | null) {
-    const { jsPDF } = await import("jspdf");
+    const jsPDF = await loadJsPDF();
     const supabaseRef = supabase;
     const cl = closure || todayClosure;
     // Si no hay cierre, usar stats en vivo
