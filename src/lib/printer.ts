@@ -421,6 +421,13 @@ export type CashCutData = {
   countedCash?: number;
   difference?: number;
   ticketCount: number;
+  // Nuevos campos para desglose
+  creditoNuevo?: number;      // Monto enviado a CxC (crédito nuevo del día)
+  cobrosCxC?: number;          // Monto cobrado de CxC existente (abonos)
+  cancelaciones?: number;      // Número de tickets cancelados
+  montoCancelado?: number;     // Monto total cancelado
+  expensesList?: { concept: string; amount: number }[];  // Desglose de gastos
+  fondoInicial?: number;       // Fondo inicial de caja
 };
 
 export function buildCashCutBytes(data: CashCutData): number[] {
@@ -447,6 +454,12 @@ export function buildCashCutBytes(data: CashCutData): number[] {
   }
   b.push(...separatorLine("="));
 
+  // Fondo inicial
+  if (data.fondoInicial != null) {
+    b.push(...twoColumns("Fondo inicial:", `$${money(data.fondoInicial)}`));
+    b.push(...separatorLine("-"));
+  }
+
   // Ventas
   b.push(...CMD.BOLD_ON);
   b.push(...line("RESUMEN DE VENTAS"));
@@ -456,7 +469,7 @@ export function buildCashCutBytes(data: CashCutData): number[] {
   b.push(...twoColumns("Total ventas:", `$${money(data.totalSales)}`));
   b.push(...line(""));
 
-  // Desglose
+  // Desglose por método
   b.push(...CMD.BOLD_ON);
   b.push(...line("DESGLOSE POR METODO"));
   b.push(...CMD.BOLD_OFF);
@@ -464,9 +477,49 @@ export function buildCashCutBytes(data: CashCutData): number[] {
   b.push(...twoColumns("Efectivo:", `$${money(data.totalCash)}`));
   b.push(...twoColumns("Tarjeta:", `$${money(data.totalCard)}`));
   b.push(...twoColumns("Transferencia:", `$${money(data.totalTransfer)}`));
-  b.push(...twoColumns("Credito (CxC):", `$${money(data.totalCxC)}`));
+  b.push(...line(""));
+
+  // Crédito
+  b.push(...CMD.BOLD_ON);
+  b.push(...line("CREDITO (CxC)"));
+  b.push(...CMD.BOLD_OFF);
   b.push(...separatorLine("-"));
-  b.push(...twoColumns("Gastos/Salidas:", `-$${money(data.totalExpenses)}`));
+  if (data.creditoNuevo != null) {
+    b.push(...twoColumns("Credito nuevo:", `$${money(data.creditoNuevo)}`));
+  }
+  if (data.cobrosCxC != null) {
+    b.push(...twoColumns("Cobros CxC:", `$${money(data.cobrosCxC)}`));
+  }
+  if (data.creditoNuevo == null && data.cobrosCxC == null) {
+    b.push(...twoColumns("Total CxC:", `$${money(data.totalCxC)}`));
+  }
+  b.push(...line(""));
+
+  // Cancelaciones
+  if (data.cancelaciones && data.cancelaciones > 0) {
+    b.push(...CMD.BOLD_ON);
+    b.push(...line("CANCELACIONES"));
+    b.push(...CMD.BOLD_OFF);
+    b.push(...separatorLine("-"));
+    b.push(...twoColumns("Tickets cancelados:", String(data.cancelaciones)));
+    b.push(...twoColumns("Monto cancelado:", `$${money(data.montoCancelado ?? 0)}`));
+    b.push(...line(""));
+  }
+
+  // Gastos
+  b.push(...CMD.BOLD_ON);
+  b.push(...line("GASTOS / SALIDAS"));
+  b.push(...CMD.BOLD_OFF);
+  b.push(...separatorLine("-"));
+  if (data.expensesList && data.expensesList.length > 0) {
+    for (const exp of data.expensesList) {
+      b.push(...twoColumns(exp.concept, `-$${money(exp.amount)}`));
+    }
+    b.push(...separatorLine("-"));
+  }
+  b.push(...CMD.BOLD_ON);
+  b.push(...twoColumns("Total gastos:", `-$${money(data.totalExpenses)}`));
+  b.push(...CMD.BOLD_OFF);
   b.push(...line(""));
 
   // Caja

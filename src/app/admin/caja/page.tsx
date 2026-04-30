@@ -205,6 +205,7 @@ export default function CajaPage() {
   const [todayOpening, setTodayOpening] = useState<CashOpening | null>(null);
   const [expenses, setExpenses] = useState<CashExpense[]>([]);
   const [weekData, setWeekData] = useState<Movement[]>([]);
+  const [weekExpenses, setWeekExpenses] = useState<CashExpense[]>([]);
 
   // Closure form
   const [countedCash, setCountedCash] = useState("");
@@ -243,6 +244,7 @@ export default function CajaPage() {
 
   // Cancelled view
   const [showCancelled, setShowCancelled] = useState(false);
+  const [showCancelPanel, setShowCancelPanel] = useState(false);
 
   // Fase 2 — Filtros de turno/cajera
   const [filterCashier, setFilterCashier] = useState<string>("__all__");
@@ -470,10 +472,27 @@ export default function CajaPage() {
     setWeekData((data as Movement[]) || []);
   }, []);
 
+  const loadWeekExpenses = useCallback(async () => {
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 6);
+      const start = new Date(`${startDate.getFullYear()}-${`${startDate.getMonth()+1}`.padStart(2,"0")}-${`${startDate.getDate()}`.padStart(2,"0")}T00:00:00`).toISOString();
+      const end = new Date(`${endDate.getFullYear()}-${`${endDate.getMonth()+1}`.padStart(2,"0")}-${`${endDate.getDate()}`.padStart(2,"0")}T23:59:59`).toISOString();
+      const { data } = await supabase
+        .from("cash_expenses")
+        .select("*")
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .order("created_at", { ascending: true });
+      setWeekExpenses((data as CashExpense[]) || []);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([loadMovements(), loadTodayClosure(), loadClosureHistory(), loadOpening(), loadExpenses(), loadWeekData()]);
+      await Promise.all([loadMovements(), loadTodayClosure(), loadClosureHistory(), loadOpening(), loadExpenses(), loadWeekData(), loadWeekExpenses()]);
       setLoading(false);
     })();
   }, [dateFrom, dateTo]);
@@ -592,27 +611,38 @@ export default function CajaPage() {
 
   // Week report data
   const weekReport = useMemo(() => {
-    const days: Record<string, { ventas: number; cxc: number; efectivo: number; tarjeta: number; transferencia: number; count: number }> = {};
+    const days: Record<string, { ventas: number; cxc: number; efectivo: number; tarjeta: number; transferencia: number; count: number; gastos: number; cancelaciones: number; montoCancelado: number }> = {};
     const endDate = new Date();
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(endDate.getDate() - i);
       const key = `${d.getFullYear()}-${`${d.getMonth()+1}`.padStart(2,"0")}-${`${d.getDate()}`.padStart(2,"0")}`;
-      days[key] = { ventas: 0, cxc: 0, efectivo: 0, tarjeta: 0, transferencia: 0, count: 0 };
+      days[key] = { ventas: 0, cxc: 0, efectivo: 0, tarjeta: 0, transferencia: 0, count: 0, gastos: 0, cancelaciones: 0, montoCancelado: 0 };
     }
     for (const m of weekData) {
       if (!m.created_at) continue;
       const key = m.created_at.slice(0, 10);
       if (!days[key]) continue;
       const amt = Number(m.amount || 0);
+      if (m.is_cancelled) {
+        days[key].cancelaciones++;
+        days[key].montoCancelado += amt;
+        continue;
+      }
       if (m.type === "venta") { days[key].ventas += amt; days[key].count++; }
       if (m.type === "cxc_pago") days[key].cxc += amt;
       if (m.payment_method === "efectivo") days[key].efectivo += amt;
       if (m.payment_method === "tarjeta") days[key].tarjeta += amt;
       if (m.payment_method === "transferencia") days[key].transferencia += amt;
     }
+    // Add expenses from weekExpenses
+    for (const e of weekExpenses) {
+      if (!e.created_at) continue;
+      const key = e.created_at.slice(0, 10);
+      if (days[key]) days[key].gastos += Number(e.amount || 0);
+    }
     return Object.entries(days).map(([date, vals]) => ({ date, ...vals, total: vals.ventas + vals.cxc }));
-  }, [weekData]);
+  }, [weekData, weekExpenses]);
 
   const weekMax = useMemo(() => Math.max(...weekReport.map((d) => d.total), 1), [weekReport]);
   const weekTotal = useMemo(() => weekReport.reduce((a, d) => a + d.total, 0), [weekReport]);
@@ -955,7 +985,7 @@ export default function CajaPage() {
         </div>
 
         {/* Date filter - show on resumen, gastos, historial, reportes */}
-        {(tab === "resumen" || tab === "gastos" || tab === "historial") && (
+        {(tab === "resumen" || tab === "gastos" || tab === "historial" || tab === "reportes") && (
           <div style={filterCard}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               <div>
@@ -1203,6 +1233,71 @@ export default function CajaPage() {
                 )
               )}
             </Panel>
+
+            {/* Panel de cancelaciones detalladas (colapsable) */}
+            {cancelledMovements.length > 0 && (() => {
+              const totalMontoCancelado = cancelledMovements.reduce((a, m) => a + Number(m.amount || 0), 0);
+              return (
+                <div style={{ marginTop: 18 }}>
+                  <button
+                    onClick={() => setShowCancelPanel(!showCancelPanel)}
+                    style={{
+                      width: "100%", padding: "14px 18px", borderRadius: 18,
+                      border: `1px solid rgba(180,35,24,0.18)`, background: "rgba(180,35,24,0.06)",
+                      cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: C.danger, fontSize: 15 }}>
+                      Cancelaciones del rango ({cancelledMovements.length})
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontWeight: 800, color: C.danger, fontSize: 16 }}>-${money(totalMontoCancelado)}</span>
+                      <span style={{ fontSize: 18, color: C.muted }}>{showCancelPanel ? "▲" : "▼"}</span>
+                    </span>
+                  </button>
+                  {showCancelPanel && (
+                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 18px 18px", padding: 14 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10, marginBottom: 14 }}>
+                        <div style={{ background: "rgba(180,35,24,0.08)", borderRadius: 14, padding: 12 }}>
+                          <div style={{ color: C.muted, fontSize: 12 }}>Total cancelaciones</div>
+                          <div style={{ color: C.danger, fontSize: 22, fontWeight: 800 }}>{cancelledMovements.length}</div>
+                        </div>
+                        <div style={{ background: "rgba(180,35,24,0.08)", borderRadius: 14, padding: 12 }}>
+                          <div style={{ color: C.muted, fontSize: 12 }}>Monto total</div>
+                          <div style={{ color: C.danger, fontSize: 22, fontWeight: 800 }}>-${money(totalMontoCancelado)}</div>
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gap: 10, maxHeight: 400, overflowY: "auto" }}>
+                        {cancelledMovements.map((m) => (
+                          <div key={m.id} style={{ padding: 12, borderRadius: 14, background: C.bgSoft, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C.danger}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: C.text, fontSize: 14 }}>
+                                  {typeName(m.type)} — {methodName(m.payment_method)}
+                                </div>
+                                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                                  {fmtDateTime(m.created_at)}
+                                  {m.cashier_name && <span> — {m.cashier_name}</span>}
+                                </div>
+                                <div style={{ color: C.danger, fontSize: 13, marginTop: 4, fontWeight: 700 }}>
+                                  Motivo: {m.cancel_reason || "Sin motivo"}
+                                </div>
+                                <div style={{ color: C.muted, fontSize: 12, marginTop: 2 }}>
+                                  Cancelo: <b>{m.cancelled_by || "—"}</b> — {fmtDateTime(m.cancelled_at)}
+                                </div>
+                              </div>
+                              <div style={{ ...amtBadge, background: C.danger, fontSize: 14, textDecoration: "line-through" }}>
+                                ${money(m.amount)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -1488,7 +1583,58 @@ export default function CajaPage() {
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
               {todayClosure && (
-                <button onClick={() => window.print()} style={btnSec}>
+                <button
+                  onClick={async () => {
+                    // Consultar crédito nuevo del rango (orders con payment_method=credito)
+                    const start = new Date(`${dateFrom}T00:00:00`).toISOString();
+                    const end = new Date(`${dateTo}T23:59:59`).toISOString();
+                    const { data: creditOrders } = await supabase
+                      .from("orders")
+                      .select("id, order_items(kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)")
+                      .eq("payment_method", "credito")
+                      .gte("created_at", start)
+                      .lte("created_at", end);
+                    let creditoNuevo = 0;
+                    for (const ord of (creditOrders || [])) {
+                      for (const it of (ord.order_items || [])) {
+                        const itAny = it as any;
+                        if (itAny.sale_type === "pieza" && itAny.is_fixed_price_piece) {
+                          creditoNuevo += (Number(itAny.quantity) || 0) * (Number(itAny.price) || 0);
+                        } else {
+                          const kg = Number(itAny.prepared_kilos || itAny.kilos || 0);
+                          creditoNuevo += kg * (Number(itAny.price) || 0);
+                        }
+                      }
+                    }
+
+                    const now = new Date();
+                    const cutData: CashCutData = {
+                      type: "cierre",
+                      cashier: todayClosure.closed_by || undefined,
+                      date: now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                      time: now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+                      totalSales: stats.totalVentas,
+                      totalCash: stats.totalEfectivoIngreso,
+                      totalCard: stats.totalTarjeta,
+                      totalTransfer: stats.totalTransferencia,
+                      totalCxC: stats.totalCxc,
+                      totalExpenses: stats.totalGastos,
+                      expectedCash: stats.efectivoEsperado,
+                      countedCash: Number(todayClosure.counted_cash || 0),
+                      difference: Number(todayClosure.difference || 0),
+                      ticketCount: stats.ticketCount,
+                      creditoNuevo: moneyRound(creditoNuevo),
+                      cobrosCxC: stats.totalCxc,
+                      cancelaciones: cancelledMovements.length,
+                      montoCancelado: cancelledMovements.reduce((a, m) => a + Number(m.amount || 0), 0),
+                      expensesList: expenses.map((e) => ({ concept: e.concept, amount: Number(e.amount || 0) })),
+                      fondoInicial: stats.fondoInicial,
+                    };
+                    const ok = await printCashCut(cutData);
+                    if (!ok) alert("No se pudo imprimir. Verifica la conexión de la impresora.");
+                  }}
+                  style={btnSec}
+                >
                   🖨️ Imprimir ticket de cierre
                 </button>
               )}
@@ -1598,9 +1744,100 @@ export default function CajaPage() {
 
             <div style={{ height: 18 }} />
 
+            {/* Comparativo entre dias */}
+            <Panel title="Comparativo entre dias" subtitle="Ventas, gastos, credito, cancelaciones y diferencia">
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr>
+                      {["Dia", "Ventas", "Gastos", "CxC", "Cancel.", "Monto cancel.", "Diferencia (V-G)"].map((h) => (
+                        <th key={h} style={{ padding: "10px 8px", textAlign: "left", borderBottom: `2px solid ${C.border}`, color: C.muted, fontSize: 12, fontWeight: 700 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weekReport.map((d) => {
+                      const diff = d.ventas - d.gastos;
+                      return (
+                        <tr key={d.date + "-comp"} style={{ background: d.date === today ? "rgba(123,34,24,0.06)" : "transparent" }}>
+                          <td style={tdSt}><b>{fmtDate(d.date)}</b></td>
+                          <td style={tdSt}>${money(d.ventas)}</td>
+                          <td style={{ ...tdSt, color: C.danger }}>{d.gastos > 0 ? `-$${money(d.gastos)}` : "$0"}</td>
+                          <td style={tdSt}>${money(d.cxc)}</td>
+                          <td style={tdSt}>{d.cancelaciones}</td>
+                          <td style={{ ...tdSt, color: d.montoCancelado > 0 ? C.danger : C.text }}>{d.montoCancelado > 0 ? `-$${money(d.montoCancelado)}` : "$0"}</td>
+                          <td style={{ ...tdSt, fontWeight: 800, color: diff >= 0 ? C.success : C.danger }}>{diff >= 0 ? "+" : "-"}${money(Math.abs(diff))}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+
+            <div style={{ height: 18 }} />
+
+            {/* Grafica de barras: ventas vs gastos */}
+            <Panel title="Ventas vs Gastos por dia" subtitle="Barras comparativas (ultimos 7 dias)">
+              {(() => {
+                const maxVal = Math.max(...weekReport.map((d) => Math.max(d.ventas, d.gastos)), 1);
+                return (
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 220, padding: "10px 0" }}>
+                    {weekReport.map((d) => {
+                      const ventasPct = (d.ventas / maxVal) * 100;
+                      const gastosPct = (d.gastos / maxVal) * 100;
+                      const dayLabel = fmtDate(d.date);
+                      return (
+                        <div key={d.date + "-bar"} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{ fontSize: 10, color: C.success, fontWeight: 700 }}>${money(d.ventas)}</div>
+                          <div style={{ display: "flex", gap: 2, alignItems: "flex-end", width: "100%", justifyContent: "center", height: 160 }}>
+                            <div style={{
+                              width: "40%", maxWidth: 28,
+                              height: `${Math.max(ventasPct, 3)}%`,
+                              borderRadius: "6px 6px 0 0",
+                              background: d.date === today
+                                ? `linear-gradient(180deg, ${C.success} 0%, #16603d 100%)`
+                                : `linear-gradient(180deg, rgba(31,122,77,0.5) 0%, rgba(31,122,77,0.25) 100%)`,
+                              transition: "height 0.3s",
+                            }} />
+                            <div style={{
+                              width: "40%", maxWidth: 28,
+                              height: `${Math.max(gastosPct, 3)}%`,
+                              borderRadius: "6px 6px 0 0",
+                              background: d.date === today
+                                ? `linear-gradient(180deg, ${C.danger} 0%, #8b1a12 100%)`
+                                : `linear-gradient(180deg, rgba(180,35,24,0.5) 0%, rgba(180,35,24,0.25) 100%)`,
+                              transition: "height 0.3s",
+                            }} />
+                          </div>
+                          <div style={{ fontSize: 10, color: C.danger, fontWeight: 700 }}>{d.gastos > 0 ? `-$${money(d.gastos)}` : ""}</div>
+                          <div style={{ fontSize: 10, color: C.muted, textAlign: "center", lineHeight: 1.2 }}>{dayLabel}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+              <div style={{ display: "flex", justifyContent: "center", gap: 20, marginTop: 8, fontSize: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 4, background: C.success }} />
+                  <span style={{ color: C.text, fontWeight: 600 }}>Ventas</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 4, background: C.danger }} />
+                  <span style={{ color: C.text, fontWeight: 600 }}>Gastos</span>
+                </div>
+              </div>
+            </Panel>
+
+            <div style={{ height: 18 }} />
+
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button onClick={exportCSV} style={btnPri}>
                 Exportar CSV (Excel)
+              </button>
+              <button onClick={exportXLSX} style={btnSec}>
+                📊 Exportar XLSX
               </button>
             </div>
           </>

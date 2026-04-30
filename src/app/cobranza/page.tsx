@@ -175,6 +175,11 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [changingCustomer, setChangingCustomer] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
 
+  // Cancel con motivo obligatorio
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReasonText, setCancelReasonText] = useState("");
+  const [cancelError, setCancelError] = useState("");
+
   // Reset edit mode cuando cambia el ticket seleccionado
   useEffect(() => {
     setEditMode(false);
@@ -570,9 +575,18 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   async function cancelTicket() {
     if (!selectedTicket) return;
-    if (!confirm("¿Cancelar ticket?")) return;
+    if (!cancelReasonText.trim()) {
+      setCancelError("Escribe el motivo de cancelacion");
+      return;
+    }
 
     setSaving(true);
+    setCancelError("");
+
+    const cancellerName = (() => {
+      try { return sessionStorage.getItem("pin_name") || sessionStorage.getItem("pin_role") || "cajera"; }
+      catch { return "cajera"; }
+    })();
 
     const { error } = await supabase
       .from("orders")
@@ -589,7 +603,20 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
       return;
     }
 
-    alert("Ticket cancelado");
+    // Also update the associated cash_movement if it exists
+    await supabase
+      .from("cash_movements")
+      .update({
+        is_cancelled: true,
+        cancel_reason: cancelReasonText.trim(),
+        cancelled_by: cancellerName,
+        cancelled_at: new Date().toISOString(),
+      })
+      .eq("reference_id", selectedTicket.id);
+
+    alert("Ticket cancelado. Motivo: " + cancelReasonText.trim());
+    setShowCancelModal(false);
+    setCancelReasonText("");
     setSelectedTicket(null);
     await loadData();
     setSaving(false);
@@ -1828,13 +1855,91 @@ if (cashError) {
                     </div>
 
                     <button
-                      onClick={cancelTicket}
+                      onClick={() => { setShowCancelModal(true); setCancelReasonText(""); setCancelError(""); }}
                       style={dangerButtonStyle}
                       disabled={saving}
                     >
                       ❌ Cancelar ticket
                     </button>
                     </>)}
+
+                    {/* Modal cancelacion con motivo obligatorio */}
+                    {showCancelModal && selectedTicket && (
+                      <div style={{
+                        position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        zIndex: 10000, padding: 16,
+                      }}>
+                        <div style={{
+                          width: "100%", maxWidth: 420, background: "white",
+                          borderRadius: 18, padding: 22, boxShadow: COLORS.shadow,
+                          border: `1px solid ${COLORS.border}`,
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                            <h3 style={{ margin: 0, color: COLORS.danger, fontSize: 18 }}>Cancelar ticket</h3>
+                            <button
+                              onClick={() => setShowCancelModal(false)}
+                              style={{ width: 36, height: 36, borderRadius: 999, border: "none", background: "#efe8df", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer" }}
+                            >✕</button>
+                          </div>
+
+                          <div style={{ padding: 10, borderRadius: 12, background: "rgba(180,35,24,0.06)", border: `1px solid rgba(180,35,24,0.12)`, marginBottom: 14 }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>
+                              {ticketFolio(selectedTicket.id)} — ${money(ticketTotal(selectedTicket))}
+                            </div>
+                            <div style={{ color: COLORS.muted, fontSize: 12, marginTop: 4 }}>
+                              {selectedTicket.customer_name || "Cliente general"}
+                            </div>
+                          </div>
+
+                          {cancelError && (
+                            <div style={{ padding: 10, borderRadius: 10, background: "rgba(180,35,24,0.08)", color: COLORS.danger, fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+                              {cancelError}
+                            </div>
+                          )}
+
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Motivo de cancelacion *</div>
+                            <textarea
+                              value={cancelReasonText}
+                              onChange={(e) => setCancelReasonText(e.target.value)}
+                              placeholder="Escribe por que se cancela este ticket..."
+                              style={{
+                                width: "100%", minHeight: 80, padding: 12, borderRadius: 12,
+                                border: `1px solid ${COLORS.border}`, boxSizing: "border-box" as const,
+                                outline: "none", background: "rgba(255,255,255,0.9)", color: COLORS.text,
+                                fontSize: 14, resize: "vertical" as const,
+                              }}
+                            />
+                          </div>
+
+                          <div style={{ display: "flex", gap: 10 }}>
+                            <button
+                              onClick={cancelTicket}
+                              disabled={saving}
+                              style={{
+                                flex: 1, padding: "12px 16px", borderRadius: 12, border: "none",
+                                background: `linear-gradient(180deg, ${COLORS.danger} 0%, #8b1a12 100%)`,
+                                color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer",
+                                opacity: saving ? 0.65 : 1,
+                              }}
+                            >
+                              {saving ? "Cancelando..." : "Confirmar cancelacion"}
+                            </button>
+                            <button
+                              onClick={() => setShowCancelModal(false)}
+                              style={{
+                                flex: 1, padding: "12px 16px", borderRadius: 12,
+                                border: `1px solid ${COLORS.border}`, background: "white",
+                                color: COLORS.text, fontWeight: 700, fontSize: 14, cursor: "pointer",
+                              }}
+                            >
+                              Volver
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Modal escáner QR */}
                     {showQrScanner && (
