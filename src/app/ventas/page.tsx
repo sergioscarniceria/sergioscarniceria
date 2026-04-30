@@ -330,11 +330,11 @@ async function loadProdOrders() {
   const { data } = await supabase
     .from("orders")
     .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
-    .eq("status", "terminado")
     .in("source", ["pedido", "portal"])
-    .eq("payment_status", "pendiente")
+    .in("payment_status", ["pendiente"])
+    .not("status", "eq", "cancelado")
     .order("created_at", { ascending: false })
-    .limit(20);
+    .limit(30);
   setProdOrders((data as Ticket[]) || []);
 }
 
@@ -608,6 +608,7 @@ if (pulledOrderId) {
     .from("orders")
     .update({
       source: "mostrador",
+      status: "terminado",
       attendant_name: attendant || null,
       captured_by: attendant || "Mostrador",
     })
@@ -807,7 +808,7 @@ const paidTickets = useMemo(() => {
             </button>
             {prodOrders.length > 0 && (
               <button onClick={() => setShowProdOrders(!showProdOrders)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: showProdOrders ? COLORS.success : "rgba(31,122,77,0.10)", color: showProdOrders ? "white" : COLORS.success, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
-                📦 Pedidos listos ({prodOrders.length})
+                📦 Pedidos ({prodOrders.length})
               </button>
             )}
             {heldSales.length > 0 && (
@@ -826,7 +827,7 @@ const paidTickets = useMemo(() => {
         {/* Panel: pedidos de producción listos para pesar */}
         {showProdOrders && prodOrders.length > 0 && (
           <div style={{ marginBottom: 14, padding: 14, borderRadius: 18, background: "rgba(31,122,77,0.06)", border: `1px solid rgba(31,122,77,0.15)` }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: COLORS.success, marginBottom: 10 }}>📦 Pedidos listos para pesar</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: COLORS.success, marginBottom: 10 }}>📦 Pedidos pendientes — jalar a mostrador</div>
             <div style={{ display: "grid", gap: 8 }}>
               {prodOrders.map((order) => {
                 const total = (order.order_items || []).reduce((a, oi) => {

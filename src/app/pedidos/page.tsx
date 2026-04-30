@@ -95,7 +95,7 @@ const [changingId, setChangingId] = useState<string | null>(null);
     const { data, error } = await supabase
       .from("orders")
       .select(`*, order_items(*)`)
-      .in("source", ["pedido", "portal"])
+      .not("source", "in", "(mostrador,caja_manual)")
       .order("delivery_date", { ascending: true })
       .order("created_at", { ascending: false });
 
