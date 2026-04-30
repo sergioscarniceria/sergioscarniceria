@@ -499,15 +499,19 @@ export default function CajaPage() {
   }, [dateFrom, dateTo]);
 
   // ─── Computed stats ────────────────────────────────────────
-  // Si ya hay un corte de hoy, solo contar movimientos DESPUÉS de ese corte
+  // Todos los movimientos activos del rango (para la lista visible)
+  const allActiveMovements = useMemo(() => {
+    return movements.filter((m) => !m.is_cancelled);
+  }, [movements]);
+
+  // Solo movimientos DESPUÉS del último corte (para stats del cierre actual)
   const activeMovements = useMemo(() => {
-    const all = movements.filter((m) => !m.is_cancelled);
     if (todayClosure?.created_at) {
       const cutoff = todayClosure.created_at;
-      return all.filter((m) => m.created_at && m.created_at > cutoff);
+      return allActiveMovements.filter((m) => m.created_at && m.created_at > cutoff);
     }
-    return all;
-  }, [movements, todayClosure]);
+    return allActiveMovements;
+  }, [allActiveMovements, todayClosure]);
 
   const stats = useMemo(() => {
     const active = activeMovements;
@@ -1426,13 +1430,13 @@ export default function CajaPage() {
             </div>
 
             {/* Movimientos */}
-            <Panel title={showCancelled ? "Tickets cancelados" : "Movimientos del rango"} subtitle={showCancelled ? `${cancelledMovements.length} cancelado${cancelledMovements.length === 1 ? "" : "s"}` : `${activeMovements.length} movimiento${activeMovements.length === 1 ? "" : "s"}`}>
+            <Panel title={showCancelled ? "Tickets cancelados" : "Movimientos del rango"} subtitle={showCancelled ? `${cancelledMovements.length} cancelado${cancelledMovements.length === 1 ? "" : "s"}` : `${allActiveMovements.length} movimiento${allActiveMovements.length === 1 ? "" : "s"}`}>
               <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
                 <button
                   onClick={() => setShowCancelled(false)}
                   style={{ ...tabBtnSt, background: !showCancelled ? C.primary : "transparent", color: !showCancelled ? "white" : C.text }}
                 >
-                  Activos ({activeMovements.length})
+                  Activos ({allActiveMovements.length})
                 </button>
                 <button
                   onClick={() => setShowCancelled(true)}
@@ -1443,11 +1447,11 @@ export default function CajaPage() {
               </div>
 
               {!showCancelled ? (
-                activeMovements.length === 0 ? (
+                allActiveMovements.length === 0 ? (
                   <EmptyBox>No hay movimientos en este rango</EmptyBox>
                 ) : (
                   <div style={{ display: "grid", gap: 10, maxHeight: 500, overflowY: "auto" }}>
-                    {activeMovements.map((m) => (
+                    {allActiveMovements.map((m) => (
                       <div key={m.id} style={movCard}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>

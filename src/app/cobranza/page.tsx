@@ -364,7 +364,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
 
   function ticketFinalTotal(ticket: Ticket | null): number {
     const sub = ticketTotal(ticket);
-    return Math.max(0, sub - calcDiscount(sub));
+    return moneyRound(Math.max(0, sub - calcDiscount(sub)));
   }
 
   const filteredTickets = useMemo(() => {
@@ -1218,6 +1218,32 @@ if (cashError) {
   setSaving(false);
   return;
 }
+  // Auto-imprimir ticket de venta manual
+  try {
+    const manualItems = manualLines.map((line) => ({
+      product: line.product.trim(),
+      kilos: Number(line.kilos || 0),
+      price: Number(line.price || 0),
+      sale_type: (line as any).sale_type || "kg",
+    }));
+    const manualSubtotal = manualItems.reduce((a, i) => a + i.kilos * i.price, 0);
+    const ticketForPrint: TicketData = {
+      folio: orderData.id,
+      customerName: cleanCustomerName,
+      items: manualItems,
+      subtotal: manualSubtotal,
+      discount: 0,
+      total: moneyRound(manualSubtotal),
+      qrData: orderData.id,
+      type: "cobro",
+      paymentMethod: method,
+    };
+    smartPrintTicket(ticketForPrint);
+    openCashDrawer().catch(() => {});
+  } catch (printErr) {
+    console.log("Error al imprimir ticket manual:", printErr);
+  }
+
   alert("Venta manual registrada");
 
   clearManualSale();

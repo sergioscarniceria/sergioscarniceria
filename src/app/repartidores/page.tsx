@@ -155,6 +155,7 @@ export default function RepartidoresPage() {
         delivery_notes, notes, created_at, payment_status, payment_method,
         customers ( phone, address )
       `)
+      .in("source", ["pedido", "portal"])
       .order("created_at", { ascending: false });
 
     if (error) {
