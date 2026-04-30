@@ -150,6 +150,7 @@ export default function CobranzaPage() {
 
   const [customerName, setCustomerName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
+  const [manualDiscount, setManualDiscount] = useState("");
   const [manualLines, setManualLines] = useState<ManualLine[]>([]);
   const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
 const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
@@ -305,13 +306,26 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   async function loadData() {
     setLoading(true);
 
-    const { data: ticketsData, error: ticketsError } = await supabase
-      .from("orders")
-      .select(
-        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
-      )
-      .order("created_at", { ascending: false })
-      .limit(40);
+    // Cargar todos los tickets pendientes + últimos 40 pagados
+    const [pendientesRes, pagadosRes] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .or("payment_status.eq.pendiente,payment_status.is.null")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("orders")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .eq("payment_status", "pagado")
+        .order("created_at", { ascending: false })
+        .limit(30),
+    ]);
+    const pendientes = (pendientesRes.data || []) as Ticket[];
+    const pagados = (pagadosRes.data || []) as Ticket[];
+    const seen = new Set(pendientes.map((t) => t.id));
+    const ticketsData = [...pendientes, ...pagados.filter((t) => !seen.has(t.id))];
+    const ticketsError = pendientesRes.error || pagadosRes.error;
 
     const { data: customersData, error: customersError } = await supabase
       .from("customers")
@@ -917,6 +931,7 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   setSelectedCustomerId("");
   setCustomerName("");
   setManualNotes("");
+  setManualDiscount("");
   setManualLines([]);
 }
 async function createNewCustomer() {
@@ -1051,8 +1066,8 @@ async function saveManualCredit() {
         note_date: noteDate,
         due_date: dueDate,
         source_type: "venta_manual",
-        subtotal: moneyRound(manualTotal),
-        discount_amount: 0,
+        subtotal: moneyRound(manualSubtotal),
+        discount_amount: Number(manualDiscount || 0),
         total_amount: moneyRound(manualTotal),
         balance_due: moneyRound(manualTotal),
         status: "abierta",
@@ -1106,7 +1121,8 @@ async function saveManualCredit() {
       is_fixed_price_piece: false,
       prepared_kilos: null,
     })),
-    subtotal: manualTotal,
+    subtotal: manualSubtotal,
+    discount: Number(manualDiscount || 0),
     total: manualTotal,
     paymentMethod: "credito",
     qrData: orderData.id,
@@ -1226,14 +1242,15 @@ if (cashError) {
       price: Number(line.price || 0),
       sale_type: (line as any).sale_type || "kg",
     }));
-    const manualSubtotal = manualItems.reduce((a, i) => a + i.kilos * i.price, 0);
+    const printSubtotal = manualItems.reduce((a, i) => a + i.kilos * i.price, 0);
+    const printDiscount = Number(manualDiscount || 0);
     const ticketForPrint: TicketData = {
       folio: orderData.id,
       customerName: cleanCustomerName,
       items: manualItems,
-      subtotal: manualSubtotal,
-      discount: 0,
-      total: moneyRound(manualSubtotal),
+      subtotal: printSubtotal,
+      discount: printDiscount,
+      total: moneyRound(Math.max(0, printSubtotal - printDiscount)),
       qrData: orderData.id,
       type: "cobro",
       paymentMethod: method,
@@ -1291,11 +1308,16 @@ if (cashError) {
     setHistorialTicket(ticket);
   }
 
-  const manualTotal = useMemo(() => {
+  const manualSubtotal = useMemo(() => {
     return manualLines.reduce((acc, line) => {
       return acc + Number(line.kilos || 0) * Number(line.price || 0);
     }, 0);
   }, [manualLines]);
+
+  const manualTotal = useMemo(() => {
+    const disc = Number(manualDiscount || 0);
+    return Math.max(0, manualSubtotal - disc);
+  }, [manualSubtotal, manualDiscount]);
 
   if (loading) {
     return (
@@ -2567,6 +2589,23 @@ if (cashError) {
                   </div>
 
                   <div style={summaryRowStyle}>
+                    <span>Subtotal</span>
+                    <b>${money(manualSubtotal)}</b>
+                  </div>
+
+                  <div style={{ ...summaryRowStyle, alignItems: "center" }}>
+                    <span>Descuento $</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      value={manualDiscount}
+                      onChange={(e) => setManualDiscount(e.target.value)}
+                      placeholder="0"
+                      style={{ width: 90, padding: "6px 10px", borderRadius: 10, border: `1px solid ${COLORS.border}`, textAlign: "center" as const, fontSize: 15, fontWeight: 700 }}
+                    />
+                  </div>
+
+                  <div style={{ ...summaryRowStyle, fontSize: 18, fontWeight: 800, color: COLORS.success }}>
                     <span>Total</span>
                     <b>${money(manualTotal)}</b>
                   </div>
