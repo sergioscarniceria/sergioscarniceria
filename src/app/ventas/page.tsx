@@ -330,8 +330,8 @@ async function loadProdOrders() {
   const { data } = await supabase
     .from("orders")
     .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
-    .in("source", ["pedido", "portal"])
-    .in("payment_status", ["pendiente"])
+    .not("source", "in", "(mostrador,caja_manual)")
+    .or("payment_status.eq.pendiente,payment_status.is.null")
     .not("status", "eq", "cancelado")
     .order("created_at", { ascending: false })
     .limit(30);
