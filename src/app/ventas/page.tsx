@@ -177,6 +177,9 @@ const [showHeld, setShowHeld] = useState(false);
 const [holdNote, setHoldNote] = useState("");
 const [showHoldModal, setShowHoldModal] = useState(false);
 
+// Modo POS pantalla completa
+const [isPOS, setIsPOS] = useState(false);
+
 // Báscula Torrey
 const [scaleWeight, setScaleWeight] = useState<number>(0);
 const [scaleStable, setScaleStable] = useState<boolean>(false);
@@ -195,6 +198,13 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
 
   return () => clearInterval(interval);
 }, []);
+
+  // Detectar salida de fullscreen (Esc)
+  useEffect(() => {
+    const handler = () => { if (!document.fullscreenElement) setIsPOS(false); };
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
 
   // Suscripción a báscula Torrey
   useEffect(() => {
@@ -690,6 +700,18 @@ const paidTickets = useMemo(() => {
             <p style={subtitleStyle}>{attendant ? `Atendiendo: ${attendant}` : "Selecciona quién atiende"}</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                if (!document.fullscreenElement) {
+                  document.documentElement.requestFullscreen?.().then(() => setIsPOS(true)).catch(() => {});
+                } else {
+                  document.exitFullscreen?.().then(() => setIsPOS(false)).catch(() => {});
+                }
+              }}
+              style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: isPOS ? COLORS.primary : "white", color: isPOS ? "white" : COLORS.primary, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}
+            >
+              {isPOS ? "✕ Salir POS" : "🖥 Modo POS"}
+            </button>
             {heldSales.length > 0 && (
               <button onClick={() => setShowHeld(!showHeld)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(166,106,16,0.10)", color: COLORS.warning, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
                 En espera ({heldSales.length})
