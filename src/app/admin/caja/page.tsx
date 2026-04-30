@@ -783,6 +783,33 @@ export default function CajaPage() {
       alert("Captura un efectivo contado válido");
       return;
     }
+
+    // Bloquear cierre si hay tickets preparados sin cobrar (anti-robo)
+    const todayStart = new Date(`${today}T00:00:00`).toISOString();
+    const todayEnd = new Date(`${today}T23:59:59`).toISOString();
+    const { data: uncollected } = await supabase
+      .from("orders")
+      .select("id, customer_name, created_at, status, source")
+      .in("payment_status", ["pendiente", null as any])
+      .gte("created_at", todayStart)
+      .lte("created_at", todayEnd);
+
+    // Solo bloquear por tickets YA preparados (terminado) o de mostrador
+    const blocking = (uncollected || []).filter((o: any) =>
+      o.status === "terminado" || o.source === "mostrador"
+    );
+
+    if (blocking.length > 0) {
+      const list = blocking.slice(0, 10).map((o: any) =>
+        `• TK-${o.id.slice(0, 6)} — ${o.customer_name || "Mostrador"}`
+      ).join("\n");
+      alert(
+        `No puedes cerrar caja. Hay ${blocking.length} ticket(s) preparados sin cobrar:\n\n${list}\n\n` +
+        `Cobra o cancela estos tickets antes de hacer el cierre.`
+      );
+      return;
+    }
+
     setSaving(true);
 
     const closedBy = (() => {
