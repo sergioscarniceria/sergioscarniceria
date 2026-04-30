@@ -7,6 +7,7 @@ import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
+import { jsPDF } from "jspdf";
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {
@@ -851,6 +852,261 @@ export default function CajaPage() {
     setSaving(false);
   }
 
+  // ─── Exportar cierre a PDF ─────────────────────────────────
+  async function exportClosurePDF(closure?: CashClosure | null) {
+    const supabaseRef = supabase;
+    const cl = closure || todayClosure;
+    // Si no hay cierre, usar stats en vivo
+    const useLive = !cl;
+    const closureDate = cl?.closure_date || today;
+    const closureTime = cl?.created_at ? fmtDateTime(cl.created_at) : fmtDateTime(new Date().toISOString());
+    const closedBy = cl?.closed_by || "";
+
+    const totalVentas = cl ? Number(cl.total_sales || 0) : stats.totalVentas;
+    const totalCxc = cl ? Number(cl.total_cxc || 0) : stats.totalCxc;
+    const totalTarjeta = cl ? Number(cl.total_card || 0) : stats.totalTarjeta;
+    const totalTransfer = cl ? Number(cl.total_transfer || 0) : stats.totalTransferencia;
+    const totalGeneral = cl ? Number(cl.total_general || 0) : stats.totalGeneral;
+    const totalGastos = cl ? Number(cl.total_expenses || 0) : stats.totalGastos;
+    const fondoIni = cl ? Number(cl.initial_amount || 0) : stats.fondoInicial;
+    const esperado = cl ? Number(cl.expected_cash || 0) : stats.efectivoEsperado;
+    const contado = cl ? Number(cl.counted_cash || 0) : 0;
+    const diferencia = cl ? Number(cl.difference || 0) : 0;
+
+    // Obtener datos extra del día
+    const dayStart = new Date(`${closureDate}T00:00:00`).toISOString();
+    const dayEnd = new Date(`${closureDate}T23:59:59`).toISOString();
+
+    const [movRes, expRes, creditRes] = await Promise.all([
+      supabaseRef.from("cash_movements").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("cash_expenses").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
+    ]);
+
+    const dayMovements = (movRes.data || []) as Movement[];
+    const dayExpenses = (expRes.data || []) as CashExpense[];
+    const creditOrders = creditRes.data || [];
+
+    const cancelled = dayMovements.filter((m: any) => m.is_cancelled);
+    const active = dayMovements.filter((m: any) => !m.is_cancelled);
+    const creditoNuevo = creditOrders.reduce((a: number, o: any) => a + Number(o.total || 0), 0);
+
+    // ─── Generar PDF ───
+    const doc = new jsPDF({ unit: "mm", format: "letter" });
+    const W = doc.internal.pageSize.getWidth();
+    let y = 18;
+    const marginL = 16;
+    const marginR = W - 16;
+    const colW = marginR - marginL;
+
+    function addPage() { doc.addPage(); y = 18; }
+    function checkPage(need: number) { if (y + need > 270) addPage(); }
+
+    // Header
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text("SERGIO'S CARNICERIA", W / 2, y, { align: "center" });
+    y += 8;
+    doc.setFontSize(14);
+    doc.text("REPORTE DE CIERRE DE CAJA", W / 2, y, { align: "center" });
+    y += 8;
+    doc.setDrawColor(123, 34, 24);
+    doc.setLineWidth(0.8);
+    doc.line(marginL, y, marginR, y);
+    y += 7;
+
+    // Info general
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Fecha: ${fmtDate(closureDate)}`, marginL, y);
+    doc.text(`Registrado: ${closureTime}`, marginR, y, { align: "right" });
+    y += 5;
+    if (closedBy) { doc.text(`Cerrado por: ${closedBy}`, marginL, y); y += 5; }
+    y += 3;
+
+    // ── Sección helper ──
+    function sectionTitle(title: string) {
+      checkPage(12);
+      doc.setFillColor(123, 34, 24);
+      doc.rect(marginL, y, colW, 7, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, marginL + 3, y + 5);
+      doc.setTextColor(0, 0, 0);
+      y += 10;
+    }
+
+    function row(label: string, value: string, bold = false) {
+      checkPage(6);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.text(label, marginL + 2, y);
+      doc.text(value, marginR - 2, y, { align: "right" });
+      y += 5;
+    }
+
+    function separator() {
+      checkPage(4);
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.3);
+      doc.line(marginL, y, marginR, y);
+      y += 3;
+    }
+
+    // ═══ RESUMEN GENERAL ═══
+    sectionTitle("RESUMEN GENERAL");
+    row("Fondo inicial", `$${money(fondoIni)}`);
+    row("Total ventas (contado)", `$${money(totalVentas)}`, true);
+    row("Cobros CxC (abonos)", `$${money(totalCxc)}`);
+    row("Crédito nuevo del día", `$${money(creditoNuevo)}`);
+    separator();
+    row("Total general", `$${money(totalGeneral)}`, true);
+    y += 3;
+
+    // ═══ DESGLOSE POR MÉTODO ═══
+    sectionTitle("DESGLOSE POR METODO DE PAGO");
+    const ventasEf = active.filter((m: any) => m.type === "venta" && m.payment_method === "efectivo").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const ventasTj = active.filter((m: any) => m.type === "venta" && m.payment_method === "tarjeta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const ventasTr = active.filter((m: any) => m.type === "venta" && m.payment_method === "transferencia").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const cxcEf = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "efectivo").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const cxcTj = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "tarjeta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const cxcTr = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "transferencia").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("", marginL + 2, y);
+    doc.text("Efectivo", marginL + 70, y, { align: "right" });
+    doc.text("Tarjeta", marginL + 110, y, { align: "right" });
+    doc.text("Transf.", marginR - 2, y, { align: "right" });
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    doc.text("Ventas", marginL + 2, y);
+    doc.text(`$${money(ventasEf)}`, marginL + 70, y, { align: "right" });
+    doc.text(`$${money(ventasTj)}`, marginL + 110, y, { align: "right" });
+    doc.text(`$${money(ventasTr)}`, marginR - 2, y, { align: "right" });
+    y += 5;
+    doc.text("Cobros CxC", marginL + 2, y);
+    doc.text(`$${money(cxcEf)}`, marginL + 70, y, { align: "right" });
+    doc.text(`$${money(cxcTj)}`, marginL + 110, y, { align: "right" });
+    doc.text(`$${money(cxcTr)}`, marginR - 2, y, { align: "right" });
+    y += 5;
+    separator();
+    doc.setFont("helvetica", "bold");
+    doc.text("Total", marginL + 2, y);
+    doc.text(`$${money(ventasEf + cxcEf)}`, marginL + 70, y, { align: "right" });
+    doc.text(`$${money(ventasTj + cxcTj)}`, marginL + 110, y, { align: "right" });
+    doc.text(`$${money(ventasTr + cxcTr)}`, marginR - 2, y, { align: "right" });
+    y += 8;
+
+    // ═══ GASTOS ═══
+    sectionTitle("GASTOS / SALIDAS");
+    if (dayExpenses.length === 0) {
+      doc.setFontSize(9); doc.setFont("helvetica", "italic");
+      doc.text("Sin gastos registrados", marginL + 2, y); y += 5;
+    } else {
+      for (const e of dayExpenses) {
+        checkPage(6);
+        row(e.concept || e.category, `-$${money(e.amount)}`);
+      }
+      separator();
+      row("Total gastos", `-$${money(totalGastos)}`, true);
+    }
+    y += 3;
+
+    // ═══ CANCELACIONES ═══
+    if (cancelled.length > 0) {
+      sectionTitle("CANCELACIONES");
+      const montoCancel = cancelled.reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+      row("Tickets cancelados", String(cancelled.length));
+      row("Monto total cancelado", `$${money(montoCancel)}`, true);
+      y += 2;
+      for (const m of cancelled) {
+        checkPage(10);
+        doc.setFontSize(8); doc.setFont("helvetica", "normal");
+        const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+        doc.text(`${hora} — $${money(m.amount)} — ${m.cashier_name || "—"} — ${(m as any).cancel_reason || "Sin motivo"}`, marginL + 2, y);
+        y += 4;
+      }
+      y += 3;
+    }
+
+    // ═══ ARQUEO DE CAJA ═══
+    if (cl) {
+      sectionTitle("ARQUEO DE CAJA");
+      row("Efectivo esperado", `$${money(esperado)}`);
+      row("Efectivo contado", `$${money(contado)}`);
+      const sign = diferencia >= 0 ? "+" : "";
+      row("Diferencia", `${sign}$${money(diferencia)}`, true);
+
+      // Denominaciones
+      const hasDenoms = DENOMINATIONS.some((d) => Number((cl as any)[d.key] || 0) > 0);
+      if (hasDenoms) {
+        y += 2;
+        doc.setFontSize(8); doc.setFont("helvetica", "bold");
+        doc.text("Denominaciones:", marginL + 2, y); y += 4;
+        doc.setFont("helvetica", "normal");
+        for (const d of DENOMINATIONS) {
+          const cant = Number((cl as any)[d.key] || 0);
+          if (cant > 0) {
+            checkPage(5);
+            doc.text(`${d.label} x ${cant} = $${money(cant * d.value)}`, marginL + 4, y);
+            y += 4;
+          }
+        }
+      }
+      y += 3;
+    }
+
+    // ═══ MOVIMIENTOS DEL DÍA ═══
+    sectionTitle("DETALLE DE MOVIMIENTOS (" + active.length + ")");
+    doc.setFontSize(7); doc.setFont("helvetica", "bold");
+    doc.text("Hora", marginL + 2, y);
+    doc.text("Tipo", marginL + 22, y);
+    doc.text("Metodo", marginL + 55, y);
+    doc.text("Cajera", marginL + 85, y);
+    doc.text("Monto", marginR - 2, y, { align: "right" });
+    y += 4;
+    doc.setFont("helvetica", "normal");
+
+    for (const m of active) {
+      checkPage(5);
+      const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+      doc.text(hora, marginL + 2, y);
+      doc.text(typeName(m.type), marginL + 22, y);
+      doc.text(methodName(m.payment_method), marginL + 55, y);
+      doc.text((m.cashier_name || "").slice(0, 12), marginL + 85, y);
+      doc.text(`$${money(m.amount)}`, marginR - 2, y, { align: "right" });
+      y += 4;
+    }
+
+    // ═══ NOTAS ═══
+    const notes = cl?.notes || "";
+    if (notes) {
+      y += 3;
+      checkPage(12);
+      doc.setFontSize(9); doc.setFont("helvetica", "italic");
+      doc.text(`Notas: ${notes}`, marginL + 2, y, { maxWidth: colW - 4 });
+      y += 8;
+    }
+
+    // Footer
+    checkPage(15);
+    y += 5;
+    doc.setDrawColor(123, 34, 24);
+    doc.setLineWidth(0.5);
+    doc.line(marginL, y, marginR, y);
+    y += 5;
+    doc.setFontSize(8); doc.setFont("helvetica", "normal");
+    doc.text("Sergio's Carniceria — Reporte generado automaticamente", W / 2, y, { align: "center" });
+    y += 4;
+    doc.text(new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" }), W / 2, y, { align: "center" });
+
+    // Guardar
+    const fname = `Cierre_Caja_${closureDate}.pdf`;
+    doc.save(fname);
+  }
+
   function buildExportRows() {
     const rows: (string | number)[][] = [
       ["Fecha", "Tipo", "Método", "Monto", "Cajera", "Origen", "Referencia", "Cancelado"],
@@ -1665,6 +1921,9 @@ export default function CajaPage() {
                   🖨️ Imprimir ticket de cierre
                 </button>
               )}
+              <button onClick={() => exportClosurePDF()} style={btnSec}>
+                📄 Exportar PDF
+              </button>
               <button onClick={saveClosure} disabled={saving} style={btnPri}>
                 {saving ? "Guardando..." : todayClosure ? "Nuevo corte de caja" : "Guardar cierre"}
               </button>
@@ -1709,6 +1968,11 @@ export default function CajaPage() {
                         <DetailCell label="Total" value={`$${money(cl.total_general)}`} bold />
                       </div>
                       {cl.notes && <div style={{ marginTop: 8, padding: 8, borderRadius: 10, background: "rgba(166,106,16,0.08)", color: C.muted, fontSize: 12, fontStyle: "italic" }}>{cl.notes}</div>}
+                      <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                        <button onClick={() => exportClosurePDF(cl)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 10, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: C.primary }}>
+                          📄 Exportar PDF
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
