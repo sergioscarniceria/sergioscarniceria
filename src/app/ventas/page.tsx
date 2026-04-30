@@ -330,7 +330,7 @@ async function loadProdOrders() {
   const { data } = await supabase
     .from("orders")
     .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
-    .not("source", "in", "(mostrador,caja_manual)")
+    .not("source", "in", "(mostrador,caja_manual,pedido_mostrador)")
     .or("payment_status.eq.pendiente,payment_status.is.null")
     .not("status", "eq", "cancelado")
     .order("created_at", { ascending: false })
@@ -607,7 +607,7 @@ if (pulledOrderId) {
   const { error: updateError } = await supabase
     .from("orders")
     .update({
-      source: "mostrador",
+      source: "pedido_mostrador",
       status: "terminado",
       attendant_name: attendant || null,
       captured_by: attendant || "Mostrador",
