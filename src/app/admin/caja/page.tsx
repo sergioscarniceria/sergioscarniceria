@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
-import { jsPDF } from "jspdf";
+// jsPDF se importa dinámicamente en exportClosurePDF() para evitar error SSR
 
 // ─── Types ─────────────────────────────────────────────────────
 type Movement = {
@@ -854,6 +854,7 @@ export default function CajaPage() {
 
   // ─── Exportar cierre a PDF ─────────────────────────────────
   async function exportClosurePDF(closure?: CashClosure | null) {
+    const { jsPDF } = await import("jspdf");
     const supabaseRef = supabase;
     const cl = closure || todayClosure;
     // Si no hay cierre, usar stats en vivo
