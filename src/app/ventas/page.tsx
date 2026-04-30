@@ -26,6 +26,7 @@ type Product = {
 };
 type Ticket = {
   id: string;
+  customer_id?: string | null;
   customer_name: string | null;
   status: string | null;
   payment_status: string | null;
@@ -180,6 +181,11 @@ const [showHoldModal, setShowHoldModal] = useState(false);
 // Modo POS pantalla completa
 const [isPOS, setIsPOS] = useState(false);
 
+// Pedidos de producción listos para pesar
+const [prodOrders, setProdOrders] = useState<Ticket[]>([]);
+const [showProdOrders, setShowProdOrders] = useState(false);
+const [pulledOrderId, setPulledOrderId] = useState<string | null>(null);
+
 // Báscula Torrey
 const [scaleWeight, setScaleWeight] = useState<number>(0);
 const [scaleStable, setScaleStable] = useState<boolean>(false);
@@ -190,10 +196,12 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
   loadCustomers();
   loadTickets();
   loadHeldSales();
+  loadProdOrders();
 
   const interval = setInterval(() => {
     loadTickets();
     loadHeldSales();
+    loadProdOrders();
   }, 5000);
 
   return () => clearInterval(interval);
@@ -292,6 +300,42 @@ async function loadCustomers() {
   }
 
   setCustomers((data as Customer[]) || []);
+}
+
+function pullProdOrder(order: Ticket) {
+  if (items.length > 0 && !confirm("Ya tienes productos en el carrito. ¿Reemplazar con este pedido?")) return;
+  const loadedItems: Item[] = (order.order_items || []).map((oi) => ({
+    id: crypto.randomUUID(),
+    product: oi.product,
+    kilos: Number(oi.kilos || 0),
+    price: Number(oi.price || 0),
+    quantity: oi.quantity ?? undefined,
+    sale_type: oi.sale_type || "kg",
+    is_fixed_price_piece: oi.is_fixed_price_piece ?? false,
+  }));
+  setItems(loadedItems);
+  setPulledOrderId(order.id);
+  // Cargar cliente del pedido
+  if (order.customer_id) {
+    setCustomerMode("existente");
+    setSelectedCustomerId(order.customer_id);
+  } else {
+    setCustomerMode("general");
+    setSelectedCustomerId("");
+  }
+  setShowProdOrders(false);
+}
+
+async function loadProdOrders() {
+  const { data } = await supabase
+    .from("orders")
+    .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
+    .eq("status", "terminado")
+    .in("source", ["pedido", "portal"])
+    .eq("payment_status", "pendiente")
+    .order("created_at", { ascending: false })
+    .limit(20);
+  setProdOrders((data as Ticket[]) || []);
 }
 
 async function loadHeldSales() {
@@ -556,52 +600,100 @@ if (customerMode === "existente" && selectedCustomerId) {
   }
 }
 
-const { data: orderData, error: orderError } = await supabase
-  .from("orders")
-  .insert([
-    {
-      customer_id: customerId,
-      customer_name: customerName,
-      status: "pendiente",
+let orderId: string;
+
+if (pulledOrderId) {
+  // ── Actualizar pedido existente de producción ──
+  const { error: updateError } = await supabase
+    .from("orders")
+    .update({
       source: "mostrador",
-      payment_status: "pendiente",
-      notes: null,
       attendant_name: attendant || null,
       captured_by: attendant || "Mostrador",
-    },
-  ])
-      .select()
-      .single();
+    })
+    .eq("id", pulledOrderId);
 
-    if (orderError || !orderData) {
-      console.log(orderError);
-      alert("No se pudo guardar la orden");
-      setSaving(false);
-      return;
-    }
+  if (updateError) {
+    console.log(updateError);
+    alert("No se pudo actualizar el pedido");
+    setSaving(false);
+    return;
+  }
 
-    const itemsPayload = items.map((item) => ({
-  order_id: orderData.id,
-  product: item.product,
-  kilos: Number(Number(item.kilos || 0).toFixed(3)),
-  price: Number(Number(item.price || 0).toFixed(2)),
-  sale_type: item.sale_type || "kg",
-  quantity: item.sale_type === "pieza" ? Number(item.quantity || 0) : null,
-  is_fixed_price_piece: Boolean(item.is_fixed_price_piece),
-}));
+  // Reemplazar order_items con los pesos reales
+  await supabase.from("order_items").delete().eq("order_id", pulledOrderId);
 
-    const { error: itemsError } = await supabase
-      .from("order_items")
-      .insert(itemsPayload);
+  const itemsPayload = items.map((item) => ({
+    order_id: pulledOrderId,
+    product: item.product,
+    kilos: Number(Number(item.kilos || 0).toFixed(3)),
+    price: Number(Number(item.price || 0).toFixed(2)),
+    sale_type: item.sale_type || "kg",
+    quantity: item.sale_type === "pieza" ? Number(item.quantity || 0) : null,
+    is_fixed_price_piece: Boolean(item.is_fixed_price_piece),
+  }));
 
-    if (itemsError) {
-      console.log(itemsError);
-      alert("La orden se guardó, pero fallaron los renglones");
-      setSaving(false);
-      return;
-    }
+  const { error: itemsError } = await supabase.from("order_items").insert(itemsPayload);
+  if (itemsError) {
+    console.log(itemsError);
+    alert("El pedido se actualizó, pero fallaron los renglones");
+    setSaving(false);
+    return;
+  }
 
-    const folio = ticketFolio(orderData.id);
+  orderId = pulledOrderId;
+
+} else {
+  // ── Crear ticket nuevo de mostrador ──
+  const { data: orderData, error: orderError } = await supabase
+    .from("orders")
+    .insert([
+      {
+        customer_id: customerId,
+        customer_name: customerName,
+        status: "pendiente",
+        source: "mostrador",
+        payment_status: "pendiente",
+        notes: null,
+        attendant_name: attendant || null,
+        captured_by: attendant || "Mostrador",
+      },
+    ])
+        .select()
+        .single();
+
+  if (orderError || !orderData) {
+    console.log(orderError);
+    alert("No se pudo guardar la orden");
+    setSaving(false);
+    return;
+  }
+
+  const itemsPayload = items.map((item) => ({
+    order_id: orderData.id,
+    product: item.product,
+    kilos: Number(Number(item.kilos || 0).toFixed(3)),
+    price: Number(Number(item.price || 0).toFixed(2)),
+    sale_type: item.sale_type || "kg",
+    quantity: item.sale_type === "pieza" ? Number(item.quantity || 0) : null,
+    is_fixed_price_piece: Boolean(item.is_fixed_price_piece),
+  }));
+
+  const { error: itemsError } = await supabase
+    .from("order_items")
+    .insert(itemsPayload);
+
+  if (itemsError) {
+    console.log(itemsError);
+    alert("La orden se guardó, pero fallaron los renglones");
+    setSaving(false);
+    return;
+  }
+
+  orderId = orderData.id;
+}
+
+    const folio = ticketFolio(orderId);
     const ticketTotal = items.reduce((acc, item) => {
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         return acc + Number(item.quantity || 0) * Number(item.price || 0);
@@ -613,7 +705,7 @@ const { data: orderData, error: orderError } = await supabase
 
    setPrintTicketData({
      folio,
-     orderId: orderData.id,
+     orderId: orderId,
      customerName: customerName,
      attendant: attendant || "",
      items: savedItems,
@@ -635,13 +727,14 @@ const { data: orderData, error: orderError } = await supabase
      })),
      subtotal: ticketTotal,
      total: ticketTotal,
-     qrData: orderData.id,
+     qrData: orderId,
      type: "venta",
    };
    smartPrintTicket(ticketForPrint);
 
    setLastSavedFolio(folio);
 setItems([]);
+setPulledOrderId(null);
 setSelectedProduct("");
 setSelectedCategory(null);
 setSearch("");
@@ -712,6 +805,11 @@ const paidTickets = useMemo(() => {
             >
               {isPOS ? "✕ Salir POS" : "🖥 Modo POS"}
             </button>
+            {prodOrders.length > 0 && (
+              <button onClick={() => setShowProdOrders(!showProdOrders)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: showProdOrders ? COLORS.success : "rgba(31,122,77,0.10)", color: showProdOrders ? "white" : COLORS.success, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
+                📦 Pedidos listos ({prodOrders.length})
+              </button>
+            )}
             {heldSales.length > 0 && (
               <button onClick={() => setShowHeld(!showHeld)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "rgba(166,106,16,0.10)", color: COLORS.warning, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
                 En espera ({heldSales.length})
@@ -724,6 +822,55 @@ const paidTickets = useMemo(() => {
             )}
           </div>
         </div>
+
+        {/* Panel: pedidos de producción listos para pesar */}
+        {showProdOrders && prodOrders.length > 0 && (
+          <div style={{ marginBottom: 14, padding: 14, borderRadius: 18, background: "rgba(31,122,77,0.06)", border: `1px solid rgba(31,122,77,0.15)` }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: COLORS.success, marginBottom: 10 }}>📦 Pedidos listos para pesar</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {prodOrders.map((order) => {
+                const total = (order.order_items || []).reduce((a, oi) => {
+                  if (oi.sale_type === "pieza" && oi.is_fixed_price_piece) return a + Number(oi.quantity || oi.kilos || 0) * Number(oi.price || 0);
+                  return a + Number(oi.kilos || 0) * Number(oi.price || 0);
+                }, 0);
+                return (
+                  <div key={order.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 14, background: "rgba(255,255,255,0.9)", border: `1px solid ${COLORS.border}` }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 14 }}>
+                        {ticketFolio(order.id)} — {order.customer_name || "Sin cliente"}
+                      </div>
+                      <div style={{ color: COLORS.muted, fontSize: 12 }}>
+                        {(order.order_items || []).length} productos · ${money(total)} · {order.created_at ? new Date(order.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => pullProdOrder(order)}
+                      style={{
+                        padding: "10px 18px", borderRadius: 12, border: "none",
+                        background: `linear-gradient(180deg, ${COLORS.success} 0%, #165a38 100%)`,
+                        color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer", whiteSpace: "nowrap" as const,
+                      }}
+                    >
+                      Jalar a mostrador
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Indicador de pedido jalado */}
+        {pulledOrderId && (
+          <div style={{ marginBottom: 10, padding: "10px 16px", borderRadius: 14, background: "rgba(31,122,77,0.10)", border: `1px solid rgba(31,122,77,0.2)`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.success }}>
+              📦 Pedido {ticketFolio(pulledOrderId)} cargado — re-pesa y genera ticket
+            </div>
+            <button onClick={() => { setPulledOrderId(null); setItems([]); }} style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "4px 12px", cursor: "pointer", fontSize: 12, color: COLORS.danger, fontWeight: 600 }}>
+              Soltar pedido
+            </button>
+          </div>
+        )}
 
         {/* Selector de empleado */}
         <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", padding: "0 4px" }}>
