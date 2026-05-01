@@ -40,6 +40,7 @@ const CATEGORY_OPTIONS = [
   "Embutidos",
   "Preparados",
   "Complementos",
+  "Comida",
 ];
 
 export default function AdminProductosPage() {
