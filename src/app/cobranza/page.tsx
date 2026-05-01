@@ -861,7 +861,19 @@ const [productSearchManual, setProductSearchManual] = useState("");
       noteDate,
       Number(customer.credit_days || 0) > 0 ? Number(customer.credit_days) : 7
     );
-    const total = ticketTotal(selectedTicket);
+    const subtotal = combinedTotal();
+    const descuento = calcDiscount(subtotal);
+    const finalTotal = Math.max(0, subtotal - descuento);
+
+    // Guardar info de descuento en notes del ticket
+    if (descuento > 0) {
+      const discountNote = discountMode === "percent"
+        ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}`
+        : `Descuento -$${Math.ceil(descuento)}`;
+      const existing = selectedTicket.notes || "";
+      const newNotes = existing ? `${existing} | ${discountNote}` : discountNote;
+      await supabase.from("orders").update({ notes: newNotes }).eq("id", selectedTicket.id);
+    }
 
     const { data: noteData, error: noteError } = await supabase
       .from("cxc_notes")
@@ -873,10 +885,10 @@ const [productSearchManual, setProductSearchManual] = useState("");
           note_date: noteDate,
           due_date: dueDate,
           source_type: "ticket",
-          subtotal: moneyRound(total),
-          discount_amount: 0,
-          total_amount: moneyRound(total),
-          balance_due: moneyRound(total),
+          subtotal: moneyRound(subtotal),
+          discount_amount: moneyRound(descuento),
+          total_amount: moneyRound(finalTotal),
+          balance_due: moneyRound(finalTotal),
           status: "abierta",
           notes: selectedTicket.notes || null,
         },
@@ -947,8 +959,9 @@ const [productSearchManual, setProductSearchManual] = useState("");
         is_fixed_price_piece: false,
         prepared_kilos: item.prepared_kilos,
       })),
-      subtotal: total,
-      total: total,
+      subtotal: subtotal,
+      discount: moneyRound(descuento),
+      total: moneyRound(finalTotal),
       paymentMethod: "credito",
       qrData: selectedTicket.id,
       type: "cobro",
