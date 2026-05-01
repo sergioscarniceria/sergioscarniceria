@@ -1143,6 +1143,21 @@ const paidTickets = useMemo(() => {
               </span>
             )}
           </div>
+          {scaleWeight > 0 && selectedProductData && !isFixedPieceProduct && (
+            <div style={{
+              textAlign: "center",
+              padding: "8px 0 4px",
+              fontSize: 26,
+              fontWeight: 900,
+              color: COLORS.primary,
+              letterSpacing: "-0.5px",
+            }}>
+              ${money(scaleWeight * selectedProductData.price)}
+              <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.muted, marginLeft: 6 }}>
+                ({scaleWeight.toFixed(3)} × ${money(selectedProductData.price)})
+              </span>
+            </div>
+          )}
 
           {/* Warning: báscula en 0 */}
           {scaleZeroWarning && (
