@@ -158,6 +158,7 @@ export default function CobranzaPage() {
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [ticketSearch, setTicketSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [extraTickets, setExtraTickets] = useState<Ticket[]>([]);
 
   const [customerName, setCustomerName] = useState("");
   const [manualNotes, setManualNotes] = useState("");
@@ -448,8 +449,41 @@ const [productSearchManual, setProductSearchManual] = useState("");
     }
 
     setSelectedTicket(data as Ticket);
+    setExtraTickets([]);
     setDiscountMode("none");
     setDiscountValue("");
+  }
+
+  // Agregar otro ticket a la cuenta (multi-cobro)
+  async function addTicketToGroup(id: string) {
+    if (selectedTicket && id === selectedTicket.id) return;
+    if (extraTickets.some((t) => t.id === id)) return;
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+      .eq("id", id)
+      .single();
+    if (error || !data) { alert("No se pudo agregar el ticket"); return; }
+    setExtraTickets((prev) => [...prev, data as Ticket]);
+  }
+
+  function removeTicketFromGroup(id: string) {
+    setExtraTickets((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // Total combinado de todos los tickets seleccionados
+  function allSelectedTickets(): Ticket[] {
+    if (!selectedTicket) return [];
+    return [selectedTicket, ...extraTickets];
+  }
+
+  function combinedTotal(): number {
+    return allSelectedTickets().reduce((acc, t) => acc + ticketTotal(t), 0);
+  }
+
+  function combinedFinalTotal(): number {
+    const sub = combinedTotal();
+    return moneyRound(Math.max(0, sub - calcDiscount(sub)));
   }
 
   /**
@@ -507,37 +541,47 @@ const [productSearchManual, setProductSearchManual] = useState("");
 
     setSaving(true);
 
-    const subtotal = ticketTotal(selectedTicket);
+    const allTickets = allSelectedTickets();
+    const subtotal = combinedTotal();
     const descuento = calcDiscount(subtotal);
     const finalTotal = Math.max(0, subtotal - descuento);
 
-    const orderUpdate: any = {
-      payment_status: "pagado",
-      payment_method: method,
-      paid_at: new Date().toISOString(),
-    };
+    const paidAt = new Date().toISOString();
+    const isMulti = allTickets.length > 1;
+    const groupNote = isMulti ? `Cobro agrupado (${allTickets.length} tickets)` : "";
 
-    // Guardar info de descuento en notes si existe
-    if (descuento > 0) {
-      const discountNote = discountMode === "percent"
-        ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}`
-        : `Descuento -$${Math.ceil(descuento)}`;
-      const existing = selectedTicket.notes || "";
-      orderUpdate.notes = existing ? `${existing} | ${discountNote}` : discountNote;
+    // Marcar cada ticket como pagado
+    for (const ticket of allTickets) {
+      const orderUpdate: any = {
+        payment_status: "pagado",
+        payment_method: method,
+        paid_at: paidAt,
+        cashier_name: cashierName || null,
+      };
+
+      // Descuento solo en nota del ticket principal
+      if (descuento > 0 && ticket.id === selectedTicket.id) {
+        const discountNote = discountMode === "percent"
+          ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}`
+          : `Descuento -$${Math.ceil(descuento)}`;
+        const existing = ticket.notes || "";
+        const parts = [existing, discountNote, groupNote].filter(Boolean);
+        orderUpdate.notes = parts.join(" | ");
+      } else if (groupNote) {
+        const existing = ticket.notes || "";
+        orderUpdate.notes = existing ? `${existing} | ${groupNote}` : groupNote;
+      }
+
+      const { error } = await supabase.from("orders").update(orderUpdate).eq("id", ticket.id);
+      if (error) {
+        console.log(error);
+        alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+        setSaving(false);
+        return;
+      }
     }
 
-    const { error } = await supabase
-      .from("orders")
-      .update(orderUpdate)
-      .eq("id", selectedTicket.id);
-
-    if (error) {
-      console.log(error);
-      alert("No se pudo registrar el pago");
-      setSaving(false);
-      return;
-    }
-
+    // Un solo movimiento de caja por el total combinado
     const { error: cashError } = await supabase
       .from("cash_movements")
       .insert([
@@ -559,39 +603,35 @@ const [productSearchManual, setProductSearchManual] = useState("");
       return;
     }
 
-    // Descontar inventario de complementos (productos por pieza)
-    if (selectedTicket.order_items) {
-      for (const item of selectedTicket.order_items) {
-        if (item.sale_type === "pieza" && (item as any).quantity) {
-          // Buscar producto
-          const { data: prod } = await supabase
-            .from("products")
-            .select("id, stock, category, fixed_piece_price")
-            .eq("name", item.product)
-            .single();
-          if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
-            const prevStock = prod.stock || 0;
-            const qty = Number((item as any).quantity || 0);
-            const newStock = Math.max(0, prevStock - qty);
-            await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
-            await supabase.from("inventory_movements").insert({
-              item_type: "complemento",
-              item_id: prod.id,
-              movement_type: "salida",
-              quantity: qty,
-              previous_stock: prevStock,
-              new_stock: newStock,
-              notes: `Venta ticket ${selectedTicket.id.slice(0, 6)}`,
-              created_by: cashierName || "cajera",
-            });
+    // Descontar inventario de complementos (productos por pieza) para todos los tickets
+    for (const ticket of allTickets) {
+      if (ticket.order_items) {
+        for (const item of ticket.order_items) {
+          if (item.sale_type === "pieza" && item.quantity) {
+            const { data: prod } = await supabase
+              .from("products")
+              .select("id, stock, category, fixed_piece_price")
+              .eq("name", item.product)
+              .single();
+            if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
+              const prevStock = prod.stock || 0;
+              const qty = Number(item.quantity || 0);
+              const newStock = Math.max(0, prevStock - qty);
+              await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
+              await supabase.from("inventory_movements").insert({
+                item_type: "complemento",
+                item_id: prod.id,
+                movement_type: "salida",
+                quantity: qty,
+                previous_stock: prevStock,
+                new_stock: newStock,
+                notes: `Venta ticket ${ticket.id.slice(0, 6)}`,
+                created_by: cashierName || "cajera",
+              });
+            }
           }
         }
       }
-    }
-
-    // Guardar nombre de cajera en la orden
-    if (cashierName) {
-      await supabase.from("orders").update({ cashier_name: cashierName }).eq("id", selectedTicket.id);
     }
 
     // Mostrar ticket imprimible
@@ -602,6 +642,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
   function closePrintAndReset() {
     setShowPrintTicket(false);
     setSelectedTicket(null);
+    setExtraTickets([]);
     setDiscountMode("none");
     setDiscountValue("");
     loadData();
@@ -1567,11 +1608,22 @@ if (cashError) {
                     {filteredTickets.length === 0 ? (
                       <div style={emptyBoxStyle}>No hay tickets pendientes</div>
                     ) : (
-                      filteredTickets.map((ticket) => (
+                      filteredTickets.map((ticket) => {
+                        const isSelected = selectedTicket?.id === ticket.id;
+                        const isExtra = extraTickets.some((t) => t.id === ticket.id);
+                        const isInGroup = isSelected || isExtra;
+                        return (
                         <button
                           key={ticket.id}
-                          onClick={() => openTicket(ticket.id)}
-                          style={searchResultCardStyle}
+                          onClick={() => {
+                            if (isInGroup) return;
+                            if (selectedTicket && !isSelected) {
+                              addTicketToGroup(ticket.id);
+                            } else {
+                              openTicket(ticket.id);
+                            }
+                          }}
+                          style={{ ...searchResultCardStyle, ...(isInGroup ? { background: "rgba(22,163,74,0.08)", border: `2px solid ${COLORS.success}` } : {}) }}
                         >
                           <div style={{ textAlign: "left", minWidth: 0 }}>
                             <div style={searchTitleStyle}>{ticketFolio(ticket.id)}</div>
@@ -1588,9 +1640,12 @@ if (cashError) {
                             </div>
                           </div>
 
-                          <div style={badgeStyle}>Abrir</div>
+                          <div style={badgeStyle}>
+                            {isInGroup ? "✓" : selectedTicket ? "+ Sumar" : "Abrir"}
+                          </div>
                         </button>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -1872,21 +1927,41 @@ if (cashError) {
                       )}
                     </div>
 
+                    {/* Tickets agrupados */}
+                    {extraTickets.length > 0 && (
+                      <div style={{ background: "rgba(22,163,74,0.06)", borderRadius: 12, padding: 12, marginBottom: 12, border: `1px solid rgba(22,163,74,0.2)` }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.success, marginBottom: 8 }}>
+                          Cobro agrupado ({allSelectedTickets().length} tickets)
+                        </div>
+                        {allSelectedTickets().map((t) => (
+                          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 13 }}>
+                            <span>{ticketFolio(t.id)} — {t.customer_name || "Mostrador"}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontWeight: 700 }}>${money(ticketTotal(t))}</span>
+                              {t.id !== selectedTicket.id && (
+                                <button onClick={() => removeTicketFromGroup(t.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>✕</button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Resumen de cobro */}
                     <div style={discountSummaryStyle}>
                       <div style={summaryRowStyle}>
-                        <span>Subtotal</span>
-                        <span>${money(ticketTotal(selectedTicket))}</span>
+                        <span>Subtotal{extraTickets.length > 0 ? ` (${allSelectedTickets().length} tickets)` : ""}</span>
+                        <span>${money(combinedTotal())}</span>
                       </div>
-                      {calcDiscount(ticketTotal(selectedTicket)) > 0 && (
+                      {calcDiscount(combinedTotal()) > 0 && (
                         <div style={{ ...summaryRowStyle, color: COLORS.success }}>
                           <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
-                          <span>-${money(calcDiscount(ticketTotal(selectedTicket)))}</span>
+                          <span>-${money(calcDiscount(combinedTotal()))}</span>
                         </div>
                       )}
                       <div style={{ ...summaryRowStyle, fontWeight: 800, fontSize: 22 }}>
                         <span>Total a cobrar</span>
-                        <span>${money(ticketFinalTotal(selectedTicket))}</span>
+                        <span>${money(combinedFinalTotal())}</span>
                       </div>
                     </div>
 
@@ -2013,7 +2088,7 @@ if (cashError) {
 
                     {/* Modal calculadora de cambio */}
                     {showCashCalc && selectedTicket && (() => {
-                      const totalCobrar = ticketFinalTotal(selectedTicket);
+                      const totalCobrar = combinedFinalTotal();
                       const recibido = Number(cashReceived || 0);
                       const cambio = recibido - totalCobrar;
                       const QUICK_AMOUNTS = [50, 100, 200, 500, 1000];
@@ -2139,12 +2214,8 @@ if (cashError) {
                             <button
                               onClick={() => {
                                 if (!selectedTicket) return;
-                                const disc = calcDiscount(ticketTotal(selectedTicket));
-                                const ticketForPrint: TicketData = {
-                                  folio: ticketFolio(selectedTicket.id),
-                                  customerName: selectedTicket.customer_name,
-                                  cashier: cashierName || null,
-                                  items: (selectedTicket.order_items || []).map((item: any) => ({
+                                const allItems = allSelectedTickets().flatMap((t) =>
+                                  (t.order_items || []).map((item: any) => ({
                                     product: item.product,
                                     kilos: item.kilos,
                                     price: item.price,
@@ -2152,15 +2223,21 @@ if (cashError) {
                                     sale_type: item.sale_type,
                                     is_fixed_price_piece: item.is_fixed_price_piece,
                                     prepared_kilos: item.prepared_kilos,
-                                  })),
-                                  subtotal: ticketTotal(selectedTicket),
+                                  }))
+                                );
+                                const disc = calcDiscount(combinedTotal());
+                                const ticketForPrint: TicketData = {
+                                  folio: ticketFolio(selectedTicket.id) + (extraTickets.length > 0 ? ` +${extraTickets.length}` : ""),
+                                  customerName: selectedTicket.customer_name,
+                                  cashier: cashierName || null,
+                                  items: allItems,
+                                  subtotal: combinedTotal(),
                                   discount: disc,
-                                  total: ticketFinalTotal(selectedTicket),
+                                  total: combinedFinalTotal(),
                                   qrData: selectedTicket.id,
                                   type: "cobro",
                                 };
                                 smartPrintTicket(ticketForPrint);
-                                // Abrir cajón si está conectada la impresora
                                 openCashDrawer().catch(() => {});
                               }}
                               style={successButtonStyle}
@@ -2204,16 +2281,17 @@ if (cashError) {
 
                             <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
-                            {(selectedTicket.order_items || []).map((item, i) => {
-                              const kg = Number(item.prepared_kilos || item.kilos || 0);
-                              const lineTotal = kg * Number(item.price || 0);
+                            {allSelectedTickets().flatMap((t) => (t.order_items || []).map((item, i) => {
+                              const isPieza = item.sale_type === "pieza" && item.is_fixed_price_piece;
+                              const qty = isPieza ? Number(item.quantity || 0) : Number(item.prepared_kilos || item.kilos || 0);
+                              const lineTotal = qty * Number(item.price || 0);
                               return (
-                                <div key={i} style={{ marginBottom: 6 }}>
+                                <div key={`${t.id}-${i}`} style={{ marginBottom: 6 }}>
                                   <div style={{ fontWeight: 700 }}>{item.product}</div>
                                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                                     <span>
-                                      {kg} kg x ${money(item.price)}
-                                      {item.prepared_kilos && item.prepared_kilos !== item.kilos
+                                      {isPieza ? `${qty} pza` : `${qty} kg`} x ${money(item.price)}
+                                      {!isPieza && item.prepared_kilos && item.prepared_kilos !== item.kilos
                                         ? ` (ped: ${item.kilos})`
                                         : ""}
                                     </span>
@@ -2221,25 +2299,25 @@ if (cashError) {
                                   </div>
                                 </div>
                               );
-                            })}
+                            }))}
 
                             <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
                             <div style={{ display: "flex", justifyContent: "space-between", margin: "2px 0" }}>
                               <span>Subtotal</span>
-                              <span>${money(ticketTotal(selectedTicket))}</span>
+                              <span>${money(combinedTotal())}</span>
                             </div>
 
-                            {calcDiscount(ticketTotal(selectedTicket)) > 0 && (
+                            {calcDiscount(combinedTotal()) > 0 && (
                               <div style={{ display: "flex", justifyContent: "space-between", margin: "2px 0", color: "#1f7a4d" }}>
                                 <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
-                                <span>-${money(calcDiscount(ticketTotal(selectedTicket)))}</span>
+                                <span>-${money(calcDiscount(combinedTotal()))}</span>
                               </div>
                             )}
 
                             <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, fontSize: 16, margin: "8px 0" }}>
                               <span>TOTAL</span>
-                              <span>${money(ticketFinalTotal(selectedTicket))}</span>
+                              <span>${money(combinedFinalTotal())}</span>
                             </div>
 
                             <div style={{ textAlign: "center", margin: "8px 0" }}>
