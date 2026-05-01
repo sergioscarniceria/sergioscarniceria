@@ -185,6 +185,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
   const [hideUnprepared, setHideUnprepared] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editedItems, setEditedItems] = useState<OrderItem[]>([]);
+  const [editProductSearch, setEditProductSearch] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Cambiar cliente del ticket
@@ -702,6 +703,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
   function startEditMode() {
     if (!selectedTicket?.order_items) return;
     setEditedItems(selectedTicket.order_items.map((item) => ({ ...item })));
+    setEditProductSearch("");
     setEditMode(true);
   }
 
@@ -724,6 +726,31 @@ const [productSearchManual, setProductSearchManual] = useState("");
 
   function removeEditedItem(index: number) {
     setEditedItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateEditedItemProduct(index: number, value: string) {
+    setEditedItems((prev) => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], product: value };
+      return copy;
+    });
+  }
+
+  function addFreeEditLine() {
+    setEditedItems((prev) => [...prev, { product: "", kilos: 1, price: 0, sale_type: "kg" as const }]);
+  }
+
+  function addCatalogProductToEdit(p: CatalogProduct) {
+    const isPieza = !!p.fixed_piece_price;
+    setEditedItems((prev) => [...prev, {
+      product: p.name,
+      kilos: isPieza ? 0 : 1,
+      price: isPieza ? (p.fixed_piece_price || 0) : p.price,
+      sale_type: (isPieza ? "pieza" : "kg") as "kg" | "pieza",
+      quantity: isPieza ? 1 : null,
+      is_fixed_price_piece: isPieza,
+    }]);
+    setEditProductSearch("");
   }
 
   function editedTotal() {
@@ -1787,13 +1814,23 @@ if (cashError) {
                     <div style={{ marginTop: 12 }}>
                       {editMode ? (
                         /* ── Items en modo edición ── */
-                        editedItems.length === 0 ? (
+                        <>
+                        {editedItems.length === 0 ? (
                           <div style={emptyBoxStyle}>Sin productos — agrega al menos uno</div>
                         ) : (
                           editedItems.map((item, index) => (
                             <div key={index} style={{ ...itemRowStyle, flexDirection: "column", gap: 8 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-                                <div style={itemNameStyle}>{item.product}</div>
+                                {item.product ? (
+                                  <div style={itemNameStyle}>{item.product}</div>
+                                ) : (
+                                  <input
+                                    value={item.product}
+                                    onChange={(e) => updateEditedItemProduct(index, e.target.value)}
+                                    placeholder="Nombre del producto"
+                                    style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 14, fontWeight: 700 }}
+                                  />
+                                )}
                                 <button
                                   onClick={() => removeEditedItem(index)}
                                   style={{ background: "rgba(220,38,38,0.1)", color: COLORS.danger, border: "none", borderRadius: 8, padding: "4px 10px", cursor: "pointer", fontSize: 13, fontWeight: 700 }}
@@ -1832,7 +1869,39 @@ if (cashError) {
                               </div>
                             </div>
                           ))
-                        )
+                        )}
+                        {/* Agregar producto al ticket */}
+                        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "flex-start" }}>
+                          <button
+                            onClick={addFreeEditLine}
+                            style={{ background: COLORS.primary, color: "white", border: "none", borderRadius: 10, padding: "8px 14px", cursor: "pointer", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" as const }}
+                          >
+                            + Renglón libre
+                          </button>
+                          {catalogProducts.length > 0 && (
+                            <div style={{ position: "relative" as const, flex: 1, minWidth: 160 }}>
+                              <input
+                                value={editProductSearch}
+                                onChange={(e) => setEditProductSearch(e.target.value)}
+                                placeholder="Buscar producto del catálogo..."
+                                style={{ width: "100%", padding: "8px 12px", borderRadius: 10, border: `1px solid ${COLORS.border}`, fontSize: 14, boxSizing: "border-box" as const }}
+                              />
+                              {editProductSearch.trim() && (
+                                <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" as const, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+                                  {catalogProducts.filter((p) => p.name.toLowerCase().includes(editProductSearch.toLowerCase())).slice(0, 15).map((p) => (
+                                    <div key={p.id} onClick={() => addCatalogProductToEdit(p)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14 }}>
+                                      {p.name} — {p.fixed_piece_price ? `${money(p.fixed_piece_price)}/pza` : `${money(p.price)}/kg`}
+                                    </div>
+                                  ))}
+                                  {catalogProducts.filter((p) => p.name.toLowerCase().includes(editProductSearch.toLowerCase())).length === 0 && (
+                                    <div style={{ padding: "10px 14px", color: COLORS.muted, fontSize: 14 }}>Sin resultados</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        </>
                       ) : (
                         /* ── Items en modo lectura ── */
                         (selectedTicket.order_items || []).length === 0 ? (
