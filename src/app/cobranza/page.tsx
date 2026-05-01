@@ -19,6 +19,16 @@ type OrderItem = {
   price: number;
   prepared_kilos?: number | null;
   sale_type?: "kg" | "pieza" | null;
+  quantity?: number | null;
+  is_fixed_price_piece?: boolean | null;
+};
+
+type CatalogProduct = {
+  id: string;
+  name: string;
+  price: number;
+  category: string | null;
+  fixed_piece_price?: number | null;
 };
 
 type Ticket = {
@@ -145,6 +155,7 @@ export default function CobranzaPage() {
 
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
   const [ticketSearch, setTicketSearch] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
 
@@ -154,9 +165,11 @@ export default function CobranzaPage() {
   const [manualLines, setManualLines] = useState<ManualLine[]>([]);
   const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
 const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+const [manualCustomerSearch, setManualCustomerSearch] = useState("");
 const [showNewCustomer, setShowNewCustomer] = useState(false);
 const [newCustomerName, setNewCustomerName] = useState("");
 const [newCustomerPhone, setNewCustomerPhone] = useState("");
+const [productSearchManual, setProductSearchManual] = useState("");
 
   // Descuento
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
@@ -327,13 +340,13 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     const ticketsData = [...pendientes, ...pagados.filter((t) => !seen.has(t.id))];
     const ticketsError = pendientesRes.error || pagadosRes.error;
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("id, name, credit_enabled, credit_days, customer_type")
-      .order("name", { ascending: true });
+    const [customersRes, productsRes] = await Promise.all([
+      supabase.from("customers").select("id, name, credit_enabled, credit_days, customer_type").order("name", { ascending: true }),
+      supabase.from("products").select("id, name, price, category, fixed_piece_price").order("name", { ascending: true }),
+    ]);
 
-    if (ticketsError || customersError) {
-      console.log(ticketsError || customersError);
+    if (ticketsError || customersRes.error) {
+      console.log(ticketsError || customersRes.error);
       alert("No se pudo cargar cobranza");
       setLoading(false);
       return;
@@ -349,14 +362,17 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
     });
 
     setTickets(pending);
-    setCustomers((customersData as Customer[]) || []);
+    setCustomers((customersRes.data as Customer[]) || []);
+    setCatalogProducts((productsRes.data as CatalogProduct[]) || []);
     setLoading(false);
   }
 
   function ticketTotal(ticket: Ticket | null) {
     if (!ticket) return 0;
     return (ticket.order_items || []).reduce((acc, item) => {
-      // Usar prepared_kilos (peso real ajustado) si existe, si no el original
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        return acc + Number(item.quantity || 0) * Number(item.price || 0);
+      }
       const kg = Number(item.prepared_kilos || item.kilos || 0);
       return acc + kg * Number(item.price || 0);
     }, 0);
@@ -929,9 +945,11 @@ const [newCustomerPhone, setNewCustomerPhone] = useState("");
   function clearManualSale() {
   setCustomerMode("general");
   setSelectedCustomerId("");
+  setManualCustomerSearch("");
   setCustomerName("");
   setManualNotes("");
   setManualDiscount("");
+  setProductSearchManual("");
   setManualLines([]);
 }
 async function createNewCustomer() {
@@ -2479,18 +2497,27 @@ if (cashError) {
 )}
   {customerMode === "existente" ? (
     <>
-      <select
-        value={selectedCustomerId}
-        onChange={(e) => setSelectedCustomerId(e.target.value)}
-        style={inputStyle}
-      >
-        <option value="">Seleccionar cliente</option>
-        {customers.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      <div style={{ position: "relative" as const }}>
+        <input
+          value={manualCustomerSearch}
+          onChange={(e) => { setManualCustomerSearch(e.target.value); setSelectedCustomerId(""); }}
+          placeholder="Buscar cliente por nombre..."
+          style={inputStyle}
+        />
+        {manualCustomerSearch.trim() && !selectedCustomerId && (
+          <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" as const, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+            {customers.filter((c) => c.name.toLowerCase().includes(manualCustomerSearch.toLowerCase())).slice(0, 20).map((c) => (
+              <div key={c.id} onClick={() => { setSelectedCustomerId(c.id); setManualCustomerSearch(c.name); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14 }}>
+                {c.name}{c.credit_enabled ? " (crédito)" : ""}
+              </div>
+            ))}
+            {customers.filter((c) => c.name.toLowerCase().includes(manualCustomerSearch.toLowerCase())).length === 0 && (
+              <div style={{ padding: "10px 14px", color: COLORS.muted, fontSize: 14 }}>Sin resultados</div>
+            )}
+          </div>
+        )}
+      </div>
+      {selectedCustomerId && <div style={{ color: COLORS.success, fontSize: 13, marginTop: 4 }}>Cliente: {manualCustomerSearch}</div>}
 
       <button
         onClick={() => setShowNewCustomer(true)}
@@ -2516,9 +2543,42 @@ if (cashError) {
                   />
                 </div>
 
-                <button onClick={addManualLine} style={primaryActionButtonStyle}>
-                  + Agregar renglón
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "flex-start" }}>
+                  <button onClick={addManualLine} style={{ ...primaryActionButtonStyle, whiteSpace: "nowrap" as const }}>
+                    + Renglón libre
+                  </button>
+                  {catalogProducts.length > 0 && (
+                    <div style={{ position: "relative" as const, flex: 1, minWidth: 180 }}>
+                      <input
+                        value={productSearchManual}
+                        onChange={(e) => setProductSearchManual(e.target.value)}
+                        placeholder="Buscar producto del catálogo..."
+                        style={inputStyle}
+                      />
+                      {productSearchManual.trim() && (
+                        <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 10, maxHeight: 220, overflowY: "auto" as const, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
+                          {catalogProducts.filter((p) => p.name.toLowerCase().includes(productSearchManual.toLowerCase())).slice(0, 15).map((p) => (
+                            <div key={p.id} onClick={() => {
+                              const isPieza = !!p.fixed_piece_price;
+                              setManualLines((prev) => [...prev, {
+                                id: makeLineId(),
+                                product: p.name,
+                                kilos: "1",
+                                price: String(isPieza ? p.fixed_piece_price : p.price),
+                              }]);
+                              setProductSearchManual("");
+                            }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14 }}>
+                              {p.name} — {p.fixed_piece_price ? `$${p.fixed_piece_price}/pza` : `$${p.price}/kg`}
+                            </div>
+                          ))}
+                          {catalogProducts.filter((p) => p.name.toLowerCase().includes(productSearchManual.toLowerCase())).length === 0 && (
+                            <div style={{ padding: "10px 14px", color: COLORS.muted, fontSize: 14 }}>Sin resultados — usa "Renglón libre"</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ marginTop: 14 }}>
                   {manualLines.length === 0 ? (
@@ -2540,7 +2600,7 @@ if (cashError) {
                           onChange={(e) =>
                             updateManualLine(line.id, "kilos", e.target.value)
                           }
-                          placeholder="Kilos"
+                          placeholder="Kilos/Cant"
                           style={inputMiniStyle}
                         />
 
