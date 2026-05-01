@@ -43,6 +43,7 @@ type Ticket = {
   payment_method?: string | null;
   paid_at?: string | null;
   canceled_at?: string | null;
+  attendant_name?: string | null;
   order_items?: OrderItem[];
 };
 
@@ -324,13 +325,13 @@ const [productSearchManual, setProductSearchManual] = useState("");
     const [pendientesRes, pagadosRes] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
         .or("payment_status.eq.pendiente,payment_status.is.null")
         .order("created_at", { ascending: false })
         .limit(100),
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
         .eq("payment_status", "pagado")
         .order("created_at", { ascending: false })
         .limit(30),
@@ -437,7 +438,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
       )
       .eq("id", id)
       .single();
@@ -460,7 +461,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
     if (extraTickets.some((t) => t.id === id)) return;
     const { data, error } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
       .eq("id", id)
       .single();
     if (error || !data) { alert("No se pudo agregar el ticket"); return; }
@@ -499,7 +500,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
         )
         .eq("id", full)
         .single();
@@ -515,7 +516,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
         )
         .ilike("id", `${shortCode}%`)
         .order("created_at", { ascending: false })
@@ -1340,7 +1341,7 @@ if (cashError) {
     if (full) {
       const { data } = await supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
         .eq("id", full)
         .single();
       if (data) {
@@ -1353,7 +1354,7 @@ if (cashError) {
     // Buscar por folio parcial o nombre
     const { data } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
       .or(`id.ilike.${shortCode || q}%,customer_name.ilike.%${q}%`)
       .in("payment_status", ["pagado", "credito_autorizado", "credito", "cancelado"])
       .order("created_at", { ascending: false })
@@ -1679,6 +1680,11 @@ if (cashError) {
                             </button>
                           )}
                         </div>
+                        {selectedTicket.attendant_name && (
+                          <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>
+                            Carnicero: <b style={{ color: COLORS.text }}>{selectedTicket.attendant_name}</b>
+                          </div>
+                        )}
                         {changingCustomer && (
                           <div style={{ margin: "6px 0 8px", padding: 10, background: COLORS.bgSoft, borderRadius: 12, border: `1px solid ${COLORS.border}` }}>
                             <input
