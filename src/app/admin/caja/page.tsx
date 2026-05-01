@@ -136,6 +136,19 @@ function todayStr() {
   return `${n.getFullYear()}-${`${n.getMonth() + 1}`.padStart(2, "0")}-${`${n.getDate()}`.padStart(2, "0")}`;
 }
 
+// Convierte "YYYY-MM-DD" + hora local MX a ISO string UTC correcto
+function mxToISO(dateStr: string, time: "start" | "end") {
+  const ref = new Date(`${dateStr}T12:00:00Z`);
+  const mxTime = new Date(ref.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+  const offsetMs = ref.getTime() - mxTime.getTime();
+  const offsetH = Math.round(offsetMs / 3600000);
+  const sign = offsetH >= 0 ? "+" : "-";
+  const pad = String(Math.abs(offsetH)).padStart(2, "0");
+  const tz = `${sign}${pad}:00`;
+  const clock = time === "start" ? "00:00:00" : "23:59:59";
+  return new Date(`${dateStr}T${clock}${tz}`).toISOString();
+}
+
 function fmtDateTime(v?: string | null) {
   if (!v) return "—";
   const d = new Date(v);
@@ -272,8 +285,8 @@ export default function CajaPage() {
 
   // ─── Loaders ───────────────────────────────────────────────
   const loadMovements = useCallback(async () => {
-    const start = new Date(`${dateFrom}T00:00:00`).toISOString();
-    const end = new Date(`${dateTo}T23:59:59`).toISOString();
+    const start = mxToISO(dateFrom, "start");
+    const end = mxToISO(dateTo, "end");
     const { data } = await supabase
       .from("cash_movements")
       .select("*")
@@ -351,8 +364,8 @@ export default function CajaPage() {
 
   const loadExpenses = useCallback(async () => {
     try {
-      const start = new Date(`${dateFrom}T00:00:00`).toISOString();
-      const end = new Date(`${dateTo}T23:59:59`).toISOString();
+      const start = mxToISO(dateFrom, "start");
+      const end = mxToISO(dateTo, "end");
       const { data } = await supabase
         .from("cash_expenses")
         .select("*")
@@ -473,8 +486,9 @@ export default function CajaPage() {
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - 6);
-    const start = new Date(`${startDate.getFullYear()}-${`${startDate.getMonth()+1}`.padStart(2,"0")}-${`${startDate.getDate()}`.padStart(2,"0")}T00:00:00`).toISOString();
-    const end = new Date(`${endDate.getFullYear()}-${`${endDate.getMonth()+1}`.padStart(2,"0")}-${`${endDate.getDate()}`.padStart(2,"0")}T23:59:59`).toISOString();
+    const fmtD = (d: Date) => `${d.getFullYear()}-${`${d.getMonth()+1}`.padStart(2,"0")}-${`${d.getDate()}`.padStart(2,"0")}`;
+    const start = mxToISO(fmtD(startDate), "start");
+    const end = mxToISO(fmtD(endDate), "end");
     const { data } = await supabase
       .from("cash_movements")
       .select("*")
@@ -489,8 +503,9 @@ export default function CajaPage() {
       const endDate = new Date();
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 6);
-      const start = new Date(`${startDate.getFullYear()}-${`${startDate.getMonth()+1}`.padStart(2,"0")}-${`${startDate.getDate()}`.padStart(2,"0")}T00:00:00`).toISOString();
-      const end = new Date(`${endDate.getFullYear()}-${`${endDate.getMonth()+1}`.padStart(2,"0")}-${`${endDate.getDate()}`.padStart(2,"0")}T23:59:59`).toISOString();
+      const fmtD2 = (d: Date) => `${d.getFullYear()}-${`${d.getMonth()+1}`.padStart(2,"0")}-${`${d.getDate()}`.padStart(2,"0")}`;
+      const start = mxToISO(fmtD2(startDate), "start");
+      const end = mxToISO(fmtD2(endDate), "end");
       const { data } = await supabase
         .from("cash_expenses")
         .select("*")
@@ -708,7 +723,7 @@ export default function CajaPage() {
   async function saveReconteo() {
     setSaving(true);
     const now = new Date();
-    const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+    const hora = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
 
     // Guardar como movimiento de tipo "reconteo" para registro
     const { error } = await supabase.from("cash_movements").insert([{
@@ -801,8 +816,8 @@ export default function CajaPage() {
     }
 
     // Bloquear cierre si hay tickets preparados sin cobrar (anti-robo)
-    const todayStart = new Date(`${today}T00:00:00`).toISOString();
-    const todayEnd = new Date(`${today}T23:59:59`).toISOString();
+    const todayStart = mxToISO(today, "start");
+    const todayEnd = mxToISO(today, "end");
     const { data: uncollected } = await supabase
       .from("orders")
       .select("id, customer_name, created_at, status, source")
@@ -890,8 +905,8 @@ export default function CajaPage() {
     const diferencia = cl ? Number(cl.difference || 0) : 0;
 
     // Obtener datos extra del día
-    const dayStart = new Date(`${closureDate}T00:00:00`).toISOString();
-    const dayEnd = new Date(`${closureDate}T23:59:59`).toISOString();
+    const dayStart = mxToISO(closureDate, "start");
+    const dayEnd = mxToISO(closureDate, "end");
 
     const [movRes, expRes, creditRes] = await Promise.all([
       supabaseRef.from("cash_movements").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
@@ -1040,7 +1055,7 @@ export default function CajaPage() {
       for (const m of cancelled) {
         checkPage(10);
         doc.setFontSize(8); doc.setFont("helvetica", "normal");
-        const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+        const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
         doc.text(`${hora} — $${money(m.amount)} — ${m.cashier_name || "—"} — ${(m as any).cancel_reason || "Sin motivo"}`, marginL + 2, y);
         y += 4;
       }
@@ -1087,7 +1102,7 @@ export default function CajaPage() {
 
     for (const m of active) {
       checkPage(5);
-      const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
+      const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
       doc.text(hora, marginL + 2, y);
       doc.text(typeName(m.type), marginL + 22, y);
       doc.text(methodName(m.payment_method), marginL + 55, y);
@@ -1885,8 +1900,8 @@ export default function CajaPage() {
                 <button
                   onClick={async () => {
                     // Consultar crédito nuevo del rango (orders con payment_method=credito)
-                    const start = new Date(`${dateFrom}T00:00:00`).toISOString();
-                    const end = new Date(`${dateTo}T23:59:59`).toISOString();
+                    const start = mxToISO(dateFrom, "start");
+                    const end = mxToISO(dateTo, "end");
                     const { data: creditOrders } = await supabase
                       .from("orders")
                       .select("id, order_items(kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)")
@@ -1911,7 +1926,7 @@ export default function CajaPage() {
                       type: "cierre",
                       cashier: todayClosure.closed_by || undefined,
                       date: now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }),
-                      time: now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
+                      time: now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }),
                       totalSales: stats.totalVentas,
                       totalCash: stats.totalEfectivoIngreso,
                       totalCard: stats.totalTarjeta,
