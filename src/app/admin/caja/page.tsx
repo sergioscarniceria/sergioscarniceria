@@ -43,6 +43,7 @@ type OrderItem = {
   quantity?: number | null;
   sale_type?: string | null;
   prepared_kilos?: number | null;
+  is_fixed_price_piece?: boolean | null;
 };
 
 type CashClosure = {
@@ -2218,7 +2219,10 @@ export default function CajaPage() {
                       })}
                     </div>
                     <div style={{ marginTop: 8, fontWeight: 800, color: C.danger, fontSize: 14, textAlign: "right" }}>
-                      Total original: ${Math.ceil(desgloseEditInfo.original_items.reduce((s, i) => s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0), 0))}
+                      Total original: ${Math.ceil(desgloseEditInfo.original_items.reduce((s, i) => {
+                        if (i.sale_type === "pieza" && i.is_fixed_price_piece) return s + Number(i.quantity || 0) * Number(i.price || 0);
+                        return s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0);
+                      }, 0))}
                     </div>
                   </>
                 )}

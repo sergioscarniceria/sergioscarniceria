@@ -261,7 +261,10 @@ function QuickStats({ showInventory = false }: { showInventory?: boolean }) {
 
       const orders = ordersData || [];
       const ventasHoy = orders.reduce((acc: number, o: any) => {
-        return acc + (o.order_items || []).reduce((s: number, i: any) => s + (i.kilos || 0) * (i.price || 0), 0);
+        return acc + (o.order_items || []).reduce((s: number, i: any) => {
+          if (i.sale_type === "pieza" && i.is_fixed_price_piece) return s + (i.quantity || 0) * (i.price || 0);
+          return s + (i.kilos || 0) * (i.price || 0);
+        }, 0);
       }, 0);
       const pendientes = orders.filter((o: any) => o.status === "nuevo" || o.status === "proceso").length;
       const enCamino = orders.filter((o: any) => o.delivery_status === "en_camino").length;

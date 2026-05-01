@@ -383,6 +383,24 @@ const [productSearchManual, setProductSearchManual] = useState("");
     }, 0);
   }
 
+  // Calcula el total de una línea respetando pieza vs kilo
+  function itemLineTotal(item: OrderItem): number {
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      return Number(item.quantity || 0) * Number(item.price || 0);
+    }
+    return Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0);
+  }
+
+  // Texto descriptivo de cantidad para una línea
+  function itemQtyLabel(item: OrderItem): string {
+    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+      return `${item.quantity || 0} pza`;
+    }
+    const kg = item.prepared_kilos || item.kilos || 0;
+    const extra = (item.prepared_kilos && item.prepared_kilos !== item.kilos) ? ` (pedido: ${item.kilos} kg)` : "";
+    return `${kg} kg${extra}`;
+  }
+
   function getCustomerType(ticket: Ticket | null): string | null {
     if (!ticket?.customer_id) return null;
     const c = customers.find((cu) => cu.id === ticket.customer_id);
@@ -1903,7 +1921,7 @@ if (cashError) {
                                   />
                                 </div>
                                 <div style={{ minWidth: 80, textAlign: "right", fontWeight: 800, fontSize: 16 }}>
-                                  ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                                  ${money(itemLineTotal(item))}
                                 </div>
                               </div>
                             </div>
@@ -1951,14 +1969,12 @@ if (cashError) {
                               <div>
                                 <div style={itemNameStyle}>{item.product}</div>
                                 <div style={itemMetaStyle}>
-                                  {item.prepared_kilos && item.prepared_kilos !== item.kilos
-                                    ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
-                                    : `${item.kilos} kg`} · ${money(item.price)}
+                                  {itemQtyLabel(item)} · ${money(item.price)}
                                 </div>
                               </div>
 
                               <div style={itemTotalStyle}>
-                                ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                                ${money(itemLineTotal(item))}
                               </div>
                             </div>
                           ))
@@ -3061,13 +3077,11 @@ if (cashError) {
                           <div>
                             <div style={itemNameStyle}>{item.product}</div>
                             <div style={itemMetaStyle}>
-                              {item.prepared_kilos && item.prepared_kilos !== item.kilos
-                                ? `${item.prepared_kilos} kg (pedido: ${item.kilos} kg)`
-                                : `${item.kilos} kg`} · ${money(item.price)}
+                              {itemQtyLabel(item)} · ${money(item.price)}
                             </div>
                           </div>
                           <div style={itemTotalStyle}>
-                            ${money(Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0))}
+                            ${money(itemLineTotal(item))}
                           </div>
                         </div>
                       ))}

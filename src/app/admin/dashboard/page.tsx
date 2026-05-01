@@ -1227,7 +1227,7 @@ export default function AdminDashboardPage() {
                   const currentTotal = orderTotal(order);
                   const origItems = (order.original_items || []) as OrderItem[];
                   const originalTotal = origItems.reduce(
-                    (s, i) => s + Number(i.kilos || 0) * Number(i.price || 0),
+                    (s, i) => s + itemSubtotal(i),
                     0
                   );
                   const diff = currentTotal - originalTotal;

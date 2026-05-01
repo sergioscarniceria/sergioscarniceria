@@ -16,6 +16,7 @@ type OrderItem = {
   quantity?: number | null;
   prepared_kilos?: number | null;
   is_ready?: boolean | null;
+  is_fixed_price_piece?: boolean | null;
 };
 
 type Order = {
@@ -316,8 +317,8 @@ export default function ProduccionPage() {
 
       function total(order: Order) {
     return (order.order_items || []).reduce((acc, item) => {
-      if (item.sale_type === "pieza") {
-        return acc + Number(item.prepared_kilos || 0) * Number(item.price || 0);
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        return acc + Number(item.quantity || 0) * Number(item.price || 0);
       }
 
       // Para kg: usar prepared_kilos si existe, si no kilos original

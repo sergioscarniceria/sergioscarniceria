@@ -28,6 +28,7 @@ type CartItem = {
   sale_type: "kg" | "pieza";
   kilos: number;
   quantity: number;
+  is_fixed_price_piece?: boolean | null;
 };
 
 const COLORS = {
@@ -319,7 +320,9 @@ export default function NuevoPedidoPage() {
 
     function cartTotal() {
     return cart.reduce((acc, item) => {
-      if (item.sale_type === "pieza") return acc;
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        return acc + Number(item.quantity || 0) * Number(item.price || 0);
+      }
       return acc + Number(item.price || 0) * Number(item.kilos || 0);
     }, 0);
   }
@@ -946,7 +949,9 @@ export default function NuevoPedidoPage() {
 
                         <div style={{ textAlign: "right", flexShrink: 0 }}>
                           <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
-                            {item.sale_type === "kg"
+                            {item.sale_type === "pieza" && item.is_fixed_price_piece
+                              ? `$${Math.ceil((item.quantity || 0) * item.price)}`
+                              : item.sale_type === "kg"
                               ? `$${Math.ceil(item.kilos * item.price)}`
                               : "Se pesa después"}
                           </div>
