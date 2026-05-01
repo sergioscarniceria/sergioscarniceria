@@ -1668,7 +1668,15 @@ if (cashError) {
                   <>
                     <div style={ticketHeaderStyle}>
                       <div>
-                        <div style={ticketTitleStyle}>{ticketFolio(selectedTicket.id)}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={ticketTitleStyle}>{ticketFolio(selectedTicket.id)}</div>
+                          <button
+                            onClick={() => { setSelectedTicket(null); setExtraTickets([]); setDiscountMode("none"); setDiscountValue(""); }}
+                            style={{ background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "4px 12px", cursor: "pointer", fontSize: 12, color: COLORS.muted, fontWeight: 600 }}
+                          >
+                            ✕ Deseleccionar
+                          </button>
+                        </div>
                         <div style={ticketMetaStyle}>
                           Cliente: <b>{selectedTicket.customer_name || "Mostrador"}</b>
                           {!editMode && selectedTicket.payment_status !== "pagado" && (
