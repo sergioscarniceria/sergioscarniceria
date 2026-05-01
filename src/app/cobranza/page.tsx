@@ -45,6 +45,7 @@ type Ticket = {
   paid_at?: string | null;
   canceled_at?: string | null;
   attendant_name?: string | null;
+  discount_amount?: number | null;
   order_items?: OrderItem[];
 };
 
@@ -327,13 +328,13 @@ const [productSearchManual, setProductSearchManual] = useState("");
     const [pendientesRes, pagadosRes] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
         .or("payment_status.eq.pendiente,payment_status.is.null")
         .order("created_at", { ascending: false })
         .limit(100),
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
         .eq("payment_status", "pagado")
         .order("created_at", { ascending: false })
         .limit(30),
@@ -477,7 +478,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
+        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
       )
       .eq("id", id)
       .single();
@@ -500,7 +501,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
     if (extraTickets.some((t) => t.id === id)) return;
     const { data, error } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
       .eq("id", id)
       .single();
     if (error || !data) { alert("No se pudo agregar el ticket"); return; }
@@ -539,7 +540,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
         )
         .eq("id", full)
         .single();
@@ -555,7 +556,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
         )
         .ilike("id", `${shortCode}%`)
         .order("created_at", { ascending: false })
@@ -1419,7 +1420,7 @@ if (cashError) {
     if (full) {
       const { data } = await supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
         .eq("id", full)
         .single();
       if (data) {
@@ -1432,7 +1433,7 @@ if (cashError) {
     // Buscar por folio parcial o nombre
     const { data } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
       .or(`id.ilike.${shortCode || q}%,customer_name.ilike.%${q}%`)
       .in("payment_status", ["pagado", "credito_autorizado", "credito", "cancelado"])
       .order("created_at", { ascending: false })
@@ -3038,7 +3039,19 @@ if (cashError) {
                         </div>
                       </div>
                       <div style={ticketTotalStyle}>
-                        ${money(ticketTotal(historialTicket))}
+                        {(historialTicket.discount_amount && historialTicket.discount_amount > 0) ? (
+                          <div>
+                            <div style={{ fontSize: 13, color: COLORS.muted, textDecoration: "line-through" }}>
+                              ${money(ticketTotal(historialTicket))}
+                            </div>
+                            <div style={{ fontSize: 11, color: COLORS.danger }}>
+                              -${money(historialTicket.discount_amount)} desc.
+                            </div>
+                            <div>${money(moneyRound(Math.max(0, ticketTotal(historialTicket) - historialTicket.discount_amount)))}</div>
+                          </div>
+                        ) : (
+                          <>${money(ticketTotal(historialTicket))}</>
+                        )}
                       </div>
                     </div>
 
@@ -3064,7 +3077,9 @@ if (cashError) {
                       <button
                         onClick={() => {
                           if (!historialTicket) return;
-                          const total = ticketTotal(historialTicket);
+                          const subtotal = ticketTotal(historialTicket);
+                          const disc = Number(historialTicket.discount_amount || 0);
+                          const finalTotal = moneyRound(Math.max(0, subtotal - disc));
                           const ticketForPrint: TicketData = {
                             folio: ticketFolio(historialTicket.id),
                             customerName: historialTicket.customer_name,
@@ -3078,8 +3093,9 @@ if (cashError) {
                               is_fixed_price_piece: item.is_fixed_price_piece,
                               prepared_kilos: item.prepared_kilos,
                             })),
-                            subtotal: total,
-                            total: total,
+                            subtotal: subtotal,
+                            discount: disc > 0 ? disc : undefined,
+                            total: finalTotal,
                             qrData: historialTicket.id,
                             type: "cobro",
                           };
@@ -3093,7 +3109,9 @@ if (cashError) {
                       <button
                         onClick={() => {
                           if (!historialTicket) return;
-                          const total = ticketTotal(historialTicket);
+                          const subtotal2 = ticketTotal(historialTicket);
+                          const disc2 = Number(historialTicket.discount_amount || 0);
+                          const finalTotal2 = moneyRound(Math.max(0, subtotal2 - disc2));
                           const creditTicket: TicketData = {
                             folio: ticketFolio(historialTicket.id),
                             customerName: historialTicket.customer_name,
@@ -3108,8 +3126,9 @@ if (cashError) {
                               is_fixed_price_piece: item.is_fixed_price_piece,
                               prepared_kilos: item.prepared_kilos,
                             })),
-                            subtotal: total,
-                            total: total,
+                            subtotal: subtotal2,
+                            discount: disc2 > 0 ? disc2 : undefined,
+                            total: finalTotal2,
                             paymentMethod: historialTicket.payment_method || "efectivo",
                             qrData: historialTicket.id,
                             type: "cobro",
