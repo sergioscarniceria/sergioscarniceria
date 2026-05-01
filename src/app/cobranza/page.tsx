@@ -29,6 +29,7 @@ type CatalogProduct = {
   price: number;
   category: string | null;
   fixed_piece_price?: number | null;
+  is_excluded_from_discount?: boolean | null;
 };
 
 type Ticket = {
@@ -345,7 +346,7 @@ const [productSearchManual, setProductSearchManual] = useState("");
 
     const [customersRes, productsRes] = await Promise.all([
       supabase.from("customers").select("id, name, credit_enabled, credit_days, customer_type").order("name", { ascending: true }),
-      supabase.from("products").select("id, name, price, category, fixed_piece_price").order("name", { ascending: true }),
+      supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").order("name", { ascending: true }),
     ]);
 
     if (ticketsError || customersRes.error) {
@@ -387,12 +388,49 @@ const [productSearchManual, setProductSearchManual] = useState("");
     return c?.customer_type || null;
   }
 
+  // Verifica si un producto está excluido de descuento
+  function isProductExcludedFromDiscount(productName: string): boolean {
+    const p = catalogProducts.find((cp) => cp.name.toLowerCase() === productName.toLowerCase());
+    return !!p?.is_excluded_from_discount;
+  }
+
+  // Subtotal solo de productos que SÍ permiten descuento
+  function discountableSubtotal(tickets: Ticket[]): number {
+    return tickets.reduce((acc, t) => {
+      return acc + (t.order_items || []).reduce((sum, item) => {
+        if (isProductExcludedFromDiscount(item.product)) return sum;
+        if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+          return sum + Number(item.quantity || 0) * Number(item.price || 0);
+        }
+        const kg = Number(item.prepared_kilos || item.kilos || 0);
+        return sum + kg * Number(item.price || 0);
+      }, 0);
+    }, 0);
+  }
+
+  // Subtotal de productos EXCLUIDOS de descuento
+  function excludedSubtotal(tickets: Ticket[]): number {
+    return tickets.reduce((acc, t) => {
+      return acc + (t.order_items || []).reduce((sum, item) => {
+        if (!isProductExcludedFromDiscount(item.product)) return sum;
+        if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+          return sum + Number(item.quantity || 0) * Number(item.price || 0);
+        }
+        const kg = Number(item.prepared_kilos || item.kilos || 0);
+        return sum + kg * Number(item.price || 0);
+      }, 0);
+    }, 0);
+  }
+
   function calcDiscount(subtotal: number): number {
     if (discountMode === "none" || !discountValue) return 0;
     const val = Number(discountValue.replace(",", "."));
     if (!val || val <= 0) return 0;
-    if (discountMode === "percent") return Math.min(subtotal, subtotal * (val / 100));
-    return Math.min(subtotal, val); // amount mode
+    // Solo aplicar descuento sobre la parte descontable
+    const discountable = discountableSubtotal(allSelectedTickets());
+    if (discountable <= 0) return 0;
+    if (discountMode === "percent") return Math.min(discountable, discountable * (val / 100));
+    return Math.min(discountable, val); // amount mode
   }
 
   function ticketFinalTotal(ticket: Ticket | null): number {
