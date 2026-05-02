@@ -7,16 +7,10 @@ import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
-// jsPDF se carga desde CDN para evitar error SSR con Turbopack/fflate
-function loadJsPDF(): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if ((window as any).jspdf) { resolve((window as any).jspdf.jsPDF); return; }
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js";
-    s.onload = () => resolve((window as any).jspdf.jsPDF);
-    s.onerror = () => reject(new Error("No se pudo cargar jsPDF"));
-    document.head.appendChild(s);
-  });
+// jsPDF se carga dinámicamente para evitar error SSR
+async function loadJsPDF(): Promise<any> {
+  const mod = await import("jspdf");
+  return mod.jsPDF || mod.default;
 }
 
 // ─── Types ─────────────────────────────────────────────────────
