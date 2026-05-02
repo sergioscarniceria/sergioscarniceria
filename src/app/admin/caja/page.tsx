@@ -1008,12 +1008,16 @@ export default function CajaPage() {
       y += 3;
     }
 
+    // Totales CxC calculados de las tablas reales
+    const pdfTotalCxcPagos = dayCxcPayments.reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
+    const pdfTotalCxcNotas = dayCxcNotes.reduce((a: number, n: any) => a + Number(n.total_amount || 0), 0);
+
     // ═══ RESUMEN GENERAL ═══
     sectionTitle("RESUMEN GENERAL");
     row("Fondo inicial", `$${money(fondoIni)}`);
     row("Total ventas (contado)", `$${money(totalVentas)}`, true);
-    row("Cobros CxC (abonos)", `$${money(totalCxc)}`);
-    row("Crédito nuevo del día", `$${money(creditoNuevo)}`);
+    row("Cobros CxC (abonos)", `$${money(pdfTotalCxcPagos)}`);
+    row("Crédito nuevo del día", `$${money(pdfTotalCxcNotas)}`);
     separator();
     row("Total general", `$${money(totalGeneral)}`, true);
     y += 3;
@@ -1121,8 +1125,8 @@ export default function CajaPage() {
         doc.setFont("helvetica", "normal");
         for (const n of dayCxcNotes) {
           checkPage(5);
-          const hora = n.created_at ? new Date(n.created_at + "Z").toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
-          doc.text(`${hora}  Nota #${n.note_number || "—"} — ${(n.customer_name || "Sin cliente").slice(0, 20)} — $${money(n.total_amount)}`, marginL + 4, y);
+          const hora = n.created_at ? new Date(n.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+          doc.text(`${hora}  ${(n.customer_name || "Sin cliente").slice(0, 25)} — $${money(n.total_amount)}`, marginL + 4, y);
           y += 4;
         }
         const totalNotasNuevas = dayCxcNotes.reduce((a: number, n: any) => a + Number(n.total_amount || 0), 0);
