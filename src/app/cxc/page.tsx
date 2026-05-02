@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import jsPDF from "jspdf";
 
 function money(n: number) {
   return Math.ceil(n).toLocaleString("en-US");
@@ -118,10 +119,266 @@ export default function AdminCxcPage() {
   const [showMovimientos, setShowMovimientos] = useState(false);
   const [recentMovements, setRecentMovements] = useState<{ id: string; type: "pago" | "nota"; customer_name: string; amount: number; detail: string; date: string }[]>([]);
   const [loadingMovimientos, setLoadingMovimientos] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const generatePdf = useCallback(async (customerId: string, customerName: string) => {
+    setGeneratingPdf(customerId);
+    try {
+      // Cargar datos completos del cliente
+      const [notesRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .eq("customer_id", customerId)
+          .order("note_date", { ascending: false }),
+        supabase
+          .from("cxc_payments")
+          .select("*")
+          .eq("customer_id", customerId)
+          .order("payment_date", { ascending: false }),
+      ]);
+
+      if (notesRes.error || paymentsRes.error) {
+        alert("Error cargando datos del cliente");
+        setGeneratingPdf(null);
+        return;
+      }
+
+      const allNotes = (notesRes.data || []) as CxcNote[];
+      const allPayments = (paymentsRes.data || []) as { id: string; payment_date: string; amount: number; payment_method?: string; notes?: string }[];
+
+      // Cargar items de todas las notas
+      let allItems: CxcNoteItem[] = [];
+      if (allNotes.length > 0) {
+        const noteIds = allNotes.map((n) => n.id);
+        const { data: itemsData } = await supabase
+          .from("cxc_note_items")
+          .select("*")
+          .in("cxc_note_id", noteIds);
+        allItems = (itemsData as CxcNoteItem[]) || [];
+      }
+
+      // Agrupar items por nota
+      const itemsByNote: Record<string, CxcNoteItem[]> = {};
+      for (const it of allItems) {
+        if (!itemsByNote[it.cxc_note_id]) itemsByNote[it.cxc_note_id] = [];
+        itemsByNote[it.cxc_note_id].push(it);
+      }
+
+      const openNotes = allNotes.filter((n) => Number(n.balance_due || 0) > 0);
+      const paidNotes = allNotes.filter((n) => Number(n.balance_due || 0) <= 0);
+      const totalDebt = openNotes.reduce((acc, n) => acc + Number(n.balance_due || 0), 0);
+      const totalInvoiced = allNotes.reduce((acc, n) => acc + Number(n.total_amount || 0), 0);
+      const totalPaid = allPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
+
+      // ─── Generar PDF ───
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const marginL = 15;
+      const marginR = 15;
+      const contentW = pageW - marginL - marginR;
+      let y = 15;
+
+      function checkPage(need: number) {
+        if (y + need > 260) {
+          doc.addPage();
+          y = 15;
+        }
+      }
+
+      // Encabezado
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(59, 28, 22);
+      doc.text("Sergio's Carniceria", marginL, y);
+      y += 6;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(122, 90, 82);
+      doc.text("Estado de cuenta", marginL, y);
+      doc.text(`Fecha: ${new Date().toLocaleDateString("es-MX")}`, pageW - marginR, y, { align: "right" });
+      y += 8;
+
+      // Linea
+      doc.setDrawColor(123, 34, 24);
+      doc.setLineWidth(0.5);
+      doc.line(marginL, y, pageW - marginR, y);
+      y += 8;
+
+      // Datos del cliente
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(59, 28, 22);
+      doc.text(customerName, marginL, y);
+      y += 8;
+
+      // Resumen en recuadro
+      doc.setFillColor(247, 241, 232);
+      doc.roundedRect(marginL, y, contentW, 22, 3, 3, "F");
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(59, 28, 22);
+
+      const col1 = marginL + 5;
+      const col2 = marginL + contentW / 3;
+      const col3 = marginL + (contentW * 2) / 3;
+
+      doc.text("Saldo pendiente:", col1, y + 8);
+      doc.setTextColor(180, 35, 24);
+      doc.text(`$${money(totalDebt)}`, col1, y + 14);
+
+      doc.setTextColor(59, 28, 22);
+      doc.text("Total facturado:", col2, y + 8);
+      doc.text(`$${money(totalInvoiced)}`, col2, y + 14);
+
+      doc.text("Total pagado:", col3, y + 8);
+      doc.setTextColor(31, 122, 77);
+      doc.text(`$${money(totalPaid)}`, col3, y + 14);
+
+      y += 28;
+
+      // ─── NOTAS ABIERTAS ───
+      if (openNotes.length > 0) {
+        checkPage(20);
+        doc.setFontSize(13);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(123, 34, 24);
+        doc.text(`Notas pendientes (${openNotes.length})`, marginL, y);
+        y += 7;
+
+        for (const note of openNotes) {
+          const items = itemsByNote[note.id] || [];
+          const needH = 18 + items.length * 5;
+          checkPage(needH);
+
+          // Header de nota
+          doc.setFillColor(251, 248, 243);
+          doc.roundedRect(marginL, y, contentW, 12, 2, 2, "F");
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(59, 28, 22);
+          doc.text(note.note_number || "Sin folio", marginL + 3, y + 5);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(122, 90, 82);
+          doc.text(`Fecha: ${formatDate(note.note_date)}`, marginL + 3, y + 10);
+
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(180, 35, 24);
+          doc.text(`Saldo: $${money(Number(note.balance_due || 0))}`, pageW - marginR - 3, y + 5, { align: "right" });
+          doc.setTextColor(122, 90, 82);
+          doc.setFont("helvetica", "normal");
+          doc.text(`Total: $${money(Number(note.total_amount || 0))}`, pageW - marginR - 3, y + 10, { align: "right" });
+          y += 14;
+
+          // Items de la nota
+          if (items.length > 0) {
+            for (const it of items) {
+              checkPage(6);
+              doc.setFontSize(9);
+              doc.setTextColor(59, 28, 22);
+              doc.text(`  ${it.product}`, marginL + 3, y);
+              doc.setTextColor(122, 90, 82);
+              doc.text(`${Number(it.quantity || 0)} ${it.unit} x $${Number(it.price || 0).toFixed(2)}`, marginL + contentW * 0.5, y);
+              doc.setTextColor(59, 28, 22);
+              doc.text(`$${Number(it.line_total || 0).toFixed(2)}`, pageW - marginR - 3, y, { align: "right" });
+              y += 5;
+            }
+          }
+
+          y += 3;
+        }
+      }
+
+      // ─── PAGOS ───
+      if (allPayments.length > 0) {
+        y += 4;
+        checkPage(20);
+        doc.setFontSize(13);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(31, 122, 77);
+        doc.text(`Pagos realizados (${allPayments.length})`, marginL, y);
+        y += 7;
+
+        for (const pay of allPayments) {
+          checkPage(10);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(59, 28, 22);
+          doc.text(formatDate(pay.payment_date), marginL + 3, y);
+          doc.text(pay.payment_method || "efectivo", marginL + contentW * 0.35, y);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(31, 122, 77);
+          doc.text(`+$${money(Number(pay.amount || 0))}`, pageW - marginR - 3, y, { align: "right" });
+          y += 6;
+        }
+      }
+
+      // ─── NOTAS PAGADAS ───
+      if (paidNotes.length > 0) {
+        y += 4;
+        checkPage(20);
+        doc.setFontSize(13);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(122, 90, 82);
+        doc.text(`Notas liquidadas (${paidNotes.length})`, marginL, y);
+        y += 7;
+
+        for (const note of paidNotes) {
+          const items = itemsByNote[note.id] || [];
+          const needH = 12 + items.length * 5;
+          checkPage(needH);
+
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(59, 28, 22);
+          doc.text(note.note_number || "Sin folio", marginL + 3, y);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(122, 90, 82);
+          doc.text(formatDate(note.note_date), marginL + contentW * 0.35, y);
+          doc.text(`$${money(Number(note.total_amount || 0))}`, pageW - marginR - 3, y, { align: "right" });
+          y += 5;
+
+          if (items.length > 0) {
+            for (const it of items) {
+              checkPage(6);
+              doc.setFontSize(9);
+              doc.setTextColor(122, 90, 82);
+              doc.text(`  ${it.product} — ${Number(it.quantity || 0)} ${it.unit} x $${Number(it.price || 0).toFixed(2)}`, marginL + 5, y);
+              doc.text(`$${Number(it.line_total || 0).toFixed(2)}`, pageW - marginR - 3, y, { align: "right" });
+              y += 5;
+            }
+          }
+          y += 2;
+        }
+      }
+
+      // Pie de página
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(122, 90, 82);
+        doc.text(
+          `Sergio's Carniceria — Estado de cuenta de ${customerName} — Pagina ${i} de ${totalPages}`,
+          pageW / 2,
+          272,
+          { align: "center" }
+        );
+      }
+
+      // Descargar
+      const safeName = customerName.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, "").replace(/\s+/g, "_");
+      doc.save(`Estado_Cuenta_${safeName}_${todayDateString()}.pdf`);
+    } catch (err) {
+      console.error("Error generando PDF:", err);
+      alert("Error generando el PDF");
+    }
+    setGeneratingPdf(null);
+  }, [supabase]);
 
   async function loadRecentPayments() {
     setLoadingMovimientos(true);
@@ -511,24 +768,23 @@ export default function AdminCxcPage() {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-                      <a
-                        href={`/cxc/estado-cuenta?id=${customer.customer_id}`}
+                      <button
+                        onClick={() => generatePdf(customer.customer_id, customer.customer_name)}
+                        disabled={generatingPdf === customer.customer_id}
                         style={{
                           padding: "10px 16px",
                           borderRadius: 12,
-                          border: `1px solid ${COLORS.border}`,
-                          background: COLORS.primary,
+                          border: "none",
+                          background: generatingPdf === customer.customer_id ? COLORS.muted : COLORS.primary,
                           color: "white",
                           fontWeight: 700,
-                          cursor: "pointer",
+                          cursor: generatingPdf === customer.customer_id ? "default" : "pointer",
                           fontSize: 13,
                           whiteSpace: "nowrap",
-                          textDecoration: "none",
-                          display: "inline-block",
                         }}
                       >
-                        Ver cuenta
-                      </a>
+                        {generatingPdf === customer.customer_id ? "Generando..." : "PDF Cuenta"}
+                      </button>
 
                       {customer.open_notes > 0 && (
                         <button
