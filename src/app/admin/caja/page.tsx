@@ -136,17 +136,10 @@ function todayStr() {
   return `${n.getFullYear()}-${`${n.getMonth() + 1}`.padStart(2, "0")}-${`${n.getDate()}`.padStart(2, "0")}`;
 }
 
-// Convierte "YYYY-MM-DD" + hora local MX a ISO string UTC correcto
+// Convierte "YYYY-MM-DD" a ISO UTC respetando zona horaria de México (UTC-6, sin horario de verano desde 2022)
 function mxToISO(dateStr: string, time: "start" | "end") {
-  const ref = new Date(`${dateStr}T12:00:00Z`);
-  const mxTime = new Date(ref.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
-  const offsetMs = ref.getTime() - mxTime.getTime();
-  const offsetH = Math.round(offsetMs / 3600000);
-  const sign = offsetH >= 0 ? "+" : "-";
-  const pad = String(Math.abs(offsetH)).padStart(2, "0");
-  const tz = `${sign}${pad}:00`;
   const clock = time === "start" ? "00:00:00" : "23:59:59";
-  return new Date(`${dateStr}T${clock}${tz}`).toISOString();
+  return new Date(`${dateStr}T${clock}-06:00`).toISOString();
 }
 
 function fmtDateTime(v?: string | null) {

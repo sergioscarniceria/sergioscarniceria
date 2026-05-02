@@ -2078,21 +2078,32 @@ if (cashError) {
                       )}
                     </div>
 
-                    {/* Tickets agrupados */}
+                    {/* Tickets agrupados — desglose completo */}
                     {extraTickets.length > 0 && (
-                      <div style={{ background: "rgba(22,163,74,0.06)", borderRadius: 12, padding: 12, marginBottom: 12, border: `1px solid rgba(22,163,74,0.2)` }}>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.success, marginBottom: 8 }}>
-                          Cobro agrupado ({allSelectedTickets().length} tickets)
+                      <div style={{ marginBottom: 12 }}>
+                        <div style={{ background: "rgba(22,163,74,0.06)", borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid rgba(22,163,74,0.2)` }}>
+                          <div style={{ fontWeight: 700, fontSize: 14, color: COLORS.success, marginBottom: 4 }}>
+                            Cobro agrupado ({allSelectedTickets().length} tickets)
+                          </div>
                         </div>
-                        {allSelectedTickets().map((t) => (
-                          <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", fontSize: 13 }}>
-                            <span>{ticketFolio(t.id)} — {t.customer_name || "Mostrador"}</span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              <span style={{ fontWeight: 700 }}>${money(ticketTotal(t))}</span>
-                              {t.id !== selectedTicket.id && (
+                        {extraTickets.map((t) => (
+                          <div key={t.id} style={{ background: COLORS.card, borderRadius: 12, padding: 12, marginBottom: 8, border: `1px solid ${COLORS.border}` }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                              <div>
+                                <span style={{ fontWeight: 700, fontSize: 14 }}>{ticketFolio(t.id)}</span>
+                                <span style={{ color: COLORS.muted, fontSize: 12, marginLeft: 8 }}>{t.customer_name || "Mostrador"}</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontWeight: 800, fontSize: 15 }}>${money(ticketTotal(t))}</span>
                                 <button onClick={() => removeTicketFromGroup(t.id)} style={{ background: "none", border: "none", color: COLORS.danger, cursor: "pointer", fontSize: 16, padding: "0 4px" }}>✕</button>
-                              )}
+                              </div>
                             </div>
+                            {(t.order_items || []).map((item, idx) => (
+                              <div key={idx} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", fontSize: 13, color: COLORS.text }}>
+                                <span>{item.product} — {itemQtyLabel(item)} · ${money(item.price)}</span>
+                                <span style={{ fontWeight: 600 }}>${money(itemLineTotal(item))}</span>
+                              </div>
+                            ))}
                           </div>
                         ))}
                       </div>

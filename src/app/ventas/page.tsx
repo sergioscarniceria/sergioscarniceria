@@ -604,6 +604,15 @@ let orderId: string;
 
 if (pulledOrderId) {
   // ── Actualizar pedido existente de producción ──
+  // Conservar datos del cliente original del pedido
+  const { data: origOrder } = await supabase
+    .from("orders")
+    .select("customer_id, customer_name")
+    .eq("id", pulledOrderId)
+    .single();
+  if (origOrder?.customer_name) customerName = origOrder.customer_name;
+  if (origOrder?.customer_id) customerId = origOrder.customer_id;
+
   const { error: updateError } = await supabase
     .from("orders")
     .update({
