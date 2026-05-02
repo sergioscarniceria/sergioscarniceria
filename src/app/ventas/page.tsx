@@ -850,7 +850,7 @@ const paidTickets = useMemo(() => {
                         {ticketFolio(order.id)} — {order.customer_name || "Sin cliente"}
                       </div>
                       <div style={{ color: COLORS.muted, fontSize: 12 }}>
-                        {(order.order_items || []).length} productos · ${money(total)} · {order.created_at ? new Date(order.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}
+                        {(order.order_items || []).length} productos · ${money(total)} · {order.created_at ? new Date(order.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : ""}
                       </div>
                     </div>
                     <button

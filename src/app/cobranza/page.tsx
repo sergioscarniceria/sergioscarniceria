@@ -1827,7 +1827,7 @@ if (cashError) {
                         </div>
                         {selectedTicket.created_at && (
                           <div style={ticketMetaStyle}>
-                            Creado: <b>{new Date(selectedTicket.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</b>
+                            Creado: <b>{new Date(selectedTicket.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}</b>
                           </div>
                         )}
                         {selectedTicket.status !== "terminado" && selectedTicket.source !== "mostrador" && (
@@ -3005,11 +3005,11 @@ if (cashError) {
                             <div style={searchMetaStyle}>
                               {ticket.paid_at
                                 ? new Date(ticket.paid_at).toLocaleDateString("es-MX", {
-                                    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+                                    day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City"
                                   })
                                 : ticket.created_at
                                 ? new Date(ticket.created_at).toLocaleDateString("es-MX", {
-                                    day: "2-digit", month: "short", year: "numeric"
+                                    day: "2-digit", month: "short", year: "numeric", timeZone: "America/Mexico_City"
                                   })
                                 : ""}
                             </div>

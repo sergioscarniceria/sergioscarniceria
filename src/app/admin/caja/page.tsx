@@ -155,10 +155,35 @@ function mxToISO(dateStr: string, time: "start" | "end") {
   return new Date(`${dateStr}T${clock}-06:00`).toISOString();
 }
 
+// Normaliza un timestamp de Supabase a Date correcto.
+// cash_movements usa "timestamp without time zone" → llega sin "Z", JS lo parsea como local del navegador.
+// Agregamos "Z" para que lo trate como UTC (Supabase lo guarda en UTC).
+function safeDate(v?: string | null): Date | null {
+  if (!v) return null;
+  const s = String(v);
+  // Si ya tiene offset (Z, +, -06:00, etc.) no tocar
+  const d = new Date(s.match(/[Z+]|(?<!\d)-\d{2}:\d{2}$/) ? s : s + "Z");
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Hora en formato México: "02:35 p.m."
+function mxTime(v?: string | null): string {
+  const d = safeDate(v);
+  if (!d) return "—";
+  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" });
+}
+
+// Hora en formato 24h "HH:MM" para comparaciones
+function mxTime24(v?: string | null): string {
+  const d = safeDate(v);
+  if (!d) return "";
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "America/Mexico_City" });
+}
+
 function fmtDateTime(v?: string | null) {
-  if (!v) return "—";
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? v : d.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+  const d = safeDate(v);
+  if (!d) return "—";
+  return d.toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
 }
 
 function fmtDate(v?: string | null) {
@@ -606,9 +631,8 @@ export default function CajaPage() {
       if (m.is_cancelled) return false;
       if (filterCashier !== "__all__" && (m.cashier_name || "") !== filterCashier) return false;
       if (filterTimeFrom || filterTimeTo) {
-        if (!m.created_at) return false;
-        const d = new Date(m.created_at);
-        const hhmm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        const hhmm = mxTime24(m.created_at);
+        if (!hhmm) return false;
         if (filterTimeFrom && hhmm < filterTimeFrom) return false;
         if (filterTimeTo && hhmm > filterTimeTo) return false;
       }
@@ -1082,7 +1106,7 @@ export default function CajaPage() {
       for (const m of cancelled) {
         checkPage(10);
         doc.setFontSize(8); doc.setFont("helvetica", "normal");
-        const hora = m.created_at ? new Date(m.created_at + (String(m.created_at).includes("Z") || String(m.created_at).includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+        const hora = mxTime(m.created_at);
         doc.text(`${hora} — $${money(m.amount)} — ${m.cashier_name || "—"} — ${(m as any).cancel_reason || "Sin motivo"}`, marginL + 2, y);
         y += 4;
       }
@@ -1125,7 +1149,7 @@ export default function CajaPage() {
         doc.setFont("helvetica", "normal");
         for (const n of dayCxcNotes) {
           checkPage(5);
-          const hora = n.created_at ? new Date(n.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+          const hora = mxTime(n.created_at);
           doc.text(`${hora}  ${(n.customer_name || "Sin cliente").slice(0, 25)} — $${money(n.total_amount)}`, marginL + 4, y);
           y += 4;
         }
@@ -1140,7 +1164,7 @@ export default function CajaPage() {
         doc.setFont("helvetica", "normal");
         for (const p of dayCxcPayments) {
           checkPage(5);
-          const hora = p.created_at ? new Date(p.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+          const hora = mxTime(p.created_at);
           doc.text(`${hora}  ${(p.customer_name || "Sin cliente").slice(0, 20)} — ${methodName(p.payment_method)} — $${money(p.amount)}`, marginL + 4, y);
           y += 4;
         }
@@ -1162,8 +1186,7 @@ export default function CajaPage() {
       doc.setFont("helvetica", "normal");
       for (const o of dayCancelledOrders) {
         checkPage(5);
-        const ts = o.canceled_at || o.created_at;
-        const hora = ts ? new Date(ts + (ts.includes("Z") || ts.includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+        const hora = mxTime(o.canceled_at || o.created_at);
         doc.text(hora, marginL + 2, y);
         doc.text((o.customer_name || "Mostrador").slice(0, 22), marginL + 22, y);
         doc.text((o.captured_by || "—").slice(0, 15), marginL + 72, y);
@@ -1188,7 +1211,7 @@ export default function CajaPage() {
 
     for (const m of active) {
       checkPage(5);
-      const hora = m.created_at ? new Date(m.created_at + (String(m.created_at).includes("Z") || String(m.created_at).includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+      const hora = mxTime(m.created_at);
       const ord = m.reference_id ? orderMap[m.reference_id] : undefined;
       doc.text(hora, marginL + 2, y);
       doc.text(typeName(m.type), marginL + 18, y);

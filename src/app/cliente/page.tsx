@@ -2437,7 +2437,7 @@ export default function ClientePage() {
                             background: "rgba(45,138,84,0.08)", borderRadius: 14, padding: "10px 14px",
                             marginBottom: 12, color: COLORS.success, fontSize: 13, fontWeight: 600,
                           }}>
-                            📦 Entregado el {new Date(o.delivered_at).toLocaleDateString("es-MX")} a las {new Date(o.delivered_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+                            📦 Entregado el {new Date(o.delivered_at).toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" })} a las {new Date(o.delivered_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" })}
                           </div>
                         )}
 
