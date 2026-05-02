@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
-import jsPDF from "jspdf";
+// jsPDF se importa dinámicamente en generatePdf() para evitar error SSR con fflate
 
 function money(n: number) {
   return Math.ceil(n).toLocaleString("en-US");
@@ -175,7 +175,9 @@ export default function AdminCxcPage() {
       const totalInvoiced = allNotes.reduce((acc, n) => acc + Number(n.total_amount || 0), 0);
       const totalPaid = allPayments.reduce((acc, p) => acc + Number(p.amount || 0), 0);
 
-      // ─── Generar PDF ───
+      // ─── Generar PDF (import dinámico para evitar error SSR) ───
+      const jsPDFModule = await import("jspdf");
+      const jsPDF = jsPDFModule.default;
       const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "letter" });
       const pageW = doc.internal.pageSize.getWidth();
       const marginL = 15;
