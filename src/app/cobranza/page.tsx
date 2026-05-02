@@ -174,6 +174,8 @@ const [showNewCustomer, setShowNewCustomer] = useState(false);
 const [newCustomerName, setNewCustomerName] = useState("");
 const [newCustomerPhone, setNewCustomerPhone] = useState("");
 const [productSearchManual, setProductSearchManual] = useState("");
+const [manualDiscountMode, setManualDiscountMode] = useState<"none" | "percent" | "amount">("none");
+const [manualDiscountValue, setManualDiscountValue] = useState("");
 
   // Descuento
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
@@ -1088,6 +1090,8 @@ const [productSearchManual, setProductSearchManual] = useState("");
   setCustomerName("");
   setManualNotes("");
   setManualDiscount("");
+  setManualDiscountMode("none");
+  setManualDiscountValue("");
   setProductSearchManual("");
   setManualLines([]);
 }
@@ -1224,7 +1228,7 @@ async function saveManualCredit() {
         due_date: dueDate,
         source_type: "venta_manual",
         subtotal: moneyRound(manualSubtotal),
-        discount_amount: Number(manualDiscount || 0),
+        discount_amount: moneyRound(manualDiscountAmount),
         total_amount: moneyRound(manualTotal),
         balance_due: moneyRound(manualTotal),
         status: "abierta",
@@ -1279,7 +1283,7 @@ async function saveManualCredit() {
       prepared_kilos: null,
     })),
     subtotal: manualSubtotal,
-    discount: Number(manualDiscount || 0),
+    discount: manualDiscountAmount,
     total: manualTotal,
     paymentMethod: "credito",
     qrData: orderData.id,
@@ -1341,6 +1345,7 @@ if (customerMode === "existente" && selectedCustomerId) {
         payment_method: method,
         paid_at: new Date().toISOString(),
         cashier_name: cashierName || null,
+        discount_amount: manualDiscountAmount > 0 ? moneyRound(manualDiscountAmount) : null,
       },
     ])
     .select()
@@ -1400,7 +1405,7 @@ if (cashError) {
       sale_type: (line as any).sale_type || "kg",
     }));
     const printSubtotal = manualItems.reduce((a, i) => a + i.kilos * i.price, 0);
-    const printDiscount = Number(manualDiscount || 0);
+    const printDiscount = manualDiscountAmount;
     const ticketForPrint: TicketData = {
       folio: orderData.id,
       customerName: cleanCustomerName,
@@ -1471,10 +1476,17 @@ if (cashError) {
     }, 0);
   }, [manualLines]);
 
+  const manualDiscountAmount = useMemo(() => {
+    if (manualDiscountMode === "none" || !manualDiscountValue) return 0;
+    const val = Number(manualDiscountValue || 0);
+    if (val <= 0) return 0;
+    if (manualDiscountMode === "percent") return Math.min(manualSubtotal, manualSubtotal * (val / 100));
+    return Math.min(manualSubtotal, val);
+  }, [manualSubtotal, manualDiscountMode, manualDiscountValue]);
+
   const manualTotal = useMemo(() => {
-    const disc = Number(manualDiscount || 0);
-    return Math.max(0, manualSubtotal - disc);
-  }, [manualSubtotal, manualDiscount]);
+    return Math.max(0, manualSubtotal - manualDiscountAmount);
+  }, [manualSubtotal, manualDiscountAmount]);
 
   if (loading) {
     return (
@@ -2893,16 +2905,37 @@ if (cashError) {
                     <b>${money(manualSubtotal)}</b>
                   </div>
 
-                  <div style={{ ...summaryRowStyle, alignItems: "center" }}>
-                    <span>Descuento $</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={manualDiscount}
-                      onChange={(e) => setManualDiscount(e.target.value)}
-                      placeholder="0"
-                      style={{ width: 90, padding: "6px 10px", borderRadius: 10, border: `1px solid ${COLORS.border}`, textAlign: "center" as const, fontSize: 15, fontWeight: 700 }}
-                    />
+                  <div style={{ ...summaryRowStyle, flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        onClick={() => { setManualDiscountMode("none"); setManualDiscountValue(""); }}
+                        style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${COLORS.border}`, cursor: "pointer", fontWeight: 700, fontSize: 13, background: manualDiscountMode === "none" ? COLORS.primary : "white", color: manualDiscountMode === "none" ? "white" : COLORS.text }}
+                      >Sin descuento</button>
+                      <button
+                        onClick={() => setManualDiscountMode("percent")}
+                        style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${COLORS.border}`, cursor: "pointer", fontWeight: 700, fontSize: 13, background: manualDiscountMode === "percent" ? COLORS.primary : "white", color: manualDiscountMode === "percent" ? "white" : COLORS.text }}
+                      >% Porcentaje</button>
+                      <button
+                        onClick={() => setManualDiscountMode("amount")}
+                        style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${COLORS.border}`, cursor: "pointer", fontWeight: 700, fontSize: 13, background: manualDiscountMode === "amount" ? COLORS.primary : "white", color: manualDiscountMode === "amount" ? "white" : COLORS.text }}
+                      >$ Pesos</button>
+                    </div>
+                    {manualDiscountMode !== "none" && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>Descuento {manualDiscountMode === "percent" ? "%" : "$"}</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          value={manualDiscountValue}
+                          onChange={(e) => setManualDiscountValue(e.target.value)}
+                          placeholder={manualDiscountMode === "percent" ? "Ej: 10" : "Ej: 50"}
+                          style={{ flex: 1, padding: "8px 10px", borderRadius: 10, border: `1px solid ${COLORS.border}`, textAlign: "center" as const, fontSize: 15, fontWeight: 700 }}
+                        />
+                        {manualDiscountMode === "percent" && manualDiscountAmount > 0 && (
+                          <span style={{ fontSize: 13, color: COLORS.muted }}>= ${money(manualDiscountAmount)}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ ...summaryRowStyle, fontSize: 18, fontWeight: 800, color: COLORS.success }}>
