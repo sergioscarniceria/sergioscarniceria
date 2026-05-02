@@ -510,25 +510,45 @@ export default function AdminCxcPage() {
                       ) : null}
                     </div>
 
-                    {customer.open_notes > 0 && (
-                      <button
-                        onClick={() => toggleExpand(customer.customer_id)}
+                    <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+                      <a
+                        href={`/cxc/estado-cuenta?id=${customer.customer_id}`}
                         style={{
                           padding: "10px 16px",
                           borderRadius: 12,
                           border: `1px solid ${COLORS.border}`,
-                          background: isExpanded ? COLORS.primary : "white",
-                          color: isExpanded ? "white" : COLORS.text,
+                          background: COLORS.primary,
+                          color: "white",
                           fontWeight: 700,
                           cursor: "pointer",
                           fontSize: 13,
-                          flexShrink: 0,
                           whiteSpace: "nowrap",
+                          textDecoration: "none",
+                          display: "inline-block",
                         }}
                       >
-                        {isExpanded ? "Ocultar notas ▴" : `Ver ${customer.open_notes} ${customer.open_notes === 1 ? "nota" : "notas"} ▾`}
-                      </button>
-                    )}
+                        Ver cuenta
+                      </a>
+
+                      {customer.open_notes > 0 && (
+                        <button
+                          onClick={() => toggleExpand(customer.customer_id)}
+                          style={{
+                            padding: "10px 16px",
+                            borderRadius: 12,
+                            border: `1px solid ${COLORS.border}`,
+                            background: isExpanded ? COLORS.primaryDark : "white",
+                            color: isExpanded ? "white" : COLORS.text,
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            fontSize: 13,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {isExpanded ? "Ocultar notas ▴" : `Ver ${customer.open_notes} ${customer.open_notes === 1 ? "nota" : "notas"} ▾`}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {isExpanded && customerNotes.length > 0 && (

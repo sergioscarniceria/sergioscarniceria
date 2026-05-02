@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase";
 
 function money(n: number) { return Math.ceil(n).toLocaleString("en-US"); }
@@ -43,6 +44,16 @@ type CxcPayment = {
   reference?: string | null;
   notes?: string | null;
   created_at?: string | null;
+};
+
+type CxcNoteItem = {
+  id: string;
+  cxc_note_id: string;
+  product: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  line_total: number;
 };
 
 const COLORS = {
@@ -93,17 +104,32 @@ function isOverdue(note: CxcNote) {
 
 export default function EstadoCuentaAdminPage() {
   const supabase = getSupabaseClient();
+  const searchParams = useSearchParams();
+  const printRef = useRef<HTMLDivElement>(null);
 
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [notes, setNotes] = useState<CxcNote[]>([]);
   const [payments, setPayments] = useState<CxcPayment[]>([]);
+  const [noteItemsMap, setNoteItemsMap] = useState<Record<string, CxcNoteItem[]>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingItems, setLoadingItems] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     loadCustomers();
   }, []);
+
+  // Auto-select customer from query param ?id=
+  useEffect(() => {
+    const idParam = searchParams.get("id");
+    if (idParam && customers.length > 0 && !selectedCustomer) {
+      const found = customers.find((c) => c.id === idParam);
+      if (found) {
+        loadCustomerStatement(found);
+      }
+    }
+  }, [customers, searchParams]);
 
   async function loadCustomers() {
     setLoading(true);
@@ -128,37 +154,64 @@ export default function EstadoCuentaAdminPage() {
     setLoading(true);
     setSelectedCustomer(customer);
 
-    const { data: notesData, error: notesError } = await supabase
-      .from("cxc_notes")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("note_date", { ascending: false })
-      .order("created_at", { ascending: false });
+    const [notesRes, paymentsRes] = await Promise.all([
+      supabase
+        .from("cxc_notes")
+        .select("*")
+        .eq("customer_id", customer.id)
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("cxc_payments")
+        .select("*")
+        .eq("customer_id", customer.id)
+        .order("payment_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+    ]);
 
-    const { data: paymentsData, error: paymentsError } = await supabase
-      .from("cxc_payments")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("payment_date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (notesError) {
-      console.log(notesError);
+    if (notesRes.error) {
+      console.log(notesRes.error);
       alert("No se pudieron cargar las notas");
       setLoading(false);
       return;
     }
 
-    if (paymentsError) {
-      console.log(paymentsError);
+    if (paymentsRes.error) {
+      console.log(paymentsRes.error);
       alert("No se pudieron cargar los pagos");
       setLoading(false);
       return;
     }
 
-    setNotes((notesData as CxcNote[]) || []);
-    setPayments((paymentsData as CxcPayment[]) || []);
+    const loadedNotes = (notesRes.data as CxcNote[]) || [];
+    setNotes(loadedNotes);
+    setPayments((paymentsRes.data as CxcPayment[]) || []);
     setLoading(false);
+
+    // Load items for all notes
+    if (loadedNotes.length > 0) {
+      setLoadingItems(true);
+      const noteIds = loadedNotes.map((n) => n.id);
+      const { data: itemsData, error: itemsError } = await supabase
+        .from("cxc_note_items")
+        .select("*")
+        .in("cxc_note_id", noteIds);
+
+      if (!itemsError && itemsData) {
+        const grouped: Record<string, CxcNoteItem[]> = {};
+        for (const id of noteIds) grouped[id] = [];
+        for (const row of (itemsData as CxcNoteItem[])) {
+          if (!grouped[row.cxc_note_id]) grouped[row.cxc_note_id] = [];
+          grouped[row.cxc_note_id].push(row);
+        }
+        setNoteItemsMap(grouped);
+      }
+      setLoadingItems(false);
+    }
+  }
+
+  function handlePrint() {
+    window.print();
   }
 
   const filteredCustomers = useMemo(() => {
@@ -220,6 +273,17 @@ export default function EstadoCuentaAdminPage() {
 
   return (
     <div style={pageStyle}>
+      {/* Print styles */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body { background: white !important; -webkit-print-color-adjust: exact; }
+          nav, .no-print, a[href="/cxc"], a[href="/admin/dashboard"] { display: none !important; }
+          button { display: none !important; }
+          div[style*="grid-template-columns: minmax(320px"] { display: block !important; }
+          div[style*="grid-template-columns: minmax(320px"] > div:first-child { display: none !important; }
+          * { box-shadow: none !important; backdrop-filter: none !important; }
+        }
+      ` }} />
       <div style={glowTopLeft} />
       <div style={glowTopRight} />
 
@@ -241,6 +305,11 @@ export default function EstadoCuentaAdminPage() {
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>
               Dashboard
             </Link>
+            {selectedCustomer && (
+              <button onClick={handlePrint} style={printButtonStyle}>
+                Imprimir cuenta
+              </button>
+            )}
           </div>
         </div>
 
@@ -392,59 +461,91 @@ export default function EstadoCuentaAdminPage() {
                       <div style={emptyBoxStyle}>No hay notas abiertas</div>
                     ) : (
                       <div style={cardsListStyle}>
-                        {openNotes.map((note) => (
-                          <div key={note.id} style={entryCardStyle}>
-                            <div style={entryHeaderStyle}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={entryTitleStyle}>
-                                  {note.note_number || "Sin folio"}
+                        {openNotes.map((note) => {
+                          const items = noteItemsMap[note.id];
+                          return (
+                            <div key={note.id} style={entryCardStyle}>
+                              <div style={entryHeaderStyle}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={entryTitleStyle}>
+                                    {note.note_number || "Sin folio"}
+                                  </div>
+                                  <div style={metaTextStyle}>
+                                    Fecha: <b>{formatDate(note.note_date)}</b>
+                                  </div>
+                                  <div style={metaTextStyle}>
+                                    Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
+                                  </div>
                                 </div>
-                                <div style={metaTextStyle}>
-                                  Fecha: <b>{formatDate(note.note_date)}</b>
-                                </div>
-                                <div style={metaTextStyle}>
-                                  Vence: <b>{formatDate(note.due_date || note.note_date)}</b>
+
+                                <div
+                                  style={{
+                                    ...statusBadgeStyle,
+                                    background: isOverdue(note)
+                                      ? "rgba(180,35,24,0.10)"
+                                      : note.status === "abonada"
+                                      ? "rgba(166,106,16,0.12)"
+                                      : "rgba(53,92,125,0.12)",
+                                    color: isOverdue(note)
+                                      ? COLORS.danger
+                                      : note.status === "abonada"
+                                      ? COLORS.warning
+                                      : COLORS.info,
+                                  }}
+                                >
+                                  {isOverdue(note) ? "Vencida" : note.status}
                                 </div>
                               </div>
 
-                              <div
-                                style={{
-                                  ...statusBadgeStyle,
-                                  background: isOverdue(note)
-                                    ? "rgba(180,35,24,0.10)"
-                                    : note.status === "abonada"
-                                    ? "rgba(166,106,16,0.12)"
-                                    : "rgba(53,92,125,0.12)",
-                                  color: isOverdue(note)
-                                    ? COLORS.danger
-                                    : note.status === "abonada"
-                                    ? COLORS.warning
-                                    : COLORS.info,
-                                }}
-                              >
-                                {isOverdue(note) ? "Vencida" : note.status}
+                              <div style={metaWrapStyle}>
+                                <span style={metaPillStyle}>
+                                  Total: <b>${money(Number(note.total_amount || 0))}</b>
+                                </span>
+                                <span style={metaPillStyle}>
+                                  Saldo: <b>${money(Number(note.balance_due || 0))}</b>
+                                </span>
+                                {Number(note.discount_amount || 0) > 0 && (
+                                  <span style={metaPillStyle}>
+                                    Descuento: <b>${money(Number(note.discount_amount || 0))}</b>
+                                  </span>
+                                )}
                               </div>
+
+                              {/* Artículos de la nota */}
+                              {items && items.length > 0 && (
+                                <div style={itemsBoxStyle}>
+                                  <div style={itemsTitleStyle}>Artículos ({items.length})</div>
+                                  <div style={{ display: "grid", gap: 4 }}>
+                                    {items.map((it) => (
+                                      <div key={it.id} style={itemRowStyle}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <span style={{ color: COLORS.text, fontWeight: 700, fontSize: 13 }}>
+                                            {it.product}
+                                          </span>
+                                          <span style={{ color: COLORS.muted, fontSize: 12, marginLeft: 8 }}>
+                                            {Number(it.quantity || 0)} {it.unit} × ${Number(it.price || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <div style={{ color: COLORS.text, fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                                          ${Number(it.line_total || 0).toFixed(2)}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {loadingItems && !items && (
+                                <div style={{ ...metaTextStyle, fontStyle: "italic" }}>Cargando artículos...</div>
+                              )}
+
+                              {note.notes ? (
+                                <div style={notesStyle}>
+                                  <b>Notas:</b> {note.notes}
+                                </div>
+                              ) : null}
                             </div>
-
-                            <div style={metaWrapStyle}>
-                              <span style={metaPillStyle}>
-                                Total: <b>${money(Number(note.total_amount || 0))}</b>
-                              </span>
-                              <span style={metaPillStyle}>
-                                Saldo: <b>${money(Number(note.balance_due || 0))}</b>
-                              </span>
-                              <span style={metaPillStyle}>
-                                Descuento: <b>${money(Number(note.discount_amount || 0))}</b>
-                              </span>
-                            </div>
-
-                            {note.notes ? (
-                              <div style={notesStyle}>
-                                <b>Notas:</b> {note.notes}
-                              </div>
-                            ) : null}
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -518,39 +619,69 @@ export default function EstadoCuentaAdminPage() {
                     <div style={emptyBoxStyle}>No hay notas pagadas</div>
                   ) : (
                     <div style={paidNotesGridStyle}>
-                      {paidNotes.map((note) => (
-                        <div key={note.id} style={entryCardStyle}>
-                          <div style={entryHeaderStyle}>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={entryTitleStyle}>
-                                {note.note_number || "Sin folio"}
+                      {paidNotes.map((note) => {
+                        const items = noteItemsMap[note.id];
+                        return (
+                          <div key={note.id} style={entryCardStyle}>
+                            <div style={entryHeaderStyle}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={entryTitleStyle}>
+                                  {note.note_number || "Sin folio"}
+                                </div>
+                                <div style={metaTextStyle}>
+                                  Fecha: <b>{formatDate(note.note_date)}</b>
+                                </div>
                               </div>
-                              <div style={metaTextStyle}>
-                                Fecha: <b>{formatDate(note.note_date)}</b>
+
+                              <div
+                                style={{
+                                  ...statusBadgeStyle,
+                                  background: "rgba(31,122,77,0.12)",
+                                  color: COLORS.success,
+                                }}
+                              >
+                                Pagada
                               </div>
                             </div>
 
-                            <div
-                              style={{
-                                ...statusBadgeStyle,
-                                background: "rgba(31,122,77,0.12)",
-                                color: COLORS.success,
-                              }}
-                            >
-                              Pagada
+                            <div style={metaWrapStyle}>
+                              <span style={metaPillStyle}>
+                                Total: <b>${money(Number(note.total_amount || 0))}</b>
+                              </span>
                             </div>
-                          </div>
 
-                          <div style={metaWrapStyle}>
-                            <span style={metaPillStyle}>
-                              Total: <b>${money(Number(note.total_amount || 0))}</b>
-                            </span>
-                            <span style={metaPillStyle}>
-                              Saldo: <b>${money(Number(note.balance_due || 0))}</b>
-                            </span>
+                            {/* Artículos de la nota pagada */}
+                            {items && items.length > 0 && (
+                              <div style={itemsBoxStyle}>
+                                <div style={itemsTitleStyle}>Artículos ({items.length})</div>
+                                <div style={{ display: "grid", gap: 4 }}>
+                                  {items.map((it) => (
+                                    <div key={it.id} style={itemRowStyle}>
+                                      <div style={{ flex: 1, minWidth: 0 }}>
+                                        <span style={{ color: COLORS.text, fontWeight: 700, fontSize: 13 }}>
+                                          {it.product}
+                                        </span>
+                                        <span style={{ color: COLORS.muted, fontSize: 12, marginLeft: 8 }}>
+                                          {Number(it.quantity || 0)} {it.unit} × ${Number(it.price || 0).toFixed(2)}
+                                        </span>
+                                      </div>
+                                      <div style={{ color: COLORS.text, fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                                        ${Number(it.line_total || 0).toFixed(2)}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {note.notes ? (
+                              <div style={notesStyle}>
+                                <b>Notas:</b> {note.notes}
+                              </div>
+                            ) : null}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -860,4 +991,44 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: COLORS.text,
   textDecoration: "none",
   fontWeight: 700,
+};
+
+const printButtonStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: "none",
+  background: `linear-gradient(180deg, ${COLORS.primary} 0%, ${COLORS.primaryDark} 100%)`,
+  color: "white",
+  fontWeight: 700,
+  cursor: "pointer",
+  boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)",
+};
+
+const itemsBoxStyle: React.CSSProperties = {
+  marginTop: 10,
+  padding: 10,
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.7)",
+  border: `1px solid ${COLORS.border}`,
+};
+
+const itemsTitleStyle: React.CSSProperties = {
+  color: COLORS.muted,
+  fontSize: 11,
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: 0.5,
+  marginBottom: 6,
+};
+
+const itemRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 8,
+  padding: "6px 8px",
+  borderRadius: 8,
+  background: COLORS.bgSoft,
+  border: `1px solid ${COLORS.border}`,
 };
