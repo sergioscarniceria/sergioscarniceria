@@ -877,6 +877,7 @@ export default function CajaPage() {
 
   // ─── Exportar cierre a PDF ─────────────────────────────────
   async function exportClosurePDF(closure?: CashClosure | null) {
+    try {
     const jsPDF = await loadJsPDF();
     const supabaseRef = supabase;
     const cl = closure || todayClosure;
@@ -1129,6 +1130,10 @@ export default function CajaPage() {
     // Guardar
     const fname = `Cierre_Caja_${closureDate}.pdf`;
     doc.save(fname);
+    } catch (err: any) {
+      console.error("Error al exportar PDF:", err);
+      alert("Error al generar el PDF: " + (err?.message || "Revisa la consola"));
+    }
   }
 
   function buildExportRows() {
@@ -1889,62 +1894,62 @@ export default function CajaPage() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
-              {todayClosure && (
-                <button
-                  onClick={async () => {
-                    // Consultar crédito nuevo del rango (orders con payment_method=credito)
-                    const start = mxToISO(dateFrom, "start");
-                    const end = mxToISO(dateTo, "end");
-                    const { data: creditOrders } = await supabase
-                      .from("orders")
-                      .select("id, order_items(kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)")
-                      .eq("payment_method", "credito")
-                      .gte("created_at", start)
-                      .lte("created_at", end);
-                    let creditoNuevo = 0;
-                    for (const ord of (creditOrders || [])) {
-                      for (const it of (ord.order_items || [])) {
-                        const itAny = it as any;
-                        if (itAny.sale_type === "pieza" && itAny.is_fixed_price_piece) {
-                          creditoNuevo += (Number(itAny.quantity) || 0) * (Number(itAny.price) || 0);
-                        } else {
-                          const kg = Number(itAny.prepared_kilos || itAny.kilos || 0);
-                          creditoNuevo += kg * (Number(itAny.price) || 0);
-                        }
+              <button
+                onClick={async () => {
+                  // Consultar crédito nuevo del rango (orders con payment_method=credito)
+                  const start = mxToISO(dateFrom, "start");
+                  const end = mxToISO(dateTo, "end");
+                  const { data: creditOrders } = await supabase
+                    .from("orders")
+                    .select("id, order_items(kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)")
+                    .eq("payment_method", "credito")
+                    .gte("created_at", start)
+                    .lte("created_at", end);
+                  let creditoNuevo = 0;
+                  for (const ord of (creditOrders || [])) {
+                    for (const it of (ord.order_items || [])) {
+                      const itAny = it as any;
+                      if (itAny.sale_type === "pieza" && itAny.is_fixed_price_piece) {
+                        creditoNuevo += (Number(itAny.quantity) || 0) * (Number(itAny.price) || 0);
+                      } else {
+                        const kg = Number(itAny.prepared_kilos || itAny.kilos || 0);
+                        creditoNuevo += kg * (Number(itAny.price) || 0);
                       }
                     }
+                  }
 
-                    const now = new Date();
-                    const cutData: CashCutData = {
-                      type: "cierre",
-                      cashier: todayClosure.closed_by || undefined,
-                      date: now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }),
-                      time: now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }),
-                      totalSales: stats.totalVentas,
-                      totalCash: stats.totalEfectivoIngreso,
-                      totalCard: stats.totalTarjeta,
-                      totalTransfer: stats.totalTransferencia,
-                      totalCxC: stats.totalCxc,
-                      totalExpenses: stats.totalGastos,
-                      expectedCash: stats.efectivoEsperado,
-                      countedCash: Number(todayClosure.counted_cash || 0),
-                      difference: Number(todayClosure.difference || 0),
-                      ticketCount: stats.ticketCount,
-                      creditoNuevo: moneyRound(creditoNuevo),
-                      cobrosCxC: stats.totalCxc,
-                      cancelaciones: cancelledMovements.length,
-                      montoCancelado: cancelledMovements.reduce((a, m) => a + Number(m.amount || 0), 0),
-                      expensesList: expenses.map((e) => ({ concept: e.concept, amount: Number(e.amount || 0) })),
-                      fondoInicial: stats.fondoInicial,
-                    };
-                    const ok = await printCashCut(cutData);
-                    if (!ok) alert("No se pudo imprimir. Verifica la conexión de la impresora.");
-                  }}
-                  style={btnSec}
-                >
-                  🖨️ Imprimir ticket de cierre
-                </button>
-              )}
+                  const now = new Date();
+                  const contadoVal = todayClosure ? Number(todayClosure.counted_cash || 0) : (useDenoms ? closureDenomTotal : Number(countedCash || 0));
+                  const difVal = todayClosure ? Number(todayClosure.difference || 0) : moneyRound(contadoVal - stats.efectivoEsperado);
+                  const cutData: CashCutData = {
+                    type: "cierre",
+                    cashier: todayClosure?.closed_by || undefined,
+                    date: now.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" }),
+                    time: now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }),
+                    totalSales: stats.totalVentas,
+                    totalCash: stats.totalEfectivoIngreso,
+                    totalCard: stats.totalTarjeta,
+                    totalTransfer: stats.totalTransferencia,
+                    totalCxC: stats.totalCxc,
+                    totalExpenses: stats.totalGastos,
+                    expectedCash: stats.efectivoEsperado,
+                    countedCash: contadoVal,
+                    difference: difVal,
+                    ticketCount: stats.ticketCount,
+                    creditoNuevo: moneyRound(creditoNuevo),
+                    cobrosCxC: stats.totalCxc,
+                    cancelaciones: cancelledMovements.length,
+                    montoCancelado: cancelledMovements.reduce((a, m) => a + Number(m.amount || 0), 0),
+                    expensesList: expenses.map((e) => ({ concept: e.concept, amount: Number(e.amount || 0) })),
+                    fondoInicial: stats.fondoInicial,
+                  };
+                  const ok = await printCashCut(cutData);
+                  if (!ok) alert("No se pudo imprimir. Verifica la conexión de la impresora.");
+                }}
+                style={btnSec}
+              >
+                🖨️ Imprimir ticket de cierre
+              </button>
               <button onClick={() => exportClosurePDF()} style={btnSec}>
                 📄 Exportar PDF
               </button>
