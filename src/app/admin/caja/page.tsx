@@ -915,15 +915,31 @@ export default function CajaPage() {
     const dayStart = mxToISO(closureDate, "start");
     const dayEnd = mxToISO(closureDate, "end");
 
-    const [movRes, expRes, creditRes] = await Promise.all([
+    const [movRes, expRes, creditRes, cxcNotesRes, cxcPaysRes, cancelledOrdersRes] = await Promise.all([
       supabaseRef.from("cash_movements").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cash_expenses").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
+      supabaseRef.from("cxc_notes").select("id, customer_name, total_amount, note_number, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("cxc_payments").select("id, customer_name, amount, payment_method, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status").eq("status", "cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
     ]);
 
     const dayMovements = (movRes.data || []) as Movement[];
     const dayExpenses = (expRes.data || []) as CashExpense[];
     const creditOrders = creditRes.data || [];
+    const dayCxcNotes = cxcNotesRes.data || [];
+    const dayCxcPayments = cxcPaysRes.data || [];
+    const dayCancelledOrders = cancelledOrdersRes.data || [];
+
+    // Enriquecer movimientos con datos de orders (cliente y carnicero)
+    const refIds = dayMovements.filter(m => m.reference_id).map(m => m.reference_id!);
+    let orderMap: Record<string, { customer_name?: string; captured_by?: string }> = {};
+    if (refIds.length > 0) {
+      const { data: ordersData } = await supabaseRef.from("orders").select("id, customer_name, captured_by").in("id", refIds);
+      for (const o of (ordersData || [])) {
+        orderMap[o.id] = { customer_name: o.customer_name, captured_by: o.captured_by };
+      }
+    }
 
     const cancelled = dayMovements.filter((m: any) => m.is_cancelled);
     const active = dayMovements.filter((m: any) => !m.is_cancelled);
@@ -1062,7 +1078,7 @@ export default function CajaPage() {
       for (const m of cancelled) {
         checkPage(10);
         doc.setFontSize(8); doc.setFont("helvetica", "normal");
-        const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+        const hora = m.created_at ? new Date(m.created_at + (String(m.created_at).includes("Z") || String(m.created_at).includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
         doc.text(`${hora} — $${money(m.amount)} — ${m.cashier_name || "—"} — ${(m as any).cancel_reason || "Sin motivo"}`, marginL + 2, y);
         y += 4;
       }
@@ -1096,24 +1112,86 @@ export default function CajaPage() {
       y += 3;
     }
 
+    // ═══ CxC DEL DÍA ═══
+    if (dayCxcNotes.length > 0 || dayCxcPayments.length > 0) {
+      sectionTitle("CUENTAS POR COBRAR (CxC)");
+      if (dayCxcNotes.length > 0) {
+        doc.setFontSize(8); doc.setFont("helvetica", "bold");
+        doc.text("Notas nuevas de crédito:", marginL + 2, y); y += 4;
+        doc.setFont("helvetica", "normal");
+        for (const n of dayCxcNotes) {
+          checkPage(5);
+          const hora = n.created_at ? new Date(n.created_at + "Z").toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+          doc.text(`${hora}  Nota #${n.note_number || "—"} — ${(n.customer_name || "Sin cliente").slice(0, 20)} — $${money(n.total_amount)}`, marginL + 4, y);
+          y += 4;
+        }
+        const totalNotasNuevas = dayCxcNotes.reduce((a: number, n: any) => a + Number(n.total_amount || 0), 0);
+        separator();
+        row("Total notas nuevas", `$${money(totalNotasNuevas)}`, true);
+        y += 2;
+      }
+      if (dayCxcPayments.length > 0) {
+        doc.setFontSize(8); doc.setFont("helvetica", "bold");
+        doc.text("Pagos/abonos recibidos:", marginL + 2, y); y += 4;
+        doc.setFont("helvetica", "normal");
+        for (const p of dayCxcPayments) {
+          checkPage(5);
+          const hora = p.created_at ? new Date(p.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+          doc.text(`${hora}  ${(p.customer_name || "Sin cliente").slice(0, 20)} — ${methodName(p.payment_method)} — $${money(p.amount)}`, marginL + 4, y);
+          y += 4;
+        }
+        const totalPagos = dayCxcPayments.reduce((a: number, p: any) => a + Number(p.amount || 0), 0);
+        separator();
+        row("Total pagos CxC", `$${money(totalPagos)}`, true);
+      }
+      y += 3;
+    }
+
+    // ═══ TICKETS CANCELADOS (ORDERS) ═══
+    if (dayCancelledOrders.length > 0) {
+      sectionTitle("TICKETS CANCELADOS (sin cobrar)");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("Hora", marginL + 2, y);
+      doc.text("Cliente", marginL + 22, y);
+      doc.text("Carnicero", marginL + 72, y);
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      for (const o of dayCancelledOrders) {
+        checkPage(5);
+        const ts = o.canceled_at || o.created_at;
+        const hora = ts ? new Date(ts + (ts.includes("Z") || ts.includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+        doc.text(hora, marginL + 2, y);
+        doc.text((o.customer_name || "Mostrador").slice(0, 22), marginL + 22, y);
+        doc.text((o.captured_by || "—").slice(0, 15), marginL + 72, y);
+        y += 4;
+      }
+      row("Total tickets cancelados", String(dayCancelledOrders.length), true);
+      y += 3;
+    }
+
     // ═══ MOVIMIENTOS DEL DÍA ═══
     sectionTitle("DETALLE DE MOVIMIENTOS (" + active.length + ")");
     doc.setFontSize(7); doc.setFont("helvetica", "bold");
     doc.text("Hora", marginL + 2, y);
-    doc.text("Tipo", marginL + 22, y);
-    doc.text("Metodo", marginL + 55, y);
-    doc.text("Cajera", marginL + 85, y);
+    doc.text("Tipo", marginL + 18, y);
+    doc.text("Cliente", marginL + 40, y);
+    doc.text("Carnicero", marginL + 78, y);
+    doc.text("Cajera", marginL + 108, y);
+    doc.text("Metodo", marginL + 132, y);
     doc.text("Monto", marginR - 2, y, { align: "right" });
     y += 4;
     doc.setFont("helvetica", "normal");
 
     for (const m of active) {
       checkPage(5);
-      const hora = m.created_at ? new Date(m.created_at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+      const hora = m.created_at ? new Date(m.created_at + (String(m.created_at).includes("Z") || String(m.created_at).includes("+") ? "" : "Z")).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: "America/Mexico_City" }) : "";
+      const ord = m.reference_id ? orderMap[m.reference_id] : undefined;
       doc.text(hora, marginL + 2, y);
-      doc.text(typeName(m.type), marginL + 22, y);
-      doc.text(methodName(m.payment_method), marginL + 55, y);
-      doc.text((m.cashier_name || "").slice(0, 12), marginL + 85, y);
+      doc.text(typeName(m.type), marginL + 18, y);
+      doc.text((ord?.customer_name || "—").slice(0, 16), marginL + 40, y);
+      doc.text((ord?.captured_by || "—").slice(0, 12), marginL + 78, y);
+      doc.text((m.cashier_name || "—").slice(0, 10), marginL + 108, y);
+      doc.text(methodName(m.payment_method), marginL + 132, y);
       doc.text(`$${money(m.amount)}`, marginR - 2, y, { align: "right" });
       y += 4;
     }
