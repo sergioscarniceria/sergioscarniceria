@@ -7,10 +7,29 @@ import * as XLSX from "xlsx";
 import { printCashCut, type CashCutData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
-// jsPDF se carga dinámicamente para evitar error SSR
-async function loadJsPDF(): Promise<any> {
-  const mod = await import("jspdf");
-  return mod.jsPDF || mod.default;
+// jsPDF se carga desde CDN (el paquete npm falla en build con Turbopack/fflate)
+function loadJsPDF(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).jspdf) { resolve((window as any).jspdf.jsPDF); return; }
+    const cdns = [
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
+      "https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js",
+      "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
+    ];
+    let idx = 0;
+    function tryNext() {
+      if (idx >= cdns.length) { reject(new Error("No se pudo cargar jsPDF desde ningún CDN")); return; }
+      const s = document.createElement("script");
+      s.src = cdns[idx++];
+      s.onload = () => {
+        if ((window as any).jspdf) resolve((window as any).jspdf.jsPDF);
+        else tryNext();
+      };
+      s.onerror = () => tryNext();
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
 }
 
 // ─── Types ─────────────────────────────────────────────────────
