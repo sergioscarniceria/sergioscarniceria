@@ -1236,14 +1236,35 @@ const paidTickets = useMemo(() => {
           </div>
         </div>
       ) : (
-        /* Sin báscula o producto por pieza: input normal */
+        /* Sin báscula o producto por pieza */
+        isFixedPieceProduct ? (
+          /* Botones touch para piezas: -5, -1, [cantidad], +1, +5 */
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}>
+              <button onClick={() => setKilos(String(Math.max(0, Number(kilos || 0) - 5)))} style={{ ...pieceButtonStyle, background: "rgba(180,35,24,0.10)", color: COLORS.danger, fontSize: 18 }}>-5</button>
+              <button onClick={() => setKilos(String(Math.max(0, Number(kilos || 0) - 1)))} style={{ ...pieceButtonStyle, background: "rgba(180,35,24,0.10)", color: COLORS.danger }}>-1</button>
+              <div style={{ minWidth: 70, textAlign: "center", fontSize: 36, fontWeight: 900, color: COLORS.text }}>{Number(kilos || 0)}</div>
+              <button onClick={() => setKilos(String(Number(kilos || 0) + 1))} style={{ ...pieceButtonStyle, background: "rgba(31,122,77,0.10)", color: COLORS.success }}>+1</button>
+              <button onClick={() => setKilos(String(Number(kilos || 0) + 5))} style={{ ...pieceButtonStyle, background: "rgba(31,122,77,0.10)", color: COLORS.success, fontSize: 18 }}>+5</button>
+            </div>
+            {Number(kilos || 0) > 0 && selectedProductData && (
+              <div style={{ textAlign: "center", marginTop: 8, fontSize: 22, fontWeight: 800, color: COLORS.primary }}>
+                ${money(Number(kilos || 0) * Number(selectedProductData.fixed_piece_price || 0))}
+                <span style={{ fontSize: 12, fontWeight: 600, color: COLORS.muted, marginLeft: 6 }}>
+                  ({kilos} × ${money(selectedProductData.fixed_piece_price)})
+                </span>
+              </div>
+            )}
+          </div>
+        ) : (
         <input
-          placeholder={isFixedPieceProduct ? "Ejemplo: 2" : "Ejemplo: 1.250"}
+          placeholder="Ejemplo: 1.250"
           value={kilos}
           onChange={(e) => setKilos(e.target.value)}
           style={inputStyle}
           inputMode="decimal"
         />
+        )
       )}
     </div>
 
@@ -1743,6 +1764,21 @@ const inputStyle: React.CSSProperties = {
   background: "white",
   color: COLORS.text,
   fontSize: 18,
+};
+
+const pieceButtonStyle: React.CSSProperties = {
+  width: 60,
+  height: 60,
+  borderRadius: 16,
+  border: "none",
+  cursor: "pointer",
+  fontWeight: 900,
+  fontSize: 24,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  userSelect: "none",
+  WebkitTapHighlightColor: "transparent",
 };
 
 const addButtonStyle: React.CSSProperties = {
