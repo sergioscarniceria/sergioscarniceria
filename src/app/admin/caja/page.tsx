@@ -939,13 +939,40 @@ export default function CajaPage() {
     const dayStart = mxToISO(closureDate, "start");
     const dayEnd = mxToISO(closureDate, "end");
 
-    const [movRes, expRes, creditRes, cxcNotesRes, cxcPaysRes, cancelledOrdersRes] = await Promise.all([
+    // ── Fechas para comparativos ──
+    const closureDateObj = new Date(closureDate + "T12:00:00");
+    const yesterdayDate = new Date(closureDateObj); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const lastMonthDate = new Date(closureDateObj); lastMonthDate.setMonth(lastMonthDate.getMonth() - 1);
+    const lastYearDate = new Date(closureDateObj); lastYearDate.setFullYear(lastYearDate.getFullYear() - 1);
+    const fmtD = (d: Date) => d.toISOString().slice(0, 10);
+    const yStart = mxToISO(fmtD(yesterdayDate), "start"); const yEnd = mxToISO(fmtD(yesterdayDate), "end");
+    const mStart = mxToISO(fmtD(lastMonthDate), "start"); const mEnd = mxToISO(fmtD(lastMonthDate), "end");
+    const aStart = mxToISO(fmtD(lastYearDate), "start"); const aEnd = mxToISO(fmtD(lastYearDate), "end");
+    // Mañana para pedidos pendientes
+    const tomorrowDate = new Date(closureDateObj); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tmStart = mxToISO(fmtD(tomorrowDate), "start"); const tmEnd = mxToISO(fmtD(tomorrowDate), "end");
+
+    const [movRes, expRes, creditRes, cxcNotesRes, cxcPaysRes, cancelledOrdersRes,
+           dayOrdersRes, editedOrdersRes, cxcBalanceRes,
+           yMovRes, mMovRes, aMovRes, tomorrowOrdersRes] = await Promise.all([
       supabaseRef.from("cash_movements").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cash_expenses").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
       supabaseRef.from("cxc_notes").select("id, customer_name, total_amount, note_number, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cxc_payments").select("id, customer_name, amount, payment_method, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status").eq("status", "cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      // Orders del día con items para top productos, clientes, carniceros, descuentos
+      supabaseRef.from("orders").select("id, customer_name, captured_by, discount_amount, edited_at, edited_by, status, order_items(product, kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)").in("status", ["pendiente", "terminado", "entregado"]).gte("created_at", dayStart).lte("created_at", dayEnd),
+      // Tickets editados del día
+      supabaseRef.from("orders").select("id, customer_name, edited_by, edited_at").not("edited_at", "is", null).gte("created_at", dayStart).lte("created_at", dayEnd),
+      // Saldo CxC global
+      supabaseRef.from("cxc_notes").select("balance_due").in("status", ["pendiente", "parcial"]),
+      // Comparativos — solo totales de cash_movements activos
+      supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", yStart).lte("created_at", yEnd),
+      supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", mStart).lte("created_at", mEnd),
+      supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", aStart).lte("created_at", aEnd),
+      // Pedidos para mañana
+      supabaseRef.from("orders").select("id, customer_name, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece)").in("status", ["nuevo", "pendiente", "proceso"]).gte("delivery_date", fmtD(tomorrowDate)).lte("delivery_date", fmtD(tomorrowDate)),
     ]);
 
     const dayMovements = (movRes.data || []) as Movement[];
@@ -954,6 +981,13 @@ export default function CajaPage() {
     const dayCxcNotes = cxcNotesRes.data || [];
     const dayCxcPayments = cxcPaysRes.data || [];
     const dayCancelledOrders = cancelledOrdersRes.data || [];
+    const dayOrders = dayOrdersRes.data || [];
+    const editedOrders = editedOrdersRes.data || [];
+    const cxcBalanceAll = cxcBalanceRes.data || [];
+    const yesterdayMov = yMovRes.data || [];
+    const lastMonthMov = mMovRes.data || [];
+    const lastYearMov = aMovRes.data || [];
+    const tomorrowOrders = tomorrowOrdersRes.data || [];
 
     // Enriquecer movimientos con datos de orders (cliente y carnicero)
     const refIds = dayMovements.filter(m => m.reference_id).map(m => m.reference_id!);
@@ -968,6 +1002,65 @@ export default function CajaPage() {
     const cancelled = dayMovements.filter((m: any) => m.is_cancelled);
     const active = dayMovements.filter((m: any) => !m.is_cancelled);
     const creditoNuevo = creditOrders.reduce((a: number, o: any) => a + Number(o.total || 0), 0);
+
+    // ── Cálculos para secciones nuevas ──
+    // Top productos
+    const prodMap: Record<string, { kg: number; pz: number; total: number }> = {};
+    for (const o of dayOrders) {
+      for (const it of (o.order_items || [])) {
+        const key = it.product || "Sin nombre";
+        if (!prodMap[key]) prodMap[key] = { kg: 0, pz: 0, total: 0 };
+        if (it.sale_type === "pieza" && it.is_fixed_price_piece) {
+          prodMap[key].pz += Number(it.quantity || 0);
+          prodMap[key].total += Number(it.quantity || 0) * Number(it.price || 0);
+        } else {
+          const kg = Number(it.prepared_kilos || it.kilos || 0);
+          prodMap[key].kg += kg;
+          prodMap[key].total += kg * Number(it.price || 0);
+        }
+      }
+    }
+    const topProds = Object.entries(prodMap).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
+
+    // Top clientes
+    const clientMap: Record<string, number> = {};
+    for (const o of dayOrders) {
+      const name = o.customer_name || "Mostrador";
+      const items = (o.order_items || []);
+      let t = 0;
+      for (const it of items) {
+        if (it.sale_type === "pieza" && it.is_fixed_price_piece) t += Number(it.quantity || 0) * Number(it.price || 0);
+        else t += Number(it.prepared_kilos || it.kilos || 0) * Number(it.price || 0);
+      }
+      clientMap[name] = (clientMap[name] || 0) + t;
+    }
+    const topClients = Object.entries(clientMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    // Resumen por carnicero
+    const carniceroMap: Record<string, { tickets: number; total: number }> = {};
+    for (const o of dayOrders) {
+      const name = o.captured_by || "Sin asignar";
+      if (!carniceroMap[name]) carniceroMap[name] = { tickets: 0, total: 0 };
+      carniceroMap[name].tickets++;
+      for (const it of (o.order_items || [])) {
+        if (it.sale_type === "pieza" && it.is_fixed_price_piece) carniceroMap[name].total += Number(it.quantity || 0) * Number(it.price || 0);
+        else carniceroMap[name].total += Number(it.prepared_kilos || it.kilos || 0) * Number(it.price || 0);
+      }
+    }
+    const carniceroList = Object.entries(carniceroMap).sort((a, b) => b[1].total - a[1].total);
+
+    // Descuentos aplicados
+    const discountOrders = dayOrders.filter((o: any) => Number(o.discount_amount || 0) > 0);
+
+    // Comparativos
+    const sumMov = (arr: any[]) => arr.reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const ventasHoy = active.filter((m: any) => m.type === "venta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const ventasAyer = sumMov(yesterdayMov);
+    const ventasMesAnt = sumMov(lastMonthMov);
+    const ventasAnioAnt = sumMov(lastYearMov);
+
+    // Saldo CxC acumulado
+    const saldoCxcTotal = cxcBalanceAll.reduce((a: number, n: any) => a + Number(n.balance_due || 0), 0);
 
     // ─── Generar PDF ───
     const doc = new jsPDF({ unit: "mm", format: "letter" });
@@ -1221,6 +1314,152 @@ export default function CajaPage() {
       doc.text(methodName(m.payment_method), marginL + 132, y);
       doc.text(`$${money(m.amount)}`, marginR - 2, y, { align: "right" });
       y += 4;
+    }
+
+    // ═══ TOP 10 PRODUCTOS MÁS VENDIDOS ═══
+    if (topProds.length > 0) {
+      sectionTitle("TOP 10 PRODUCTOS MAS VENDIDOS");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("#", marginL + 2, y);
+      doc.text("Producto", marginL + 8, y);
+      doc.text("Kg / Pz", marginL + 100, y, { align: "right" });
+      doc.text("Monto", marginR - 2, y, { align: "right" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      topProds.forEach(([name, d], i) => {
+        checkPage(5);
+        doc.text(String(i + 1), marginL + 2, y);
+        doc.text(name.slice(0, 35), marginL + 8, y);
+        const qtyLabel = d.kg > 0 && d.pz > 0 ? `${d.kg.toFixed(1)} kg + ${d.pz} pz` : d.pz > 0 ? `${d.pz} pz` : `${d.kg.toFixed(1)} kg`;
+        doc.text(qtyLabel, marginL + 100, y, { align: "right" });
+        doc.text(`$${money(d.total)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      });
+      y += 3;
+    }
+
+    // ═══ TOP 5 CLIENTES DEL DÍA ═══
+    if (topClients.length > 0) {
+      sectionTitle("TOP 5 CLIENTES DEL DIA");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("#", marginL + 2, y);
+      doc.text("Cliente", marginL + 8, y);
+      doc.text("Total", marginR - 2, y, { align: "right" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      topClients.forEach(([name, total], i) => {
+        checkPage(5);
+        doc.text(String(i + 1), marginL + 2, y);
+        doc.text(name.slice(0, 40), marginL + 8, y);
+        doc.text(`$${money(total)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      });
+      y += 3;
+    }
+
+    // ═══ RESUMEN POR CARNICERO ═══
+    if (carniceroList.length > 0) {
+      sectionTitle("RESUMEN POR CARNICERO");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("Carnicero", marginL + 2, y);
+      doc.text("Tickets", marginL + 80, y, { align: "right" });
+      doc.text("Total", marginR - 2, y, { align: "right" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      for (const [name, d] of carniceroList) {
+        checkPage(5);
+        doc.text(name.slice(0, 25), marginL + 2, y);
+        doc.text(String(d.tickets), marginL + 80, y, { align: "right" });
+        doc.text(`$${money(d.total)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      }
+      y += 3;
+    }
+
+    // ═══ DESCUENTOS APLICADOS ═══
+    if (discountOrders.length > 0) {
+      sectionTitle("DESCUENTOS APLICADOS");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("Cliente", marginL + 2, y);
+      doc.text("Descuento", marginR - 2, y, { align: "right" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      let totalDesc = 0;
+      for (const o of discountOrders) {
+        checkPage(5);
+        const disc = Number(o.discount_amount || 0);
+        totalDesc += disc;
+        doc.text((o.customer_name || "Mostrador").slice(0, 35), marginL + 2, y);
+        doc.text(`-$${money(disc)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      }
+      separator();
+      row("Total descuentos", `-$${money(totalDesc)}`, true);
+      y += 3;
+    }
+
+    // ═══ TICKETS EDITADOS ═══
+    if (editedOrders.length > 0) {
+      sectionTitle("TICKETS EDITADOS (" + editedOrders.length + ")");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("Hora edición", marginL + 2, y);
+      doc.text("Cliente", marginL + 30, y);
+      doc.text("Editado por", marginL + 100, y);
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      for (const o of editedOrders) {
+        checkPage(5);
+        doc.text(mxTime(o.edited_at), marginL + 2, y);
+        doc.text((o.customer_name || "Mostrador").slice(0, 25), marginL + 30, y);
+        doc.text((o.edited_by || "—").slice(0, 15), marginL + 100, y);
+        y += 4;
+      }
+      y += 3;
+    }
+
+    // ═══ COMPARATIVO DE VENTAS ═══
+    sectionTitle("COMPARATIVO DE VENTAS");
+    const pctDiff = (hoy: number, otro: number) => otro > 0 ? `${((hoy - otro) / otro * 100).toFixed(0)}%` : "N/A";
+    const diffSign = (hoy: number, otro: number) => hoy >= otro ? "+" : "";
+    row("Hoy", `$${money(ventasHoy)}`, true);
+    row(`Ayer (${fmtD(yesterdayDate)})`, `$${money(ventasAyer)}   ${diffSign(ventasHoy, ventasAyer)}${pctDiff(ventasHoy, ventasAyer)}`);
+    row(`Hace 1 mes (${fmtD(lastMonthDate)})`, `$${money(ventasMesAnt)}   ${diffSign(ventasHoy, ventasMesAnt)}${pctDiff(ventasHoy, ventasMesAnt)}`);
+    row(`Hace 1 año (${fmtD(lastYearDate)})`, `$${money(ventasAnioAnt)}   ${diffSign(ventasHoy, ventasAnioAnt)}${pctDiff(ventasHoy, ventasAnioAnt)}`);
+    y += 3;
+
+    // ═══ SALDO CxC ACUMULADO ═══
+    sectionTitle("SALDO CxC ACUMULADO");
+    row("Deuda total de clientes", `$${money(saldoCxcTotal)}`, true);
+    row("Notas pendientes/parciales", String(cxcBalanceAll.length));
+    y += 3;
+
+    // ═══ PEDIDOS PENDIENTES PARA MAÑANA ═══
+    if (tomorrowOrders.length > 0) {
+      sectionTitle("PEDIDOS PARA MANANA (" + fmtD(tomorrowDate) + ")");
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      doc.text("Cliente", marginL + 2, y);
+      doc.text("Productos", marginL + 70, y, { align: "right" });
+      doc.text("Estimado", marginR - 2, y, { align: "right" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      let totalManana = 0;
+      for (const o of tomorrowOrders) {
+        checkPage(5);
+        const items = o.order_items || [];
+        let t = 0;
+        for (const it of items) {
+          if (it.sale_type === "pieza" && it.is_fixed_price_piece) t += Number(it.quantity || 0) * Number(it.price || 0);
+          else t += Number(it.kilos || 0) * Number(it.price || 0);
+        }
+        totalManana += t;
+        doc.text((o.customer_name || "Sin cliente").slice(0, 30), marginL + 2, y);
+        doc.text(String(items.length), marginL + 70, y, { align: "right" });
+        doc.text(`$${money(t)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      }
+      separator();
+      row("Total estimado mañana", `$${money(totalManana)}`, true);
+      y += 3;
     }
 
     // ═══ NOTAS ═══
