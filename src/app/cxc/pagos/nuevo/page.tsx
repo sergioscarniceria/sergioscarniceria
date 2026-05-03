@@ -170,6 +170,70 @@ export default function NuevoPagoCxcPage() {
     return openNotes.reduce((acc, note) => acc + Number(note.balance_due || 0), 0);
   }, [openNotes]);
 
+  function printAbonoTicket(info: {
+    customerName: string;
+    paymentDate: string;
+    paymentAmount: number;
+    paymentMethod: string;
+    appliedDetails: { noteNumber: string; applied: number; newBalance: number }[];
+    newTotalBalance: number;
+  }) {
+    const methodLabel: Record<string, string> = {
+      efectivo: "Efectivo",
+      tarjeta: "Tarjeta",
+      transferencia: "Transferencia",
+    };
+    const rows = info.appliedDetails
+      .map(
+        (d) =>
+          `<tr>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc">${d.noteNumber}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${d.applied.toFixed(2)}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${d.newBalance.toFixed(2)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>Recibo de Abono</title>
+      <style>
+        @page { margin: 0; }
+        body { font-family: monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 8px; }
+        h2 { text-align: center; margin: 4px 0; font-size: 14px; }
+        .center { text-align: center; }
+        .line { border-top: 1px dashed #000; margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 2px 6px; font-size: 11px; border-bottom: 1px solid #000; }
+        th:nth-child(2), th:nth-child(3) { text-align: right; }
+        .total-row { font-weight: bold; font-size: 13px; }
+      </style></head><body>
+      <h2>SERGIO'S CARNICERÍA</h2>
+      <p class="center" style="margin:2px 0">RECIBO DE ABONO</p>
+      <div class="line"></div>
+      <p><strong>Cliente:</strong> ${info.customerName}</p>
+      <p><strong>Fecha:</strong> ${info.paymentDate}</p>
+      <p><strong>Método:</strong> ${methodLabel[info.paymentMethod] || info.paymentMethod}</p>
+      <p class="total-row"><strong>Abono:</strong> $${info.paymentAmount.toFixed(2)}</p>
+      <div class="line"></div>
+      <p style="font-size:11px;margin-bottom:2px"><strong>Aplicado a:</strong></p>
+      <table>
+        <tr><th>Nota</th><th>Abonado</th><th>Resta</th></tr>
+        ${rows}
+      </table>
+      <div class="line"></div>
+      <p class="total-row center">SALDO RESTANTE: $${info.newTotalBalance.toFixed(2)}</p>
+      <div class="line"></div>
+      <p class="center" style="font-size:10px;margin-top:8px">¡Gracias por su pago!</p>
+      <script>window.onload=function(){window.print();setTimeout(function(){window.close()},600);}</script>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=320,height=600");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+    }
+  }
+
   async function savePaymentBase() {
   if (!selectedCustomer) {
     alert("Selecciona un cliente");
@@ -242,15 +306,27 @@ if (cashMovementError) {
 }
 
   let remaining = paymentAmount;
+  const appliedDetails: { noteNumber: string; applied: number; newBalance: number }[] = [];
+  let newTotalBalance = 0;
 
   for (const note of openNotes) {
-    if (remaining <= 0) break;
+    if (remaining <= 0) {
+      newTotalBalance += Number(note.balance_due || 0);
+      continue;
+    }
 
     const currentBalance = Number(note.balance_due || 0);
     if (currentBalance <= 0) continue;
 
     const amountApplied = Math.min(remaining, currentBalance);
     const newBalance = Number((currentBalance - amountApplied).toFixed(2));
+
+    appliedDetails.push({
+      noteNumber: note.note_number || note.id.slice(0, 8),
+      applied: amountApplied,
+      newBalance,
+    });
+    newTotalBalance += newBalance;
 
     const { error: updateError } = await supabase
       .from("cxc_notes")
@@ -269,6 +345,16 @@ if (cashMovementError) {
 
     remaining = Number((remaining - amountApplied).toFixed(2));
   }
+
+  // ─── Imprimir ticket de abono ───
+  printAbonoTicket({
+    customerName: selectedCustomer.name,
+    paymentDate,
+    paymentAmount,
+    paymentMethod,
+    appliedDetails,
+    newTotalBalance,
+  });
 
   alert("Pago registrado y aplicado correctamente");
 
