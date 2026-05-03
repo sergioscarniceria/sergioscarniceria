@@ -239,16 +239,27 @@ function Section({ children, id, delay = 0, className = "" }: { children: React.
 
 // ═══════════ MAIN COMPONENT ═══════════
 export default function HomePage() {
+  const supabase = getSupabaseClient();
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);
   const [showOps, setShowOps] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [empRole, setEmpRole] = useState<string | null>(null);
   const [empName, setEmpName] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [customerCount, setCustomerCount] = useState(5250);
+  const [productCount, setProductCount] = useState(134);
 
   useEffect(() => {
     const role = typeof window !== "undefined" ? sessionStorage.getItem("pin_role") : null;
     if (role) setEmpRole(role);
+    // Cargar conteos reales
+    async function loadCounts() {
+      const { count: cCount } = await supabase.from("customers").select("id", { count: "exact", head: true });
+      if (cCount) setCustomerCount(cCount + 5000);
+      const { count: pCount } = await supabase.from("products").select("id", { count: "exact", head: true }).eq("is_active", true);
+      if (pCount) setProductCount(pCount);
+    }
+    loadCounts();
   }, []);
 
   useEffect(() => {
@@ -396,9 +407,9 @@ export default function HomePage() {
       <Section>
         <div className="stats-row" style={{ maxWidth: 900, margin: "0 auto 60px", display: "flex", justifyContent: "center", gap: 0, padding: "0 20px" }}>
           {[
-            { n: 15, label: "Años de experiencia", suffix: "+" },
-            { n: 134, label: "Productos en catálogo", suffix: "" },
-            { n: 256, label: "Clientes registrados", suffix: "" },
+            { n: 50, label: "Años de experiencia", suffix: "+" },
+            { n: productCount, label: "Productos en catálogo", suffix: "" },
+            { n: customerCount, label: "Clientes satisfechos", suffix: "+" },
           ].map((s, i) => (
             <div key={s.label} style={{ flex: 1, textAlign: "center", padding: "24px 16px", borderRight: i < 2 ? `1px solid ${C.border}` : "none" }}>
               <div style={{ fontSize: 42, fontWeight: 800, color: C.primary, lineHeight: 1 }}>
@@ -443,22 +454,23 @@ export default function HomePage() {
 
         {/* ─── RECETARIO ─── */}
         <Section id="recetario">
-          <div style={{ marginBottom: 60 }}>
-            <div style={{ marginBottom: 28 }}>
+          <div style={{ marginBottom: 80 }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
               <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 999, background: "rgba(123,34,24,0.08)", color: C.primary, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12 }}>
                 Inspírate
               </div>
-              <h2 style={{ fontSize: 34, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 8 }}>Recetario</h2>
-              <p style={{ color: C.muted, fontSize: 16, maxWidth: 500 }}>Ideas para cocinar con nuestros cortes</p>
+              <h2 style={{ fontSize: 38, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 10 }}>Recetario</h2>
+              <p style={{ color: C.muted, fontSize: 17, maxWidth: 500, margin: "0 auto" }}>Ideas para cocinar con nuestros cortes selectos</p>
             </div>
 
-            <div className="recipe-scroll" style={{ display: "flex", gap: 20, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "thin" }}>
-              {recipes.map((recipe, idx) => {
+            <div className="recipe-scroll" style={{ display: "flex", gap: 24, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "thin" }}>
+              {recipes.map((recipe) => {
                 const isOpen = openRecipe === recipe.title;
                 return (
                   <div key={recipe.title} className="recipe-card" style={{
-                    flex: "0 0 340px", background: "white", borderRadius: 24, overflow: "hidden",
+                    flex: "0 0 340px", background: C.cardStrong, borderRadius: 24, overflow: "hidden",
                     border: `1px solid ${C.border}`, boxShadow: "0 8px 30px rgba(91,25,15,0.06)",
+                    backdropFilter: "blur(10px)",
                   }}>
                     <div style={{ position: "relative", overflow: "hidden" }}>
                       <img src={recipe.image} alt={recipe.title} loading="lazy"
@@ -475,12 +487,12 @@ export default function HomePage() {
                       <p style={{ color: C.muted, fontSize: 14, lineHeight: 1.5, marginBottom: 16 }}>{recipe.description}</p>
 
                       <button onClick={() => setOpenRecipe(isOpen ? null : recipe.title)}
-                        style={{ padding: "10px 18px", borderRadius: 12, border: "none", background: isOpen ? C.primaryDark : C.primary, color: "white", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s" }}>
+                        style={{ padding: "10px 18px", borderRadius: 12, border: "none", background: isOpen ? C.primaryDark : `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`, color: "white", cursor: "pointer", fontWeight: 700, fontSize: 13, transition: "all 0.2s", boxShadow: "0 4px 12px rgba(123,34,24,0.2)" }}>
                         {isOpen ? "Ocultar" : "Ver receta"}
                       </button>
 
                       {isOpen && (
-                        <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: C.bgSoft, border: `1px solid ${C.border}`, animation: "slideInLeft 0.3s ease" }}>
+                        <div style={{ marginTop: 16, padding: 16, borderRadius: 16, background: "rgba(247,241,232,0.7)", border: `1px solid ${C.border}`, animation: "slideInLeft 0.3s ease", backdropFilter: "blur(6px)" }}>
                           <div style={{ fontWeight: 800, color: C.text, marginBottom: 8, fontSize: 14 }}>Ingredientes</div>
                           <ul style={{ margin: 0, paddingLeft: 18, color: C.muted, fontSize: 13 }}>
                             {recipe.ingredients.map((item) => <li key={item} style={{ marginBottom: 4, lineHeight: 1.5 }}>{item}</li>)}
@@ -501,24 +513,24 @@ export default function HomePage() {
 
         {/* ─── CONTACTO ─── */}
         <Section id="contacto">
-          <div style={{ marginBottom: 60 }}>
-            <div style={{ marginBottom: 28 }}>
+          <div style={{ marginBottom: 80 }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
               <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 999, background: "rgba(53,92,125,0.08)", color: C.info, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12 }}>
                 Encuéntranos
               </div>
-              <h2 style={{ fontSize: 34, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 8 }}>Redes y contacto</h2>
-              <p style={{ color: C.muted, fontSize: 16 }}>Escríbenos por cualquier canal</p>
+              <h2 style={{ fontSize: 38, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 10 }}>Redes y contacto</h2>
+              <p style={{ color: C.muted, fontSize: 17 }}>Escríbenos por cualquier canal</p>
             </div>
 
-            <div className="social-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+            <div className="social-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
               {socialLinks.map((s, i) => (
                 <a key={i} href={s.href} target="_blank" rel="noreferrer" className="social-card"
-                  style={{ display: "block", padding: 20, borderRadius: 20, background: "white", border: `1px solid ${C.border}`, textDecoration: "none", boxShadow: "0 4px 16px rgba(91,25,15,0.04)" }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color }} />
+                  style={{ display: "block", padding: 24, borderRadius: 22, background: C.cardStrong, border: `1px solid ${C.border}`, textDecoration: "none", boxShadow: "0 8px 30px rgba(91,25,15,0.05)", backdropFilter: "blur(10px)" }}>
+                  <div style={{ width: 44, height: 44, borderRadius: 14, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: "50%", background: s.color }} />
                   </div>
-                  <div style={{ fontWeight: 800, color: C.text, fontSize: 16, marginBottom: 4 }}>{s.title}</div>
-                  <div style={{ color: C.muted, fontSize: 13 }}>{s.subtitle}</div>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 17, marginBottom: 4 }}>{s.title}</div>
+                  <div style={{ color: C.muted, fontSize: 14 }}>{s.subtitle}</div>
                 </a>
               ))}
             </div>
@@ -527,31 +539,31 @@ export default function HomePage() {
 
         {/* ─── UBICACIÓN ─── */}
         <Section id="ubicacion">
-          <div style={{ marginBottom: 60 }}>
-            <div style={{ marginBottom: 28 }}>
+          <div style={{ marginBottom: 80 }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
               <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 999, background: "rgba(31,122,77,0.08)", color: C.success, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12 }}>
                 Visítanos
               </div>
-              <h2 style={{ fontSize: 34, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 8 }}>Ubicación y horario</h2>
+              <h2 style={{ fontSize: 38, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 10 }}>Ubicación y horario</h2>
             </div>
 
-            <div className="loc-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-              <div style={{ background: "white", border: `1px solid ${C.border}`, borderRadius: 24, padding: 28, boxShadow: "0 4px 16px rgba(91,25,15,0.04)" }}>
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 8 }}>Dirección</div>
+            <div className="loc-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div style={{ background: C.cardStrong, border: `1px solid ${C.border}`, borderRadius: 24, padding: 32, boxShadow: "0 8px 30px rgba(91,25,15,0.05)", backdropFilter: "blur(10px)" }}>
+                <div style={{ marginBottom: 28 }}>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 10 }}>Dirección</div>
                   <div style={{ color: C.muted, lineHeight: 1.7, fontSize: 15 }}>
                     H. Colegio Militar No. 122<br />Ezequiel Montes, Querétaro
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 24 }}>
-                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 8 }}>Horario</div>
-                  <div style={{ color: C.muted, lineHeight: 2, fontSize: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <div style={{ marginBottom: 28 }}>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 10 }}>Horario</div>
+                  <div style={{ color: C.muted, lineHeight: 2.2, fontSize: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>
                       <span>Lun, Mar, Jue, Vie, Sáb</span>
                       <b style={{ color: C.text }}>7:30 – 3:30 PM</b>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}>
                       <span>Miércoles y Domingo</span>
                       <b style={{ color: C.text }}>7:30 – 3:00 PM</b>
                     </div>
@@ -559,12 +571,12 @@ export default function HomePage() {
                 </div>
 
                 <div>
-                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 8 }}>Formas de pago</div>
+                  <div style={{ fontWeight: 800, color: C.text, fontSize: 18, marginBottom: 10 }}>Formas de pago</div>
                   <div style={{ color: C.muted, fontSize: 15 }}>Efectivo, tarjeta, transferencia</div>
                 </div>
               </div>
 
-              <div style={{ borderRadius: 24, overflow: "hidden", border: `1px solid ${C.border}`, boxShadow: "0 4px 16px rgba(91,25,15,0.04)", minHeight: 300 }}>
+              <div style={{ borderRadius: 24, overflow: "hidden", border: `1px solid ${C.border}`, boxShadow: "0 8px 30px rgba(91,25,15,0.05)", minHeight: 300 }}>
                 <iframe
                   src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d934.2!2d-99.8990919!3d20.6649555!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x85d382807e0d8b7d%3A0x10cabfa794775e2c!2sCarnicer%C3%ADa%20Sergio&#39;s!5e0!3m2!1ses!2smx!4v1700000000000"
                   width="100%" height="100%" style={{ border: 0, minHeight: 300 }} allowFullScreen loading="lazy"
