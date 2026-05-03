@@ -32,6 +32,7 @@ const moduleCategories = {
       { title: "Dashboard ventas", href: "/admin/dashboard", desc: "Resumen del negocio" },
       { title: "Proveedores / CxP", href: "/admin/proveedores", desc: "Compras y pagos" },
       { title: "Gestión de PINs", href: "/admin/pins", desc: "Accesos por rol" },
+      { title: "Pantalla cliente", href: "/admin/display", desc: "Imágenes y videos del display" },
     ],
   },
   gestion: {
@@ -595,6 +596,18 @@ export default function HomePage() {
                 textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(31,122,77,0.15)`,
               }}>
                 Checador de asistencia
+              </Link>
+              <Link href="/display/mostrador" target="_blank" style={{
+                padding: "12px 22px", borderRadius: 14, background: "rgba(123,34,24,0.08)", color: C.primary,
+                textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(123,34,24,0.15)`,
+              }}>
+                Display mostrador
+              </Link>
+              <Link href="/display/caja" target="_blank" style={{
+                padding: "12px 22px", borderRadius: 14, background: "rgba(53,92,125,0.08)", color: C.info,
+                textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(53,92,125,0.15)`,
+              }}>
+                Display caja
               </Link>
               <button onClick={() => setShowOps(!showOps)} className="cta-btn" style={{
                 padding: "12px 28px", borderRadius: 14, border: "none",
