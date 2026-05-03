@@ -74,6 +74,7 @@ export default function AdminDashboardPage() {
   const supabase = getSupabaseClient();
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [historicalDays, setHistoricalDays] = useState<{ date: string; venta: number; total_gastos: number; utilidad_diaria: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Secciones colapsables
@@ -155,6 +156,20 @@ export default function AdminDashboardPage() {
     }
 
     setOrders((allOrders as Order[]) || []);
+
+    // ─── Cargar resúmenes diarios históricos (daily_summaries) ───
+    {
+      let hQuery = supabase
+        .from("daily_summaries")
+        .select("date, venta, total_gastos, utilidad_diaria")
+        .order("date", { ascending: true });
+
+      if (dateFrom) hQuery = hQuery.gte("date", dateFrom);
+      if (dateTo) hQuery = hQuery.lte("date", dateTo);
+
+      const { data: hData } = await hQuery;
+      setHistoricalDays((hData as any[]) || []);
+    }
 
     // Load inventory data
     const { data: bodData } = await supabase
@@ -351,10 +366,30 @@ export default function AdminDashboardPage() {
 
   const now = new Date();
 
-  const totalSales = useMemo(
+  // Ventas históricas (de daily_summaries, sin duplicar con orders del mismo día)
+  const historicalSales = useMemo(() => {
+    // Obtener fechas que ya tienen orders del sistema para no duplicar
+    const orderDates = new Set(
+      orders.map((o) => o.created_at ? o.created_at.slice(0, 10) : "")
+    );
+    return historicalDays
+      .filter((d) => !orderDates.has(d.date))
+      .reduce((acc, d) => acc + Number(d.venta || 0), 0);
+  }, [historicalDays, orders]);
+
+  const historicalDaysCount = useMemo(() => {
+    const orderDates = new Set(
+      orders.map((o) => o.created_at ? o.created_at.slice(0, 10) : "")
+    );
+    return historicalDays.filter((d) => !orderDates.has(d.date)).length;
+  }, [historicalDays, orders]);
+
+  const ordersSales = useMemo(
     () => orders.reduce((acc, order) => acc + orderTotal(order), 0),
     [orders]
   );
+
+  const totalSales = ordersSales + historicalSales;
 
   const totalOrders = orders.length;
 
@@ -402,25 +437,42 @@ export default function AdminDashboardPage() {
     [orders]
   );
 
-  const salesThisMonth = useMemo(
-    () =>
-      orders.reduce((acc, order) => {
-        if (!order.created_at) return acc;
-        const d = new Date(order.created_at);
-        return isSameMonth(d, now) ? acc + orderTotal(order) : acc;
-      }, 0),
-    [orders]
-  );
+  const salesThisMonth = useMemo(() => {
+    const ordersMonthSales = orders.reduce((acc, order) => {
+      if (!order.created_at) return acc;
+      const d = new Date(order.created_at);
+      return isSameMonth(d, now) ? acc + orderTotal(order) : acc;
+    }, 0);
+    const orderDates = new Set(
+      orders.map((o) => o.created_at ? o.created_at.slice(0, 10) : "")
+    );
+    const histMonthSales = historicalDays
+      .filter((d) => {
+        const dt = new Date(d.date + "T12:00:00");
+        return isSameMonth(dt, now) && !orderDates.has(d.date);
+      })
+      .reduce((acc, d) => acc + Number(d.venta || 0), 0);
+    return ordersMonthSales + histMonthSales;
+  }, [orders, historicalDays]);
 
-  const salesThisYear = useMemo(
-    () =>
-      orders.reduce((acc, order) => {
-        if (!order.created_at) return acc;
-        const d = new Date(order.created_at);
-        return isSameYear(d, now) ? acc + orderTotal(order) : acc;
-      }, 0),
-    [orders]
-  );
+  const salesThisYear = useMemo(() => {
+    const ordersYearSales = orders.reduce((acc, order) => {
+      if (!order.created_at) return acc;
+      const d = new Date(order.created_at);
+      return isSameYear(d, now) ? acc + orderTotal(order) : acc;
+    }, 0);
+    // Sumar históricos del mismo año sin duplicar
+    const orderDates = new Set(
+      orders.map((o) => o.created_at ? o.created_at.slice(0, 10) : "")
+    );
+    const histYearSales = historicalDays
+      .filter((d) => {
+        const dYear = new Date(d.date + "T12:00:00").getFullYear();
+        return dYear === now.getFullYear() && !orderDates.has(d.date);
+      })
+      .reduce((acc, d) => acc + Number(d.venta || 0), 0);
+    return ordersYearSales + histYearSales;
+  }, [orders, historicalDays]);
 
   // ─── Inventory Value ─────────────────────────────────────
   const inventoryStats = useMemo(() => {
