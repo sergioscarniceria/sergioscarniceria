@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { smartPrintTicket, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import ScaleButton from "@/components/ScaleButton";
 import { getScale } from "@/lib/scale";
+import { sendCfd, type CfdItemLine } from "@/lib/cfd-channel";
 
 type Item = {
   id: string;
@@ -234,6 +235,33 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
       unsub();
       clearInterval(checkInterval);
     };
+  }, []);
+
+  // ─── Emitir al display del cliente (BroadcastChannel) ───
+  useEffect(() => {
+    if (items.length === 0) {
+      sendCfd("mostrador", { type: "idle" });
+      return;
+    }
+    const cfdItems: CfdItemLine[] = items.map((i) => ({
+      product: i.product,
+      kilos: i.kilos,
+      price: i.price,
+      sale_type: i.sale_type,
+      quantity: i.quantity,
+      is_fixed_price_piece: i.is_fixed_price_piece,
+    }));
+    const cfdTotal = items.reduce((acc, i) => {
+      if (i.sale_type === "pieza" && i.is_fixed_price_piece) return acc + Number(i.quantity || 0) * Number(i.price || 0);
+      return acc + Number(i.kilos || 0) * Number(i.price || 0);
+    }, 0);
+    sendCfd("mostrador", { type: "venta_activa", items: cfdItems, total: cfdTotal });
+  }, [items]);
+
+  // Heartbeat cada 5s para que el display sepa que estamos activos
+  useEffect(() => {
+    const hb = setInterval(() => sendCfd("mostrador", { type: "heartbeat" }), 5000);
+    return () => clearInterval(hb);
   }, []);
 
   async function loadProducts() {
@@ -741,6 +769,9 @@ if (pulledOrderId) {
      type: "venta",
    };
    smartPrintTicket(ticketForPrint);
+
+   // Notificar al display del cliente que el ticket está listo
+   sendCfd("mostrador", { type: "ticket_listo", total: ticketTotal, customerName, folio });
 
    setLastSavedFolio(folio);
 setItems([]);

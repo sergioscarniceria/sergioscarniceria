@@ -8,6 +8,7 @@ import QrScanner from "@/components/QrScanner";
 import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound, roundingDiff } from "@/lib/money";
+import { sendCfd, type CfdItemLine } from "@/lib/cfd-channel";
 
 type TabMode = "ticket" | "manual" | "historial";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -231,6 +232,36 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       document.exitFullscreen().catch(() => {});
     }
   }
+
+  // ─── Emitir al display del cliente en caja (BroadcastChannel) ───
+  useEffect(() => {
+    if (!selectedTicket) {
+      sendCfd("caja", { type: "idle" });
+      return;
+    }
+    const allItems = allSelectedTickets().flatMap((t) => t.order_items || []);
+    const cfdItems: CfdItemLine[] = allItems.map((i) => ({
+      product: i.product,
+      kilos: i.kilos,
+      price: i.price,
+      sale_type: (i.sale_type as "kg" | "pieza") || undefined,
+      quantity: i.quantity,
+      is_fixed_price_piece: i.is_fixed_price_piece || undefined,
+    }));
+    const total = combinedFinalTotal();
+    sendCfd("caja", {
+      type: "venta_activa",
+      items: cfdItems,
+      total,
+      customerName: selectedTicket.customer_name || undefined,
+    });
+  }, [selectedTicket?.id, extraTickets.length, discountMode, discountValue]);
+
+  // Heartbeat cada 5s
+  useEffect(() => {
+    const hb = setInterval(() => sendCfd("caja", { type: "heartbeat" }), 5000);
+    return () => clearInterval(hb);
+  }, []);
 
   // Historial reimpresión
   const [historialSearch, setHistorialSearch] = useState("");
@@ -694,6 +725,14 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         }
       }
     }
+
+    // Notificar al display del cliente que el pago fue confirmado
+    sendCfd("caja", {
+      type: "pago_confirmado",
+      total: moneyRound(finalTotal),
+      customerName: selectedTicket.customer_name || undefined,
+      method,
+    });
 
     // Mostrar ticket imprimible
     setShowPrintTicket(true);
