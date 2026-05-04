@@ -49,7 +49,9 @@ type ProductStats = {
   product: string;
   revenue: number;
   kilos: number;
+  piezas: number;
   times: number;
+  isPieza: boolean;
 };
 
 const COLORS = {
@@ -614,11 +616,16 @@ export default function AdminDashboardPage() {
     for (const order of orders) {
       for (const item of order.order_items || []) {
         const key = item.product || "Sin nombre";
+        const esPieza = item.sale_type === "pieza" || !!item.is_fixed_price_piece;
         if (!totals[key]) {
-          totals[key] = { product: key, revenue: 0, kilos: 0, times: 0 };
+          totals[key] = { product: key, revenue: 0, kilos: 0, piezas: 0, times: 0, isPieza: esPieza };
         }
         totals[key].revenue += itemSubtotal(item);
-        totals[key].kilos += (item.sale_type === "pieza" || item.is_fixed_price_piece) ? 0 : Number(item.kilos || 0);
+        if (esPieza) {
+          totals[key].piezas += Number(item.quantity || 1);
+        } else {
+          totals[key].kilos += Number(item.kilos || 0);
+        }
         totals[key].times += 1;
       }
     }
@@ -1255,7 +1262,7 @@ export default function AdminDashboardPage() {
                   #{index + 1} <b>{product.product}</b>
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
-                  {fmt(product.kilos)} kg
+                  {product.isPieza ? `${fmt(product.piezas)} pzas` : `${fmt(product.kilos)} kg`}
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
                   {product.times} veces
@@ -1278,7 +1285,7 @@ export default function AdminDashboardPage() {
                   #{index + 1} <b>{product.product}</b>
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
-                  {fmt(product.kilos)} kg
+                  {product.isPieza ? `${fmt(product.piezas)} pzas` : `${fmt(product.kilos)} kg`}
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.danger, fontWeight: 600 }}>
                   {product.times} {product.times === 1 ? "vez" : "veces"}
