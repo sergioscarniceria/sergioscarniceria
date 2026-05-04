@@ -626,6 +626,10 @@ export default function AdminDashboardPage() {
     return Object.values(totals).sort((a, b) => b.revenue - a.revenue);
   }, [orders]);
 
+  const bottomProducts = useMemo(() => {
+    return [...productStats].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
+  }, [productStats]);
+
   const salesByDay = useMemo(() => {
     const map: Record<string, { date: string; sales: number; orders: number }> = {};
 
@@ -1255,6 +1259,29 @@ export default function AdminDashboardPage() {
                 </div>
                 <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
                   {product.times} veces
+                </div>
+                <div style={{ flex: 1, textAlign: "right", fontWeight: 700, color: COLORS.text }}>
+                  ${fmt(product.revenue)}
+                </div>
+              </div>
+            ))
+          )}
+        </Section>
+
+        <Section id="menos-vendidos" title="Menos vendidos" count={bottomProducts.length}>
+          {bottomProducts.length === 0 ? (
+            <div style={emptyBoxStyle}>No hay datos</div>
+          ) : (
+            bottomProducts.map((product, index) => (
+              <div key={product.product} style={productRowStyle}>
+                <div style={{ flex: 2, color: COLORS.text, minWidth: 0 }}>
+                  #{index + 1} <b>{product.product}</b>
+                </div>
+                <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
+                  {fmt(product.kilos)} kg
+                </div>
+                <div style={{ flex: 1, textAlign: "right", color: COLORS.danger, fontWeight: 600 }}>
+                  {product.times} {product.times === 1 ? "vez" : "veces"}
                 </div>
                 <div style={{ flex: 1, textAlign: "right", fontWeight: 700, color: COLORS.text }}>
                   ${fmt(product.revenue)}
