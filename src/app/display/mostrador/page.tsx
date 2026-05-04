@@ -12,24 +12,45 @@ type MediaItem = {
   media_type: "image" | "video";
 };
 
+// ─── Paleta igual al sitio web ───
 const C = {
-  bg: "#1a0a08",
-  bgGrad: "linear-gradient(145deg, #1a0a08 0%, #2d1410 50%, #1a0a08 100%)",
-  card: "rgba(255,255,255,0.06)",
-  cardBorder: "rgba(255,255,255,0.08)",
-  text: "#fff",
-  muted: "rgba(255,255,255,0.55)",
+  bg: "#f7f1e8",
+  bgSoft: "#fbf8f3",
+  card: "rgba(255,255,255,0.82)",
+  cardStrong: "rgba(255,255,255,0.92)",
+  border: "rgba(92,27,17,0.10)",
+  text: "#3b1c16",
+  muted: "#7a5a52",
+  primary: "#7b2218",
+  primaryDark: "#5a190f",
   accent: "#c9a96e",
   accentSoft: "rgba(201,169,110,0.15)",
-  primary: "#d4453a",
-  primarySoft: "rgba(212,69,58,0.12)",
-  success: "#4ade80",
+  success: "#1f7a4d",
 };
 
 const HEARTBEAT_TIMEOUT = 30000;
 const CAROUSEL_INTERVAL = 7000;
-const DONE_TIMEOUT = 8000;
+const DONE_TIMEOUT = 12000;
 const MEDIA_REFRESH = 300000; // 5 min
+
+// ─── Frases graciosas para "ticket listo" ───
+const FRASES_TICKET = [
+  { frase: "A falta de todo, de tu amada... una carnita asada", emoji: "🔥" },
+  { frase: "Un taco al día es la llave de la alegría", emoji: "🌮" },
+  { frase: "La carne no pregunta, la carne entiende", emoji: "🥩" },
+  { frase: "Quien tiene carne asada, no necesita nada", emoji: "✨" },
+  { frase: "No hay pena que una buena arrachera no cure", emoji: "💪" },
+  { frase: "La vida es corta, pide el corte grueso", emoji: "🔥" },
+  { frase: "Mientras haya carbón, hay esperanza", emoji: "🌟" },
+  { frase: "Hoy se come bien, mañana también", emoji: "🎉" },
+  { frase: "Barriga llena, corazón contento", emoji: "❤️" },
+  { frase: "Si la vida te da limones... exprímelos sobre la carne", emoji: "🍋" },
+  { frase: "El que madruga, se lleva el mejor corte", emoji: "🌅" },
+  { frase: "La mejor salsa es el hambre... y la nuestra también", emoji: "🫙" },
+  { frase: "No es lo mismo bistec de res, que res del bistec", emoji: "😄" },
+  { frase: "Carne de calidad, clientela de verdad", emoji: "🤝" },
+  { frase: "50 años asegurando que comas bien", emoji: "🏆" },
+];
 
 export default function DisplayMostradorPage() {
   const supabase = getSupabaseClient();
@@ -39,6 +60,7 @@ export default function DisplayMostradorPage() {
   const [total, setTotal] = useState(0);
   const [customerName, setCustomerName] = useState("");
   const [folio, setFolio] = useState("");
+  const [fraseIdx, setFraseIdx] = useState(0);
 
   // Carousel
   const [media, setMedia] = useState<MediaItem[]>([]);
@@ -87,12 +109,8 @@ export default function DisplayMostradorPage() {
       }, 600);
     };
 
-    // Check if current media is a video
     const currentMedia = media[currentSlide % media.length];
-    if (currentMedia?.media_type === "video") {
-      // Let video play to completion — don't auto-advance
-      return;
-    }
+    if (currentMedia?.media_type === "video") return;
 
     carouselTimer.current = setInterval(advance, CAROUSEL_INTERVAL);
     return () => {
@@ -100,7 +118,7 @@ export default function DisplayMostradorPage() {
     };
   }, [mode, media, currentSlide]);
 
-  // ─── Listen to BroadcastChannel ───
+  // ─── Listen to Supabase Realtime ───
   useEffect(() => {
     const resetHeartbeat = () => {
       if (heartbeatTimer.current) clearTimeout(heartbeatTimer.current);
@@ -112,7 +130,6 @@ export default function DisplayMostradorPage() {
 
       if (msg.type === "venta_activa") {
         if (doneTimer.current) clearTimeout(doneTimer.current);
-        // Track new item for animation
         if (msg.items.length > prevItemCount.current) {
           setLastAddedIdx(msg.items.length - 1);
         }
@@ -127,6 +144,7 @@ export default function DisplayMostradorPage() {
         setTotal(msg.total);
         setFolio(msg.folio || "");
         setCustomerName(msg.customerName || "");
+        setFraseIdx(Math.floor(Math.random() * FRASES_TICKET.length));
         setMode("done");
         doneTimer.current = setTimeout(() => {
           setMode("idle");
@@ -163,12 +181,14 @@ export default function DisplayMostradorPage() {
     return Number(item.kilos || 0) * Number(item.price || 0);
   }
 
+  const frase = FRASES_TICKET[fraseIdx];
+
   // ═══════ RENDER ═══════
 
   return (
     <div style={{
       width: "100vw", height: "100vh", overflow: "hidden",
-      background: C.bgGrad, fontFamily: "'Segoe UI', system-ui, sans-serif",
+      background: C.bg, fontFamily: "'Segoe UI', system-ui, sans-serif",
       color: C.text, position: "relative",
     }}>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -176,6 +196,7 @@ export default function DisplayMostradorPage() {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
       ` }} />
 
       {/* ═══ MODO REPOSO ═══ */}
@@ -218,22 +239,29 @@ export default function DisplayMostradorPage() {
               {/* Gradient overlay for bottom info */}
               <div style={{
                 position: "absolute", bottom: 0, left: 0, right: 0, height: 180,
-                background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
+                background: "linear-gradient(transparent, rgba(59,28,22,0.9))",
               }} />
             </>
           ) : (
-            /* Fallback: logo elegante */
+            /* Fallback: logo con colores del sitio */
             <div style={{
               width: "100%", height: "100%", display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center",
-              background: C.bgGrad,
+              background: `linear-gradient(145deg, ${C.bg} 0%, ${C.bgSoft} 50%, ${C.bg} 100%)`,
             }}>
-              <img src="/logo-sm.png" alt="Sergio's" style={{ width: 200, maxWidth: "40vw", height: "auto", opacity: 0.9, marginBottom: 30 }} />
-              <div style={{ fontSize: 48, fontWeight: 800, color: C.text, letterSpacing: -1 }}>
+              <img src="/logo-sm.png" alt="Sergio's" style={{ width: 220, maxWidth: "40vw", height: "auto", marginBottom: 30 }} />
+              <div style={{ fontSize: 48, fontWeight: 800, color: C.primary, letterSpacing: -1 }}>
                 Sergio&apos;s Carnicería
               </div>
-              <div style={{ fontSize: 20, color: C.accent, fontWeight: 600, marginTop: 10 }}>
-                Carne de calidad desde Ezequiel Montes
+              <div style={{ fontSize: 22, color: C.accent, fontWeight: 600, marginTop: 12 }}>
+                Carne de calidad desde 1976 — Ezequiel Montes, Qro.
+              </div>
+              <div style={{
+                marginTop: 40, padding: "14px 36px", borderRadius: 16,
+                background: C.accentSoft, border: `1px solid ${C.accent}`,
+                fontSize: 18, color: C.muted, fontWeight: 500,
+              }}>
+                Pedidos por WhatsApp: 441 115 3314
               </div>
             </div>
           )}
@@ -245,19 +273,19 @@ export default function DisplayMostradorPage() {
             alignItems: "flex-end", zIndex: 10,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <img src="/logo-sm.png" alt="" style={{ width: 44, height: "auto", opacity: 0.9 }} />
+              <img src="/logo-sm.png" alt="" style={{ width: 44, height: "auto" }} />
               <div>
                 <div style={{ fontWeight: 800, fontSize: 16, color: "white" }}>Sergio&apos;s Carnicería</div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
                   Lun-Sáb 7:30–3:30 PM | Mié y Dom 7:30–3:00 PM
                 </div>
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
                 Pedidos WhatsApp: 441 115 3314
               </div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)" }}>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>
                 @sergioscarniceria
               </div>
             </div>
@@ -280,28 +308,42 @@ export default function DisplayMostradorPage() {
 
       {/* ═══ MODO VENTA ACTIVA ═══ */}
       {mode === "active" && (
-        <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "30px 40px" }}>
+        <div style={{
+          width: "100%", height: "100%", display: "flex", flexDirection: "column", padding: "30px 40px",
+          background: `linear-gradient(170deg, ${C.bg} 0%, ${C.bgSoft} 100%)`,
+        }}>
           {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 24, flexShrink: 0 }}>
-            <img src="/logo-sm.png" alt="" style={{ width: 50, height: "auto", opacity: 0.9 }} />
-            <div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: C.text, letterSpacing: -0.5 }}>Tu pedido</div>
-              {customerName && customerName !== "MOSTRADOR" && (
-                <div style={{ fontSize: 18, color: C.accent, fontWeight: 600 }}>{customerName}</div>
-              )}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            marginBottom: 20, flexShrink: 0,
+            padding: "16px 24px", borderRadius: 20,
+            background: C.cardStrong, border: `1px solid ${C.border}`,
+            boxShadow: "0 2px 12px rgba(92,27,17,0.06)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+              <img src="/logo-sm.png" alt="" style={{ width: 50, height: "auto" }} />
+              <div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: C.primary, letterSpacing: -0.5 }}>Tu pedido</div>
+                {customerName && customerName !== "MOSTRADOR" && (
+                  <div style={{ fontSize: 18, color: C.accent, fontWeight: 600 }}>{customerName}</div>
+                )}
+              </div>
+            </div>
+            <div style={{ fontSize: 16, color: C.muted, fontWeight: 600 }}>
+              {items.length} producto{items.length !== 1 ? "s" : ""}
             </div>
           </div>
 
           {/* Column headers */}
           <div style={{
             display: "grid", gridTemplateColumns: "1fr 140px 140px 160px",
-            padding: "12px 20px", borderRadius: 12,
-            background: "rgba(255,255,255,0.04)", marginBottom: 8,
+            padding: "10px 20px", borderRadius: 12,
+            background: C.accentSoft, marginBottom: 6,
           }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>Producto</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Peso / Pzas</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Precio</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Subtotal</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: 0.5 }}>Producto</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Peso / Pzas</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Precio</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, textAlign: "right", textTransform: "uppercase", letterSpacing: 0.5 }}>Subtotal</div>
           </div>
 
           {/* Items list */}
@@ -312,19 +354,20 @@ export default function DisplayMostradorPage() {
               return (
                 <div key={idx} style={{
                   display: "grid", gridTemplateColumns: "1fr 140px 140px 160px",
-                  padding: "16px 20px", borderRadius: 14, marginBottom: 6,
-                  background: idx % 2 === 0 ? "rgba(255,255,255,0.03)" : "transparent",
-                  border: `1px solid ${isNew ? "rgba(201,169,110,0.3)" : "transparent"}`,
+                  padding: "14px 20px", borderRadius: 14, marginBottom: 4,
+                  background: idx % 2 === 0 ? C.cardStrong : "transparent",
+                  border: `1px solid ${isNew ? C.accent : "transparent"}`,
                   animation: isNew ? "slideInRight 0.4s ease" : "none",
+                  boxShadow: isNew ? `0 0 20px ${C.accentSoft}` : "none",
                 }}>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: C.text }}>{item.product}</div>
-                  <div style={{ fontSize: 24, fontWeight: 600, color: C.muted, textAlign: "right" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: C.text }}>{item.product}</div>
+                  <div style={{ fontSize: 22, fontWeight: 600, color: C.muted, textAlign: "right" }}>
                     {item.sale_type === "pieza" ? `${item.quantity} pza` : `${Number(item.kilos).toFixed(3)} kg`}
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 600, color: C.muted, textAlign: "right" }}>
+                  <div style={{ fontSize: 22, fontWeight: 600, color: C.muted, textAlign: "right" }}>
                     ${Math.ceil(item.price)}{item.sale_type !== "pieza" ? "/kg" : ""}
                   </div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: C.accent, textAlign: "right" }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: C.primary, textAlign: "right" }}>
                     ${Math.ceil(sub)}
                   </div>
                 </div>
@@ -335,19 +378,16 @@ export default function DisplayMostradorPage() {
 
           {/* Total bar */}
           <div style={{
-            flexShrink: 0, marginTop: 16, padding: "24px 28px", borderRadius: 20,
-            background: "linear-gradient(135deg, rgba(201,169,110,0.15), rgba(201,169,110,0.05))",
-            border: `1px solid rgba(201,169,110,0.2)`,
+            flexShrink: 0, marginTop: 12, padding: "20px 28px", borderRadius: 20,
+            background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
             display: "flex", justifyContent: "space-between", alignItems: "center",
+            boxShadow: "0 4px 20px rgba(123,34,24,0.3)",
           }}>
-            <div style={{ fontSize: 28, fontWeight: 700, color: C.muted }}>
-              {items.length} producto{items.length !== 1 ? "s" : ""}
+            <div style={{ fontSize: 24, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>
+              Total
             </div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-              <span style={{ fontSize: 28, fontWeight: 600, color: C.muted }}>Total</span>
-              <span style={{ fontSize: 64, fontWeight: 800, color: C.accent, letterSpacing: -2 }}>
-                ${Math.ceil(total).toLocaleString("es-MX")}
-              </span>
+            <div style={{ fontSize: 60, fontWeight: 800, color: "#fff", letterSpacing: -2 }}>
+              ${Math.ceil(total).toLocaleString("es-MX")}
             </div>
           </div>
         </div>
@@ -358,40 +398,75 @@ export default function DisplayMostradorPage() {
         <div style={{
           width: "100%", height: "100%", display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          background: C.bgGrad, animation: "scaleIn 0.5s ease",
+          background: `linear-gradient(170deg, ${C.bg} 0%, ${C.bgSoft} 50%, ${C.bg} 100%)`,
+          animation: "scaleIn 0.5s ease",
         }}>
-          <img src="/logo-sm.png" alt="" style={{ width: 100, height: "auto", opacity: 0.9, marginBottom: 30 }} />
+          {/* Checkmark circle */}
+          <div style={{
+            width: 100, height: 100, borderRadius: "50%",
+            background: `linear-gradient(135deg, ${C.success}, #28a05e)`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            marginBottom: 28, boxShadow: "0 8px 30px rgba(31,122,77,0.3)",
+            animation: "float 3s ease-in-out infinite",
+          }}>
+            <svg width="50" height="50" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
 
           <div style={{
-            fontSize: 28, fontWeight: 700, color: C.accent,
-            textTransform: "uppercase", letterSpacing: 2, marginBottom: 16,
+            fontSize: 22, fontWeight: 700, color: C.success,
+            textTransform: "uppercase", letterSpacing: 3, marginBottom: 8,
+          }}>
+            Gracias por tu compra
+          </div>
+
+          <div style={{
+            fontSize: 36, fontWeight: 800, color: C.primary, marginBottom: 6,
           }}>
             Tu ticket está listo
           </div>
 
           {folio && (
-            <div style={{ fontSize: 44, fontWeight: 800, color: C.text, marginBottom: 12, letterSpacing: 1 }}>
-              {folio}
+            <div style={{ fontSize: 20, fontWeight: 600, color: C.muted, marginBottom: 20 }}>
+              Folio: {folio}
             </div>
           )}
 
           <div style={{
-            fontSize: 80, fontWeight: 800, color: C.accent,
-            marginBottom: 32, letterSpacing: -2,
+            fontSize: 76, fontWeight: 800, color: C.primary,
+            marginBottom: 28, letterSpacing: -2,
           }}>
             ${Math.ceil(total).toLocaleString("es-MX")}
           </div>
 
+          {/* Pasa a caja box */}
           <div style={{
-            padding: "20px 50px", borderRadius: 20,
-            background: "rgba(201,169,110,0.1)", border: "1px solid rgba(201,169,110,0.2)",
+            padding: "20px 60px", borderRadius: 24,
+            background: `linear-gradient(135deg, ${C.primary}, ${C.primaryDark})`,
+            boxShadow: "0 4px 20px rgba(123,34,24,0.3)",
+            marginBottom: 36,
           }}>
-            <div style={{ fontSize: 32, fontWeight: 700, color: C.text, textAlign: "center" }}>
-              Pasa a caja a pagar
+            <div style={{ fontSize: 32, fontWeight: 800, color: "#fff", textAlign: "center" }}>
+              Favor de pasar a caja a pagar
             </div>
-            <div style={{ fontSize: 18, color: C.muted, textAlign: "center", marginTop: 8 }}>
-              Gracias por tu preferencia
+          </div>
+
+          {/* Frase graciosa */}
+          <div style={{
+            padding: "16px 40px", borderRadius: 16,
+            background: C.accentSoft, border: `1px solid ${C.accent}`,
+            maxWidth: 700,
+          }}>
+            <div style={{ fontSize: 22, color: C.muted, textAlign: "center", fontStyle: "italic", fontWeight: 500 }}>
+              {frase.emoji} &ldquo;{frase.frase}&rdquo; {frase.emoji}
             </div>
+          </div>
+
+          {/* Logo at bottom */}
+          <div style={{ position: "absolute", bottom: 30, display: "flex", alignItems: "center", gap: 12, opacity: 0.6 }}>
+            <img src="/logo-sm.png" alt="" style={{ width: 36, height: "auto" }} />
+            <span style={{ fontSize: 14, color: C.muted, fontWeight: 600 }}>Sergio&apos;s Carnicería — Desde 1976</span>
           </div>
         </div>
       )}
