@@ -55,26 +55,6 @@ export default function DisplayMostradorPage() {
   const prevItemCount = useRef(0);
   const listEndRef = useRef<HTMLDivElement>(null);
 
-  // DEBUG: ver qué está pasando con localStorage
-  const [debugInfo, setDebugInfo] = useState("Iniciando...");
-  useEffect(() => {
-    const dbg = setInterval(() => {
-      try {
-        const raw = localStorage.getItem("cfd-mostrador");
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          const age = Math.round((Date.now() - (parsed._ts || 0)) / 1000);
-          setDebugInfo(`Key existe | type=${parsed.type} | hace ${age}s | mode=${mode} | items=${items.length}`);
-        } else {
-          setDebugInfo(`Key "cfd-mostrador" NO EXISTE en localStorage | mode=${mode}`);
-        }
-      } catch (e: unknown) {
-        setDebugInfo(`Error: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }, 2000);
-    return () => clearInterval(dbg);
-  }, [mode, items.length]);
-
   // ─── Load media from Supabase ───
   const loadMedia = useCallback(async () => {
     const { data } = await supabase
@@ -415,15 +395,6 @@ export default function DisplayMostradorPage() {
           </div>
         </div>
       )}
-      {/* DEBUG BAR — quitar después */}
-      <div style={{
-        position: "fixed", bottom: 0, left: 0, right: 0,
-        background: "rgba(0,0,0,0.9)", color: "#0f0",
-        padding: "8px 16px", fontSize: 14, fontFamily: "monospace",
-        zIndex: 9999, borderTop: "2px solid #0f0",
-      }}>
-        DEBUG: {debugInfo}
-      </div>
     </div>
   );
 }
