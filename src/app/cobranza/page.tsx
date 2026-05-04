@@ -206,6 +206,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   const [showCashCalc, setShowCashCalc] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
 
+  // Calculadora de cambio (venta manual)
+  const [showManualCashCalc, setShowManualCashCalc] = useState(false);
+  const [manualCashReceived, setManualCashReceived] = useState("");
+
   // Pago mixto
   const [showMixedPay, setShowMixedPay] = useState(false);
   const [mixedEfectivo, setMixedEfectivo] = useState("");
@@ -3212,7 +3216,7 @@ if (cashError) {
                 </div>
                 <div style={actionsGridStyle}>
   <button
-    onClick={() => saveManualSale("efectivo")}
+    onClick={() => { setShowManualCashCalc(true); setManualCashReceived(""); }}
     style={successButtonStyle}
     disabled={saving}
   >
@@ -3247,6 +3251,118 @@ if (cashError) {
                 <button onClick={clearManualSale} style={dangerButtonStyle}>
                   🗑️ Limpiar venta manual
                 </button>
+
+                {/* Modal calculadora de cambio — venta manual */}
+                {showManualCashCalc && (() => {
+                  const totalCobrar = moneyRound(manualTotal);
+                  const recibido = Number(manualCashReceived || 0);
+                  const cambio = recibido - totalCobrar;
+                  const QUICK_AMOUNTS = [50, 100, 200, 500, 1000];
+                  return (
+                    <div style={{
+                      position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      zIndex: 10000, padding: 16,
+                    }}>
+                      <div style={{
+                        width: "100%", maxWidth: 400, background: "white",
+                        borderRadius: 18, padding: 22, boxShadow: COLORS.shadow,
+                        border: `1px solid ${COLORS.border}`,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                          <h3 style={{ margin: 0, color: COLORS.success, fontSize: 18 }}>Cobro en efectivo</h3>
+                          <button
+                            onClick={() => setShowManualCashCalc(false)}
+                            style={{ width: 36, height: 36, borderRadius: 999, border: "none", background: "#efe8df", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer" }}
+                          >✕</button>
+                        </div>
+
+                        <div style={{ padding: 14, borderRadius: 14, background: "rgba(31,122,77,0.08)", border: `1px solid rgba(31,122,77,0.15)`, marginBottom: 14, textAlign: "center" as const }}>
+                          <div style={{ color: COLORS.muted, fontSize: 13 }}>Total a cobrar</div>
+                          <div style={{ fontSize: 36, fontWeight: 800, color: COLORS.success }}>${money(totalCobrar)}</div>
+                        </div>
+
+                        <div style={{ marginBottom: 10 }}>
+                          <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>¿Con cuánto paga el cliente?</div>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            value={manualCashReceived}
+                            onChange={(e) => setManualCashReceived(e.target.value)}
+                            placeholder="0"
+                            autoFocus
+                            style={{
+                              width: "100%", padding: 14, borderRadius: 14,
+                              border: `2px solid ${COLORS.success}`, boxSizing: "border-box" as const,
+                              fontSize: 24, fontWeight: 700, textAlign: "center" as const,
+                              outline: "none", color: COLORS.text,
+                            }}
+                          />
+                        </div>
+
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 14, justifyContent: "center" }}>
+                          {QUICK_AMOUNTS.map((amt) => (
+                            <button
+                              key={amt}
+                              onClick={() => setManualCashReceived(String(amt))}
+                              style={{
+                                padding: "8px 16px", borderRadius: 10, fontSize: 15, fontWeight: 700,
+                                border: `1px solid ${COLORS.border}`, background: manualCashReceived === String(amt) ? COLORS.success : COLORS.bgSoft,
+                                color: manualCashReceived === String(amt) ? "white" : COLORS.text, cursor: "pointer",
+                                minWidth: 60,
+                              }}
+                            >
+                              ${amt}
+                            </button>
+                          ))}
+                        </div>
+
+                        {recibido > 0 && (
+                          <div style={{
+                            padding: 14, borderRadius: 14, marginBottom: 14, textAlign: "center" as const,
+                            background: cambio >= 0 ? "rgba(31,122,77,0.10)" : "rgba(180,35,24,0.10)",
+                            border: `1px solid ${cambio >= 0 ? "rgba(31,122,77,0.2)" : "rgba(180,35,24,0.2)"}`,
+                          }}>
+                            <div style={{ color: COLORS.muted, fontSize: 13 }}>
+                              {cambio >= 0 ? "Cambio a devolver" : "Falta por cobrar"}
+                            </div>
+                            <div style={{
+                              fontSize: 32, fontWeight: 800,
+                              color: cambio >= 0 ? COLORS.success : COLORS.danger,
+                            }}>
+                              ${money(Math.abs(cambio))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <button
+                            onClick={() => { setShowManualCashCalc(false); saveManualSale("efectivo"); }}
+                            disabled={saving}
+                            style={{
+                              flex: 1, padding: "14px 16px", borderRadius: 12, border: "none",
+                              background: `linear-gradient(180deg, ${COLORS.success} 0%, #165a38 100%)`,
+                              color: "white", fontWeight: 700, fontSize: 15, cursor: "pointer",
+                              opacity: saving ? 0.65 : 1,
+                            }}
+                          >
+                            {saving ? "Cobrando..." : "✅ Confirmar cobro"}
+                          </button>
+                          <button
+                            onClick={() => setShowManualCashCalc(false)}
+                            style={{
+                              padding: "14px 16px", borderRadius: 12,
+                              border: `1px solid ${COLORS.border}`, background: "white",
+                              color: COLORS.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                            }}
+                          >
+                            Volver
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>
