@@ -185,15 +185,14 @@ function QuickStats({ showInventory = false }: { showInventory?: boolean }) {
     async function load() {
       const today = new Date();
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-      const ordersPromise = supabase.from("orders").select("id, status, delivery_status, order_items(kilos, price)").gte("created_at", `${todayStr}T00:00:00`);
+      const ordersPromise = supabase.from("orders").select("id, status, delivery_status").gte("created_at", `${todayStr}T00:00:00`);
+      // Ventas reales cobradas (cash_movements tipo venta del día)
+      const cashPromise = supabase.from("cash_movements").select("amount, type").gte("created_at", `${todayStr}T00:00:00`).eq("type", "venta");
       const bodegaPromise = showInventory ? supabase.from("bodega_items").select("stock, cost").eq("is_active", true) : Promise.resolve({ data: [] as any[] });
       const complementosPromise = showInventory ? supabase.from("products").select("stock, purchase_price, category, fixed_piece_price").eq("is_active", true) : Promise.resolve({ data: [] as any[] });
-      const [{ data: ordersData }, { data: bodegaData }, { data: productsData }] = await Promise.all([ordersPromise, bodegaPromise, complementosPromise]);
+      const [{ data: ordersData }, { data: cashData }, { data: bodegaData }, { data: productsData }] = await Promise.all([ordersPromise, cashPromise, bodegaPromise, complementosPromise]);
       const orders = ordersData || [];
-      const ventasHoy = orders.reduce((acc: number, o: any) => acc + (o.order_items || []).reduce((s: number, i: any) => {
-        if (i.sale_type === "pieza" && i.is_fixed_price_piece) return s + (i.quantity || 0) * (i.price || 0);
-        return s + (i.kilos || 0) * (i.price || 0);
-      }, 0), 0);
+      const ventasHoy = (cashData || []).reduce((acc: number, m: any) => acc + Number(m.amount || 0), 0);
       const pendientes = orders.filter((o: any) => o.status === "nuevo" || o.status === "proceso").length;
       const enCamino = orders.filter((o: any) => o.delivery_status === "en_camino").length;
       const bodegaValue = (bodegaData || []).reduce((acc: number, i: any) => acc + (Number(i.stock) || 0) * (Number(i.cost) || 0), 0);
