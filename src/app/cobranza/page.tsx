@@ -206,6 +206,12 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   const [showCashCalc, setShowCashCalc] = useState(false);
   const [cashReceived, setCashReceived] = useState("");
 
+  // Pago mixto
+  const [showMixedPay, setShowMixedPay] = useState(false);
+  const [mixedEfectivo, setMixedEfectivo] = useState("");
+  const [mixedTarjeta, setMixedTarjeta] = useState("");
+  const [mixedTransferencia, setMixedTransferencia] = useState("");
+
   // Reset edit mode cuando cambia el ticket seleccionado
   useEffect(() => {
     setEditMode(false);
@@ -739,12 +745,109 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     setSaving(false);
   }
 
+  async function markTicketPaidMixed() {
+    if (!selectedTicket) return;
+    const mEf = Number(mixedEfectivo || 0);
+    const mTa = Number(mixedTarjeta || 0);
+    const mTr = Number(mixedTransferencia || 0);
+    const mixedSum = mEf + mTa + mTr;
+    const finalTotal = combinedFinalTotal();
+
+    if (Math.abs(mixedSum - finalTotal) > 1) {
+      alert(`La suma de los métodos ($${mixedSum.toLocaleString("es-MX")}) no coincide con el total ($${Math.ceil(finalTotal).toLocaleString("es-MX")})`);
+      return;
+    }
+
+    setSaving(true);
+    const allTickets = allSelectedTickets();
+    const subtotal = combinedTotal();
+    const descuento = calcDiscount(subtotal);
+    const paidAt = new Date().toISOString();
+    const isMulti = allTickets.length > 1;
+    const groupNote = isMulti ? `Cobro agrupado (${allTickets.length} tickets)` : "";
+
+    // Construir detalle del pago mixto
+    const parts: string[] = [];
+    if (mEf > 0) parts.push(`Efectivo $${Math.ceil(mEf)}`);
+    if (mTa > 0) parts.push(`Tarjeta $${Math.ceil(mTa)}`);
+    if (mTr > 0) parts.push(`Transfer. $${Math.ceil(mTr)}`);
+    const mixedDetail = `Pago mixto: ${parts.join(" + ")}`;
+
+    // Marcar tickets como pagados
+    for (const ticket of allTickets) {
+      const orderUpdate: any = {
+        payment_status: "pagado",
+        payment_method: "mixto",
+        paid_at: paidAt,
+        cashier_name: cashierName || null,
+      };
+
+      if (ticket.id === selectedTicket.id) {
+        const noteParts = [ticket.notes || "", descuento > 0 ? (discountMode === "percent" ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}` : `Descuento -$${Math.ceil(descuento)}`) : "", mixedDetail, groupNote].filter(Boolean);
+        orderUpdate.notes = noteParts.join(" | ");
+      } else if (groupNote || mixedDetail) {
+        const existing = ticket.notes || "";
+        orderUpdate.notes = [existing, mixedDetail, groupNote].filter(Boolean).join(" | ");
+      }
+
+      const { error } = await supabase.from("orders").update(orderUpdate).eq("id", ticket.id);
+      if (error) {
+        alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+        setSaving(false);
+        return;
+      }
+    }
+
+    // Un cash_movement por cada método usado
+    const movements: any[] = [];
+    if (mEf > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mEf), rounding_amount: 0, payment_method: "efectivo", reference_id: selectedTicket.id, cashier_name: cashierName || null });
+    if (mTa > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mTa), rounding_amount: 0, payment_method: "tarjeta", reference_id: selectedTicket.id, cashier_name: cashierName || null });
+    if (mTr > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mTr), rounding_amount: 0, payment_method: "transferencia", reference_id: selectedTicket.id, cashier_name: cashierName || null });
+    // Aplicar redondeo al primer movimiento
+    if (movements.length > 0) movements[0].rounding_amount = roundingDiff(finalTotal);
+
+    const { error: cashError } = await supabase.from("cash_movements").insert(movements);
+    if (cashError) {
+      alert("Se marcó como pagado, pero falló el movimiento de caja");
+      setSaving(false);
+      return;
+    }
+
+    // Descontar inventario de complementos
+    for (const ticket of allTickets) {
+      if (ticket.order_items) {
+        for (const item of ticket.order_items) {
+          if (item.sale_type === "pieza" && item.quantity) {
+            const { data: prod } = await supabase.from("products").select("id, stock, category, fixed_piece_price").eq("name", item.product).single();
+            if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
+              const prevStock = prod.stock || 0;
+              const qty = Number(item.quantity || 0);
+              const newStock = Math.max(0, prevStock - qty);
+              await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
+              await supabase.from("inventory_movements").insert({ item_type: "complemento", item_id: prod.id, movement_type: "salida", quantity: qty, previous_stock: prevStock, new_stock: newStock, notes: `Venta ticket ${ticket.id.slice(0, 6)}`, created_by: cashierName || "cajera" });
+            }
+          }
+        }
+      }
+    }
+
+    sendCfd("caja", { type: "pago_confirmado", total: moneyRound(finalTotal), customerName: selectedTicket.customer_name || undefined, method: "mixto" });
+
+    setShowMixedPay(false);
+    setShowPrintTicket(true);
+    setSaving(false);
+  }
+
   function closePrintAndReset() {
     setShowPrintTicket(false);
     setSelectedTicket(null);
     setExtraTickets([]);
     setDiscountMode("none");
     setDiscountValue("");
+    setShowMixedPay(false);
+    setMixedEfectivo("");
+    setMixedTarjeta("");
+    setMixedTransferencia("");
     loadData();
   }
 
@@ -2204,6 +2307,20 @@ if (cashError) {
                       </button>
 
                       <button
+                        onClick={() => {
+                          const ft = combinedFinalTotal();
+                          setMixedEfectivo("");
+                          setMixedTarjeta("");
+                          setMixedTransferencia("");
+                          setShowMixedPay(true);
+                        }}
+                        style={{ ...secondaryActionButtonStyle, background: "#6b4c9a", color: "white", borderColor: "#6b4c9a" }}
+                        disabled={saving}
+                      >
+                        🔀 Pago mixto
+                      </button>
+
+                      <button
                         onClick={sendTicketToCredit}
                         style={warningButtonStyle}
                         disabled={saving}
@@ -2397,6 +2514,117 @@ if (cashError) {
                               </button>
                               <button
                                 onClick={() => setShowCashCalc(false)}
+                                style={{
+                                  padding: "14px 16px", borderRadius: 12,
+                                  border: `1px solid ${COLORS.border}`, background: "white",
+                                  color: COLORS.text, fontWeight: 700, fontSize: 15, cursor: "pointer",
+                                }}
+                              >
+                                Volver
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Modal pago mixto */}
+                    {showMixedPay && selectedTicket && (() => {
+                      const totalCobrar = combinedFinalTotal();
+                      const mEf = Number(mixedEfectivo || 0);
+                      const mTa = Number(mixedTarjeta || 0);
+                      const mTr = Number(mixedTransferencia || 0);
+                      const sumMixed = mEf + mTa + mTr;
+                      const restante = totalCobrar - sumMixed;
+                      const isValid = Math.abs(restante) < 1;
+
+                      return (
+                        <div style={{
+                          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          zIndex: 10000, padding: 16,
+                        }}>
+                          <div style={{
+                            width: "100%", maxWidth: 420, background: "white",
+                            borderRadius: 18, padding: 22, boxShadow: COLORS.shadow,
+                            border: `1px solid ${COLORS.border}`,
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                              <h3 style={{ margin: 0, color: "#6b4c9a", fontSize: 18 }}>🔀 Pago mixto</h3>
+                              <button
+                                onClick={() => setShowMixedPay(false)}
+                                style={{ width: 36, height: 36, borderRadius: 999, border: "none", background: "#efe8df", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer" }}
+                              >✕</button>
+                            </div>
+
+                            <div style={{ padding: 14, borderRadius: 14, background: "rgba(107,76,154,0.08)", border: "1px solid rgba(107,76,154,0.15)", marginBottom: 16, textAlign: "center" as const }}>
+                              <div style={{ color: COLORS.muted, fontSize: 13 }}>Total a cobrar</div>
+                              <div style={{ fontSize: 36, fontWeight: 800, color: "#6b4c9a" }}>${money(totalCobrar)}</div>
+                            </div>
+
+                            <div style={{ display: "flex", flexDirection: "column" as const, gap: 12, marginBottom: 16 }}>
+                              <div>
+                                <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💵 Efectivo</div>
+                                <input
+                                  type="number" inputMode="decimal" value={mixedEfectivo}
+                                  onChange={(e) => setMixedEfectivo(e.target.value)}
+                                  placeholder="0" autoFocus
+                                  style={{ width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${COLORS.success}`, boxSizing: "border-box" as const, fontSize: 20, fontWeight: 700, textAlign: "center" as const, outline: "none", color: COLORS.text }}
+                                />
+                              </div>
+                              <div>
+                                <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>💳 Tarjeta</div>
+                                <input
+                                  type="number" inputMode="decimal" value={mixedTarjeta}
+                                  onChange={(e) => setMixedTarjeta(e.target.value)}
+                                  placeholder="0"
+                                  style={{ width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${COLORS.info}`, boxSizing: "border-box" as const, fontSize: 20, fontWeight: 700, textAlign: "center" as const, outline: "none", color: COLORS.text }}
+                                />
+                              </div>
+                              <div>
+                                <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 4 }}>📲 Transferencia</div>
+                                <input
+                                  type="number" inputMode="decimal" value={mixedTransferencia}
+                                  onChange={(e) => setMixedTransferencia(e.target.value)}
+                                  placeholder="0"
+                                  style={{ width: "100%", padding: 12, borderRadius: 12, border: `2px solid ${COLORS.warning}`, boxSizing: "border-box" as const, fontSize: 20, fontWeight: 700, textAlign: "center" as const, outline: "none", color: COLORS.text }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Resumen */}
+                            <div style={{
+                              padding: 14, borderRadius: 14, marginBottom: 14, textAlign: "center" as const,
+                              background: isValid ? "rgba(31,122,77,0.10)" : "rgba(180,35,24,0.06)",
+                              border: `1px solid ${isValid ? "rgba(31,122,77,0.2)" : "rgba(180,35,24,0.15)"}`,
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 8px", fontSize: 14 }}>
+                                <span style={{ color: COLORS.muted }}>Suma métodos:</span>
+                                <span style={{ fontWeight: 700, color: COLORS.text }}>${money(sumMixed)}</span>
+                              </div>
+                              <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 8px", fontSize: 14 }}>
+                                <span style={{ color: COLORS.muted }}>Restante:</span>
+                                <span style={{ fontWeight: 700, color: isValid ? COLORS.success : COLORS.danger }}>
+                                  {isValid ? "✅ Cuadra" : `$${money(Math.abs(restante))} ${restante > 0 ? "falta" : "sobra"}`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div style={{ display: "flex", gap: 10 }}>
+                              <button
+                                onClick={markTicketPaidMixed}
+                                disabled={saving || !isValid}
+                                style={{
+                                  flex: 1, padding: "14px 16px", borderRadius: 12, border: "none",
+                                  background: isValid ? "linear-gradient(180deg, #6b4c9a 0%, #4a3570 100%)" : "#ccc",
+                                  color: "white", fontWeight: 700, fontSize: 15, cursor: isValid ? "pointer" : "not-allowed",
+                                  opacity: saving ? 0.65 : 1,
+                                }}
+                              >
+                                {saving ? "Cobrando..." : "✅ Confirmar pago mixto"}
+                              </button>
+                              <button
+                                onClick={() => setShowMixedPay(false)}
                                 style={{
                                   padding: "14px 16px", borderRadius: 12,
                                   border: `1px solid ${COLORS.border}`, background: "white",
