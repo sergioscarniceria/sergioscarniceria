@@ -36,6 +36,7 @@ const COLORS = {
 const CATEGORY_OPTIONS = [
   "Res",
   "Carne para asar",
+  "Para caldo",
   "Cerdo",
   "Embutidos",
   "Preparados",
