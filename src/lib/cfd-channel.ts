@@ -25,17 +25,27 @@ export type CfdMessage =
 const CHANNEL_MOSTRADOR = "cfd-mostrador";
 const CHANNEL_CAJA = "cfd-caja";
 
-// ─── Emisor (se usa en ventas / cobranza) ───
+// ─── Canal persistente (singleton por target) ───
+const channels: Record<string, BroadcastChannel> = {};
 
-export function getCfdChannel(target: "mostrador" | "caja"): BroadcastChannel {
-  return new BroadcastChannel(target === "mostrador" ? CHANNEL_MOSTRADOR : CHANNEL_CAJA);
+function getOrCreateChannel(target: "mostrador" | "caja"): BroadcastChannel {
+  const name = target === "mostrador" ? CHANNEL_MOSTRADOR : CHANNEL_CAJA;
+  if (!channels[name] || channels[name].name === "") {
+    try {
+      channels[name] = new BroadcastChannel(name);
+    } catch {
+      // fallback
+    }
+  }
+  return channels[name];
 }
+
+// ─── Emisor (se usa en ventas / cobranza) ───
 
 export function sendCfd(target: "mostrador" | "caja", msg: CfdMessage) {
   try {
-    const ch = new BroadcastChannel(target === "mostrador" ? CHANNEL_MOSTRADOR : CHANNEL_CAJA);
-    ch.postMessage(msg);
-    ch.close();
+    const ch = getOrCreateChannel(target);
+    if (ch) ch.postMessage(msg);
   } catch {
     // BroadcastChannel no soportado o error — ignorar silenciosamente
   }
@@ -47,7 +57,8 @@ export function listenCfd(
   target: "mostrador" | "caja",
   onMessage: (msg: CfdMessage) => void
 ): () => void {
-  const ch = new BroadcastChannel(target === "mostrador" ? CHANNEL_MOSTRADOR : CHANNEL_CAJA);
+  const name = target === "mostrador" ? CHANNEL_MOSTRADOR : CHANNEL_CAJA;
+  const ch = new BroadcastChannel(name);
   ch.onmessage = (e) => onMessage(e.data as CfdMessage);
   return () => ch.close();
 }
