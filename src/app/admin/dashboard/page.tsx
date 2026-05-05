@@ -521,58 +521,47 @@ export default function AdminDashboardPage() {
 
   // ─── Conciliación Ventas vs Cobros ───────────────────────
   const conciliacion = useMemo(() => {
-    // Ventas según orders (productos × precio)
     const activeOrders = orders.filter((o) => o.status !== "cancelado");
     const cancelledOrders = orders.filter((o) => o.status === "cancelado");
+
+    // ── LADO PEDIDOS ──
     const ventasBruto = activeOrders.reduce((acc, o) => acc + orderTotal(o), 0);
-
-    // Descuentos aplicados
     const totalDescuentos = activeOrders.reduce((acc, o) => acc + Number(o.discount_amount || 0), 0);
+    const ventasNetas = ventasBruto - totalDescuentos;
 
-    // Redondeo solidario
-    const totalRedondeo = activeOrders.reduce((acc, o) => acc + Number(o.rounding_amount || 0), 0);
-
-    // Tickets pendientes de cobro (status pendiente = no cobrado aún)
+    // Estado de los pedidos
+    const cobrados = activeOrders.filter((o) => o.status !== "pendiente" && o.payment_method !== "credito");
     const pendientes = activeOrders.filter((o) => o.status === "pendiente");
+    const aCredito = activeOrders.filter((o) => o.payment_method === "credito");
+
+    const totalCobrados = cobrados.reduce((acc, o) => acc + orderTotal(o) - Number(o.discount_amount || 0), 0);
     const totalPendientes = pendientes.reduce((acc, o) => acc + orderTotal(o), 0);
-
-    // Ventas a crédito
-    const creditOrders = activeOrders.filter((o) => o.payment_method === "credito");
-    const totalCredito = creditOrders.reduce((acc, o) => acc + orderTotal(o) - Number(o.discount_amount || 0), 0);
-
-    // Total cancelado
+    const totalCredito = aCredito.reduce((acc, o) => acc + orderTotal(o) - Number(o.discount_amount || 0), 0);
     const totalCancelado = cancelledOrders.reduce((acc, o) => acc + orderTotal(o), 0);
 
-    // Total cobrado real (cash_movements)
-    const totalCobrado = cashMovements
-      .filter((m) => m.type === "venta")
-      .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    // ── LADO CAJA ──
+    const cobradoTickets = cashMovements.filter((m) => m.type === "venta").reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    const abonosCxc = cashMovements.filter((m) => m.type === "cxc_pago").reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    const totalCaja = cobradoTickets + abonosCxc;
 
-    // Abonos CxC cobrados
-    const totalAbonosCxc = cashMovements
-      .filter((m) => m.type === "cxc_pago")
-      .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+    // Desglose por método de pago
+    const porMetodo: Record<string, number> = {};
+    cashMovements.filter((m) => m.type === "venta").forEach((m) => {
+      const key = m.payment_method || "efectivo";
+      porMetodo[key] = (porMetodo[key] || 0) + Number(m.amount || 0);
+    });
 
-    // Ventas netas esperadas (bruto - descuentos + redondeo)
-    const ventasNetas = ventasBruto - totalDescuentos + totalRedondeo;
-
-    // Diferencia
-    const diferencia = ventasNetas - totalCobrado - totalPendientes - totalCredito;
+    // Ajuste = diferencia entre lo cobrado por tickets y lo que calculan los pedidos cobrados
+    // Esto incluye: redondeo, ajustes de peso al cobrar, diferencias normales
+    const ajuste = cobradoTickets - totalCobrados;
 
     return {
-      ventasBruto,
-      totalDescuentos,
-      totalRedondeo,
-      ventasNetas,
-      totalCobrado,
-      totalAbonosCxc,
-      totalPendientes,
-      pendientesCount: pendientes.length,
-      totalCredito,
-      creditCount: creditOrders.length,
-      totalCancelado,
-      cancelledCount: cancelledOrders.length,
-      diferencia,
+      ventasBruto, totalDescuentos, ventasNetas,
+      totalCobrados, cobradosCount: cobrados.length,
+      totalPendientes, pendientesCount: pendientes.length,
+      totalCredito, creditCount: aCredito.length,
+      totalCancelado, cancelledCount: cancelledOrders.length,
+      cobradoTickets, abonosCxc, totalCaja, porMetodo, ajuste,
     };
   }, [orders, cashMovements]);
 
@@ -1561,11 +1550,12 @@ export default function AdminDashboardPage() {
         </Section>
         {/* Panel de conciliación ventas vs cobros */}
         <Section id="conciliacion" title="Conciliación ventas vs cobros">
-          <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 16 }}>
-            Por qué difieren las ventas del Dashboard (pedidos) y las de Caja (cobros reales)
-          </div>
           {(() => {
             const c = conciliacion;
+            const headerStyle: React.CSSProperties = {
+              padding: "10px 12px", fontWeight: 800, fontSize: 13, color: "white",
+              textTransform: "uppercase", letterSpacing: 0.5,
+            };
             const rowStyle = (bold?: boolean, color?: string): React.CSSProperties => ({
               display: "flex", justifyContent: "space-between", padding: "8px 12px",
               borderBottom: `1px solid ${COLORS.border}`,
@@ -1579,73 +1569,112 @@ export default function AdminDashboardPage() {
               fontSize: 12, color: color || COLORS.muted,
             });
             return (
-              <div style={{ background: COLORS.cardStrong, borderRadius: 12, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
-                <div style={rowStyle(true)}>
-                  <span>Ventas brutas (productos × precio)</span>
-                  <span>${fmt(c.ventasBruto)}</span>
-                </div>
-                {c.totalDescuentos > 0 && (
-                  <div style={indentRow("#b45309")}>
-                    <span>− Descuentos aplicados</span>
-                    <span>−${fmt(c.totalDescuentos)}</span>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                {/* ── LADO IZQUIERDO: PEDIDOS ── */}
+                <div style={{ background: COLORS.cardStrong, borderRadius: 12, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+                  <div style={{ ...headerStyle, background: COLORS.primary }}>
+                    Lo que se vendió (pedidos)
                   </div>
-                )}
-                {c.totalRedondeo > 0 && (
+                  <div style={rowStyle(true)}>
+                    <span>Ventas brutas</span>
+                    <span>${fmt(c.ventasBruto)}</span>
+                  </div>
+                  {c.totalDescuentos > 0 && (
+                    <div style={indentRow("#b45309")}>
+                      <span>− Descuentos</span>
+                      <span>−${fmt(c.totalDescuentos)}</span>
+                    </div>
+                  )}
+                  <div style={rowStyle(true, COLORS.primary)}>
+                    <span>Ventas netas</span>
+                    <span>${fmt(c.ventasNetas)}</span>
+                  </div>
+                  <div style={{ height: 6, background: COLORS.bg }} />
+                  <div style={{ padding: "8px 12px", fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase" }}>
+                    Estado de los pedidos
+                  </div>
                   <div style={indentRow(COLORS.success)}>
-                    <span>+ Redondeo solidario</span>
-                    <span>+${fmt(c.totalRedondeo)}</span>
+                    <span>Cobrados ({c.cobradosCount})</span>
+                    <span>${fmt(c.totalCobrados)}</span>
                   </div>
-                )}
-                <div style={rowStyle(true)}>
-                  <span>= Ventas netas esperadas</span>
-                  <span>${fmt(c.ventasNetas)}</span>
+                  {c.totalPendientes > 0 && (
+                    <div style={indentRow("#b45309")}>
+                      <span>Pendientes de cobro ({c.pendientesCount})</span>
+                      <span>${fmt(c.totalPendientes)}</span>
+                    </div>
+                  )}
+                  {c.totalCredito > 0 && (
+                    <div style={indentRow("#7b2218")}>
+                      <span>Enviados a crédito ({c.creditCount})</span>
+                      <span>${fmt(c.totalCredito)}</span>
+                    </div>
+                  )}
+                  {c.totalCancelado > 0 && (
+                    <div style={indentRow("#dc2626")}>
+                      <span>Cancelados ({c.cancelledCount})</span>
+                      <span>${fmt(c.totalCancelado)}</span>
+                    </div>
+                  )}
                 </div>
 
-                <div style={{ height: 8, background: COLORS.bg }} />
-
-                <div style={rowStyle(true, COLORS.success)}>
-                  <span>Cobrado en caja (cash_movements)</span>
-                  <span>${fmt(c.totalCobrado)}</span>
+                {/* ── LADO DERECHO: CAJA ── */}
+                <div style={{ background: COLORS.cardStrong, borderRadius: 12, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+                  <div style={{ ...headerStyle, background: COLORS.success }}>
+                    Lo que entró a caja (dinero)
+                  </div>
+                  <div style={rowStyle()}>
+                    <span>Cobro de tickets</span>
+                    <span>${fmt(c.cobradoTickets)}</span>
+                  </div>
+                  {c.abonosCxc > 0 && (
+                    <div style={rowStyle()}>
+                      <span>Abonos CxC</span>
+                      <span>${fmt(c.abonosCxc)}</span>
+                    </div>
+                  )}
+                  <div style={rowStyle(true, COLORS.success)}>
+                    <span>Total en caja</span>
+                    <span>${fmt(c.totalCaja)}</span>
+                  </div>
+                  <div style={{ height: 6, background: COLORS.bg }} />
+                  <div style={{ padding: "8px 12px", fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: "uppercase" }}>
+                    Desglose por método
+                  </div>
+                  {Object.entries(c.porMetodo).sort((a, b) => b[1] - a[1]).map(([method, total]) => (
+                    <div key={method} style={indentRow()}>
+                      <span>{method === "efectivo" ? "Efectivo" : method === "tarjeta" ? "Tarjeta" : method === "transferencia" ? "Transferencia" : method === "mixto" ? "Mixto" : method}</span>
+                      <span>${fmt(total)}</span>
+                    </div>
+                  ))}
+                  {c.abonosCxc > 0 && (
+                    <div style={indentRow(COLORS.success)}>
+                      <span>Abonos CxC</span>
+                      <span>${fmt(c.abonosCxc)}</span>
+                    </div>
+                  )}
                 </div>
-                {c.totalPendientes > 0 && (
-                  <div style={indentRow("#b45309")}>
-                    <span>Tickets pendientes de cobro ({c.pendientesCount})</span>
-                    <span>${fmt(c.totalPendientes)}</span>
-                  </div>
-                )}
-                {c.totalCredito > 0 && (
-                  <div style={indentRow("#7b2218")}>
-                    <span>Enviado a crédito CxC ({c.creditCount})</span>
-                    <span>${fmt(c.totalCredito)}</span>
-                  </div>
-                )}
-                {c.totalCancelado > 0 && (
-                  <div style={indentRow("#dc2626")}>
-                    <span>Tickets cancelados ({c.cancelledCount})</span>
-                    <span>${fmt(c.totalCancelado)}</span>
-                  </div>
-                )}
-                {c.totalAbonosCxc > 0 && (
-                  <div style={indentRow(COLORS.success)}>
-                    <span>Abonos CxC cobrados</span>
-                    <span>+${fmt(c.totalAbonosCxc)}</span>
-                  </div>
-                )}
-
-                <div style={{ height: 8, background: COLORS.bg }} />
-
-                <div style={rowStyle(true, Math.abs(c.diferencia) < 1 ? COLORS.success : "#dc2626")}>
-                  <span>Diferencia sin explicar</span>
-                  <span>{c.diferencia >= 0 ? "" : "−"}${fmt(Math.abs(c.diferencia))}</span>
-                </div>
-                {Math.abs(c.diferencia) < 1 && (
-                  <div style={{ padding: "10px 12px", fontSize: 12, color: COLORS.success, fontWeight: 600, textAlign: "center" }}>
-                    ✓ Todo cuadra correctamente
-                  </div>
-                )}
               </div>
             );
           })()}
+
+          {/* Explicación */}
+          <div style={{ marginTop: 16, padding: "14px 16px", borderRadius: 12, background: "rgba(123,34,24,0.04)", border: `1px solid ${COLORS.border}` }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: COLORS.text, marginBottom: 8 }}>
+              ¿Por qué los números son diferentes?
+            </div>
+            <div style={{ fontSize: 12, color: COLORS.muted, lineHeight: 1.7 }}>
+              <strong>Ventas (izquierda)</strong> = lo que se capturó en pedidos (productos × kilos × precio).
+              <strong> Caja (derecha)</strong> = el dinero que realmente pasó por caja.
+              Es normal que difieran por: ajustes de peso al cobrar, redondeo,
+              tickets pendientes, ventas a crédito, y abonos de deudas anteriores.
+              {Math.abs(conciliacion.ajuste) > 100 && (
+                <span style={{ display: "block", marginTop: 6, color: "#b45309" }}>
+                  Ajuste por redondeo/peso al cobrar: <strong>${fmt(Math.abs(conciliacion.ajuste))}</strong> —
+                  esto es la diferencia entre lo calculado en el ticket y lo que se cobró realmente (normal en carnicería).
+                </span>
+              )}
+            </div>
+          </div>
         </Section>
 
         {/* Panel de redondeo para donación */}
