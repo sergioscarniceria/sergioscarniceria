@@ -1138,6 +1138,8 @@ export default function CajaPage() {
     // Comparativos
     const sumMov = (arr: any[]) => arr.reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const ventasHoy = active.filter((m: any) => m.type === "venta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const gastosOpHoy = dayExpenses.reduce((a: number, e: any) => a + Number(e.amount || 0), 0);
+    const utilidadHoy = ventasHoy - gastosOpHoy;
     const ventasAyer = sumMov(yesterdayMov);
     const ventasMesAnt = sumMov(lastMonthMov);
     const ventasAnioAnt = sumMov(lastYearMov);
@@ -1508,6 +1510,37 @@ export default function CajaPage() {
     row(`Ayer (${fmtD(yesterdayDate)})`, `$${money(ventasAyer)}   ${diffSign(ventasHoy, ventasAyer)}${pctDiff(ventasHoy, ventasAyer)}`);
     row(`Hace 1 mes (${fmtD(lastMonthDate)})`, `$${money(ventasMesAnt)}   ${diffSign(ventasHoy, ventasMesAnt)}${pctDiff(ventasHoy, ventasMesAnt)}`);
     row(`Hace 1 año (${fmtD(lastYearDate)})`, `$${money(ventasAnioAnt)}   ${diffSign(ventasHoy, ventasAnioAnt)}${pctDiff(ventasHoy, ventasAnioAnt)}`);
+    y += 3;
+
+    // ═══ UTILIDAD DEL DÍA ═══
+    sectionTitle("UTILIDAD DEL DIA");
+    row("Ventas del día", `$${money(ventasHoy)}`);
+    if (dayExpenses.length > 0) {
+      row("Gastos de operación", `-$${money(gastosOpHoy)}`, true);
+      // Desglose por concepto
+      const gastosByConcepto: Record<string, number> = {};
+      dayExpenses.forEach((e: any) => {
+        const key = e.concept || "Sin concepto";
+        gastosByConcepto[key] = (gastosByConcepto[key] || 0) + Number(e.amount || 0);
+      });
+      Object.entries(gastosByConcepto).sort((a, b) => b[1] - a[1]).forEach(([concepto, monto]) => {
+        checkPage(5);
+        doc.setFontSize(7); doc.setFont("helvetica", "normal");
+        doc.text(`  • ${concepto}`, marginL + 2, y);
+        doc.text(`-$${money(monto)}`, marginR - 2, y, { align: "right" });
+        y += 4;
+      });
+    } else {
+      row("Gastos de operación", "$0");
+    }
+    separator();
+    const utilColor = utilidadHoy >= 0 ? [34, 139, 34] : [200, 0, 0];
+    doc.setFontSize(9); doc.setFont("helvetica", "bold");
+    doc.setTextColor(utilColor[0], utilColor[1], utilColor[2]);
+    doc.text("Utilidad del día", marginL + 2, y);
+    doc.text(`$${money(utilidadHoy)}`, marginR - 2, y, { align: "right" });
+    y += 5;
+    doc.setTextColor(0, 0, 0);
     y += 3;
 
     // ═══ SALDO CxC ACUMULADO ═══

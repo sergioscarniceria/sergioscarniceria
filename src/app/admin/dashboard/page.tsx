@@ -89,9 +89,9 @@ export default function AdminDashboardPage() {
   // Utilidades data
   const [showUtilities, setShowUtilities] = useState(false);
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
-  const [opExpenses, setOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
-  const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
-  const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
+  const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
+  const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
+  const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevYearExpenses, setPrevYearExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number; sale_type?: string; quantity?: number; is_fixed_price_piece?: boolean }[] }[]>([]);
@@ -205,14 +205,12 @@ export default function AdminDashboardPage() {
       .lte("expense_date", cmLastStr);
     setOwnerExpenses((oeData as any[]) || []);
 
-    // Gastos operativos del mes (cash_movements type="gasto")
+    // Gastos operativos del mes (cash_expenses)
     const { data: opData } = await supabase
-      .from("cash_movements")
-      .select("created_at, amount, concept")
-      .eq("type", "gasto")
-      .eq("is_cancelled", false)
-      .gte("created_at", `${cmFirst}T00:00:00`)
-      .lte("created_at", `${cmLastStr}T23:59:59`);
+      .from("cash_expenses")
+      .select("expense_date, amount, concept, category")
+      .gte("expense_date", cmFirst)
+      .lte("expense_date", cmLastStr);
     setOpExpenses((opData as any[]) || []);
 
     // Mes anterior
@@ -229,12 +227,10 @@ export default function AdminDashboardPage() {
     setPrevMonthExpenses((pmOeData as any[]) || []);
 
     const { data: pmOpData } = await supabase
-      .from("cash_movements")
-      .select("created_at, amount, concept")
-      .eq("type", "gasto")
-      .eq("is_cancelled", false)
-      .gte("created_at", `${pmFirst}T00:00:00`)
-      .lte("created_at", `${pmLastStr}T23:59:59`);
+      .from("cash_expenses")
+      .select("expense_date, amount, concept, category")
+      .gte("expense_date", pmFirst)
+      .lte("expense_date", pmLastStr);
     setPrevMonthOpExpenses((pmOpData as any[]) || []);
 
     const { data: pmOrders } = await supabase
@@ -258,12 +254,10 @@ export default function AdminDashboardPage() {
     setPrevYearExpenses((pyOeData as any[]) || []);
 
     const { data: pyOpData } = await supabase
-      .from("cash_movements")
-      .select("created_at, amount, concept")
-      .eq("type", "gasto")
-      .eq("is_cancelled", false)
-      .gte("created_at", `${pyFirst}T00:00:00`)
-      .lte("created_at", `${pyLastStr}T23:59:59`);
+      .from("cash_expenses")
+      .select("expense_date, amount, concept, category")
+      .gte("expense_date", pyFirst)
+      .lte("expense_date", pyLastStr);
     setPrevYearOpExpenses((pyOpData as any[]) || []);
 
     const { data: pyOrders } = await supabase
@@ -305,11 +299,14 @@ export default function AdminDashboardPage() {
       .sort((a, b) => b.debt - a.debt);
     setSupplierDebt(debts);
 
-    // Cargar total de redondeo (para donación)
-    const { data: roundingData } = await supabase
+    // Cargar total de redondeo (para donación) — con filtro de fecha
+    let roundQ = supabase
       .from("cash_movements")
       .select("rounding_amount")
       .gt("rounding_amount", 0);
+    if (dateFrom) roundQ = roundQ.gte("created_at", `${dateFrom}T00:00:00`);
+    if (dateTo) roundQ = roundQ.lte("created_at", `${dateTo}T23:59:59`);
+    const { data: roundingData } = await roundQ;
 
     if (roundingData) {
       const totalRounding = roundingData.reduce((acc: number, r: { rounding_amount: number }) => acc + Number(r.rounding_amount || 0), 0);
