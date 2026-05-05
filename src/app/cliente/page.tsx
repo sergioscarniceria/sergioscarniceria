@@ -3052,6 +3052,24 @@ export default function ClientePage() {
                         {openNotes.length} nota{openNotes.length === 1 ? "" : "s"} abierta{openNotes.length === 1 ? "" : "s"}
                       </div>
                     )}
+                    {openNotes.length > 0 && (
+                      <div style={{ marginTop: 10, width: "100%" }}>
+                        {openNotes.map((note) => (
+                          <div key={note.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: 600, color: COLORS.text }}>{note.note_number || "Sin folio"}</div>
+                              <div style={{ color: COLORS.muted, fontSize: 12 }}>
+                                {formatCxcDate(note.note_date)}
+                                {isOverdue(note) && <span style={{ color: COLORS.danger, fontWeight: 600 }}> · Vencida</span>}
+                              </div>
+                            </div>
+                            <div style={{ fontWeight: 700, color: COLORS.danger, whiteSpace: "nowrap" }}>
+                              ${Math.ceil(Number(note.balance_due || 0))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
