@@ -70,6 +70,14 @@ const moduleCategories = {
       { title: "Tienda Online", href: "/tienda", desc: "Pedidos de clientes" },
     ],
   },
+  pantallas: {
+    label: "Pantallas cliente",
+    roles: ["admin"],
+    items: [
+      { title: "Display mostrador", href: "/display/mostrador", desc: "Pantalla para cliente en mostrador", target: "_blank" as const },
+      { title: "Display caja", href: "/display/caja", desc: "Pantalla para cliente en caja", target: "_blank" as const },
+    ],
+  },
 };
 
 const recipes = [
@@ -590,24 +598,6 @@ export default function HomePage() {
         <Section>
           <div style={{ textAlign: "center", padding: "20px 0 40px" }}>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <Link href="/asistencia/checador" style={{
-                padding: "12px 22px", borderRadius: 14, background: "rgba(31,122,77,0.08)", color: C.success,
-                textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(31,122,77,0.15)`,
-              }}>
-                Checador de asistencia
-              </Link>
-              <Link href="/display/mostrador" target="_blank" style={{
-                padding: "12px 22px", borderRadius: 14, background: "rgba(123,34,24,0.08)", color: C.primary,
-                textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(123,34,24,0.15)`,
-              }}>
-                Display mostrador
-              </Link>
-              <Link href="/display/caja" target="_blank" style={{
-                padding: "12px 22px", borderRadius: 14, background: "rgba(53,92,125,0.08)", color: C.info,
-                textDecoration: "none", fontWeight: 700, fontSize: 14, border: `1px solid rgba(53,92,125,0.15)`,
-              }}>
-                Display caja
-              </Link>
               <button onClick={() => setShowOps(!showOps)} className="cta-btn" style={{
                 padding: "12px 28px", borderRadius: 14, border: "none",
                 background: showOps ? C.primaryDark : C.primary,
@@ -658,7 +648,7 @@ export default function HomePage() {
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
                             {cat.items.map((m) => (
-                              <Link key={m.href} href={m.href} className="mod-link" style={{
+                              <Link key={m.href} href={m.href} {...("target" in m ? { target: (m as any).target } : {})} className="mod-link" style={{
                                 display: "flex", alignItems: "center", gap: 10, padding: "12px 14px",
                                 borderRadius: 14, background: C.bgSoft, border: `1px solid ${C.border}`,
                                 color: C.text, textDecoration: "none",
