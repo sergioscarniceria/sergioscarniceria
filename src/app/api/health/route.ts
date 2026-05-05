@@ -112,12 +112,16 @@ export async function GET(req: Request) {
 
   // ─── Supabase Management API: Egress, Storage, DB size real ───
   let quotaUsage: any = null;
+  let quotaDebug: any = {};
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  quotaDebug.hasToken = !!accessToken;
+  quotaDebug.tokenPrefix = accessToken ? accessToken.slice(0, 6) + "..." : null;
   if (accessToken && supabaseUrl) {
     try {
       // Extraer project ref del URL (ej: https://xxxxx.supabase.co)
       const refMatch = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/);
       const projectRef = refMatch ? refMatch[1] : null;
+      quotaDebug.projectRef = projectRef;
 
       if (projectRef) {
         // 1. Obtener org_id del proyecto
@@ -180,6 +184,7 @@ export async function GET(req: Request) {
     },
     tables: tableCounts,
     quota: quotaUsage,
+    quotaDebug,
     errors: errors.length > 0 ? errors : null,
     recommendations: [
       usagePercent > 50 ? "Considerar upgrade a Supabase Pro ($25/mes)" : null,
