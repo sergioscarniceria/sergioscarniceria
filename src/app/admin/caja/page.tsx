@@ -144,6 +144,89 @@ function money(v?: number | null) {
   return String(Math.ceil(Number(v || 0)));
 }
 
+function browserPrintCashCut(data: CashCutData) {
+  const row = (label: string, value: string, bold = false) =>
+    `<tr><td${bold ? ' style="font-weight:900"' : ""}>${label}</td><td style="text-align:right;${bold ? "font-weight:900" : ""}">${value}</td></tr>`;
+  const sep = `<tr><td colspan="2" style="border-top:2px dashed #000;padding:4px 0"></td></tr>`;
+  const header = (title: string) => `<tr><td colspan="2" style="font-weight:900;font-size:14px;padding:8px 0 4px">${title}</td></tr>${sep}`;
+
+  let expensesHtml = "";
+  if (data.expensesList && data.expensesList.length > 0) {
+    for (const e of data.expensesList) {
+      expensesHtml += row(e.concept, `-$${money(e.amount)}`);
+    }
+    expensesHtml += sep;
+  }
+
+  const html = `<!DOCTYPE html><html><head><title>Corte de Caja</title>
+<style>
+  @page{size:80mm auto;margin:0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Courier New',Consolas,monospace;font-size:13px;font-weight:700;width:80mm;padding:4mm;color:#000;-webkit-print-color-adjust:exact}
+  h1{font-size:20px;text-align:center;margin-bottom:2px;font-weight:900}
+  h2{font-size:16px;text-align:center;margin-bottom:8px;font-weight:800}
+  table{width:100%;border-collapse:collapse}
+  td{padding:3px 0;vertical-align:top;font-weight:700}
+  .sep2{border-top:3px double #000;margin:6px 0}
+</style></head><body>
+  <h1>SERGIO'S CARNICERIA</h1>
+  <h2>${data.type === "cierre" ? "CORTE DE CAJA" : "CORTE PARCIAL"}</h2>
+  <div class="sep2"></div>
+  <table>
+    ${row("Fecha:", data.date)}
+    ${row("Hora:", data.time)}
+    ${data.cashier ? row("Cajera:", data.cashier) : ""}
+  </table>
+  <div class="sep2"></div>
+  ${data.fondoInicial != null ? `<table>${row("Fondo inicial:", "$" + money(data.fondoInicial))}${sep}</table>` : ""}
+  <table>
+    ${header("RESUMEN DE VENTAS")}
+    ${row("Tickets:", String(data.ticketCount))}
+    ${row("Total ventas:", "$" + money(data.totalSales), true)}
+  </table>
+  <table>
+    ${header("DESGLOSE POR METODO")}
+    ${row("Efectivo:", "$" + money(data.totalCash))}
+    ${row("Tarjeta:", "$" + money(data.totalCard))}
+    ${row("Transferencia:", "$" + money(data.totalTransfer))}
+  </table>
+  <table>
+    ${header("CREDITO (CxC)")}
+    ${data.creditoNuevo != null ? row("Credito nuevo:", "$" + money(data.creditoNuevo)) : ""}
+    ${data.cobrosCxC != null ? row("Cobros CxC:", "$" + money(data.cobrosCxC)) : ""}
+    ${data.creditoNuevo == null && data.cobrosCxC == null ? row("Total CxC:", "$" + money(data.totalCxC)) : ""}
+  </table>
+  ${data.cancelaciones && data.cancelaciones > 0 ? `<table>
+    ${header("CANCELACIONES")}
+    ${row("Tickets cancelados:", String(data.cancelaciones))}
+    ${row("Monto cancelado:", "$" + money(data.montoCancelado ?? 0))}
+  </table>` : ""}
+  <table>
+    ${header("GASTOS / SALIDAS")}
+    ${expensesHtml}
+    ${row("Total gastos:", "-$" + money(data.totalExpenses), true)}
+  </table>
+  <table>
+    ${header("CAJA")}
+    ${row("Efectivo esperado:", "$" + money(data.expectedCash))}
+    ${data.countedCash !== undefined ? row("Efectivo contado:", "$" + money(data.countedCash)) : ""}
+    ${data.countedCash !== undefined ? row("Diferencia:", ((data.difference ?? 0) >= 0 ? "+" : "") + "$" + money(data.difference ?? 0), true) : ""}
+  </table>
+  <div class="sep2"></div>
+  <div style="text-align:center;font-weight:900;font-size:16px;margin:8px 0">
+    ${data.type === "cierre" ? "CAJA CERRADA" : "CORTE PARCIAL"}
+  </div>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=350,height=700");
+  if (win) {
+    win.document.write(html);
+    win.document.close();
+    win.addEventListener("afterprint", () => win.close());
+    setTimeout(() => win.print(), 300);
+  }
+}
+
 function todayStr() {
   const n = new Date();
   return `${n.getFullYear()}-${`${n.getMonth() + 1}`.padStart(2, "0")}-${`${n.getDate()}`.padStart(2, "0")}`;
@@ -2301,12 +2384,13 @@ export default function CajaPage() {
                     fondoInicial: stats.fondoInicial,
                   };
                   const ok = await printCashCut(cutData);
-                  if (!ok) alert("No se pudo imprimir. Verifica la conexión de la impresora.");
+                  if (!ok) browserPrintCashCut(cutData);
                 }}
                 style={btnSec}
               >
                 🖨️ Imprimir ticket de cierre
               </button>
+              <PrinterButton />
               <button onClick={() => exportClosurePDF()} style={btnSec}>
                 📄 Exportar PDF
               </button>
