@@ -746,6 +746,38 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
     }
 
+    // ─── Puntos de lealtad (solo sin descuento, con cliente identificado) ───
+    if (descuento <= 0 && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+      const pointsEarned = Math.floor(finalTotal / 100);
+      if (pointsEarned > 0) {
+        const { data: acct } = await supabase
+          .from("loyalty_accounts")
+          .select("id, points_balance, total_points_earned")
+          .eq("customer_id", selectedTicket.customer_id)
+          .maybeSingle();
+        if (acct) {
+          await supabase.from("loyalty_accounts").update({
+            points_balance: (acct.points_balance || 0) + pointsEarned,
+            total_points_earned: (acct.total_points_earned || 0) + pointsEarned,
+          }).eq("id", acct.id);
+        } else {
+          await supabase.from("loyalty_accounts").insert({
+            customer_id: selectedTicket.customer_id,
+            points_balance: pointsEarned,
+            total_points_earned: pointsEarned,
+            total_points_redeemed: 0,
+          });
+        }
+        await supabase.from("loyalty_transactions").insert({
+          customer_id: selectedTicket.customer_id,
+          order_id: selectedTicket.id,
+          movement_type: "earn",
+          points: pointsEarned,
+          notes: `Compra $${moneyRound(finalTotal)} → ${pointsEarned} pts`,
+        });
+      }
+    }
+
     // Notificar al display del cliente que el pago fue confirmado
     sendCfd("caja", {
       type: "pago_confirmado",
@@ -849,6 +881,38 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
             }
           }
         }
+      }
+    }
+
+    // ─── Puntos de lealtad (solo sin descuento, con cliente identificado) ───
+    if (descuento <= 0 && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+      const pointsEarned = Math.floor(finalTotal / 100);
+      if (pointsEarned > 0) {
+        const { data: acct } = await supabase
+          .from("loyalty_accounts")
+          .select("id, points_balance, total_points_earned")
+          .eq("customer_id", selectedTicket.customer_id)
+          .maybeSingle();
+        if (acct) {
+          await supabase.from("loyalty_accounts").update({
+            points_balance: (acct.points_balance || 0) + pointsEarned,
+            total_points_earned: (acct.total_points_earned || 0) + pointsEarned,
+          }).eq("id", acct.id);
+        } else {
+          await supabase.from("loyalty_accounts").insert({
+            customer_id: selectedTicket.customer_id,
+            points_balance: pointsEarned,
+            total_points_earned: pointsEarned,
+            total_points_redeemed: 0,
+          });
+        }
+        await supabase.from("loyalty_transactions").insert({
+          customer_id: selectedTicket.customer_id,
+          order_id: selectedTicket.id,
+          movement_type: "earn",
+          points: pointsEarned,
+          notes: `Compra $${moneyRound(finalTotal)} → ${pointsEarned} pts`,
+        });
       }
     }
 
