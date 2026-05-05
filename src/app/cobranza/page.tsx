@@ -683,20 +683,30 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
     }
 
-    // Un solo movimiento de caja por el total combinado
+    // Un movimiento de caja por cada ticket (trazabilidad individual)
+    const ticketMovements = allTickets.map((ticket, idx) => {
+      const tTotal = ticketTotal(ticket);
+      const proportion = subtotal > 0 ? tTotal / subtotal : 1 / allTickets.length;
+      const ticketAmount = moneyRound(proportion * finalTotal);
+      return {
+        type: "venta",
+        source: "cobranza",
+        amount: ticketAmount,
+        rounding_amount: idx === 0 ? roundingDiff(finalTotal) : 0,
+        payment_method: method,
+        reference_id: ticket.id,
+        cashier_name: cashierName || null,
+      };
+    });
+    // Ajustar último para que la suma sea exacta (evitar diferencias de centavos)
+    if (ticketMovements.length > 1) {
+      const sumOthers = ticketMovements.slice(0, -1).reduce((s, m) => s + m.amount, 0);
+      ticketMovements[ticketMovements.length - 1].amount = moneyRound(finalTotal - sumOthers);
+    }
+
     const { error: cashError } = await supabase
       .from("cash_movements")
-      .insert([
-        {
-          type: "venta",
-          source: "cobranza",
-          amount: moneyRound(finalTotal),
-          rounding_amount: roundingDiff(finalTotal),
-          payment_method: method,
-          reference_id: selectedTicket.id,
-          cashier_name: cashierName || null,
-        },
-      ]);
+      .insert(ticketMovements);
 
     if (cashError) {
       console.log(cashError);
@@ -802,11 +812,18 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
     }
 
-    // Un cash_movement por cada método usado
+    // Un cash_movement por cada ticket × método (trazabilidad individual)
     const movements: any[] = [];
-    if (mEf > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mEf), rounding_amount: 0, payment_method: "efectivo", reference_id: selectedTicket.id, cashier_name: cashierName || null });
-    if (mTa > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mTa), rounding_amount: 0, payment_method: "tarjeta", reference_id: selectedTicket.id, cashier_name: cashierName || null });
-    if (mTr > 0) movements.push({ type: "venta", source: "cobranza", amount: moneyRound(mTr), rounding_amount: 0, payment_method: "transferencia", reference_id: selectedTicket.id, cashier_name: cashierName || null });
+    for (const ticket of allTickets) {
+      const tTotal = ticketTotal(ticket);
+      const proportion = subtotal > 0 ? tTotal / subtotal : 1 / allTickets.length;
+      const tEf = moneyRound(proportion * mEf);
+      const tTa = moneyRound(proportion * mTa);
+      const tTr = moneyRound(proportion * mTr);
+      if (tEf > 0) movements.push({ type: "venta", source: "cobranza", amount: tEf, rounding_amount: 0, payment_method: "efectivo", reference_id: ticket.id, cashier_name: cashierName || null });
+      if (tTa > 0) movements.push({ type: "venta", source: "cobranza", amount: tTa, rounding_amount: 0, payment_method: "tarjeta", reference_id: ticket.id, cashier_name: cashierName || null });
+      if (tTr > 0) movements.push({ type: "venta", source: "cobranza", amount: tTr, rounding_amount: 0, payment_method: "transferencia", reference_id: ticket.id, cashier_name: cashierName || null });
+    }
     // Aplicar redondeo al primer movimiento
     if (movements.length > 0) movements[0].rounding_amount = roundingDiff(finalTotal);
 
