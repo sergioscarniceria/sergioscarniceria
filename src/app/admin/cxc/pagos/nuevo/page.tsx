@@ -235,6 +235,7 @@ if (cashMovementError) {
 }
 
   let remaining = paymentAmount;
+  const appliedDetails: { noteNumber: string; applied: number; newBalance: number }[] = [];
 
   for (const note of openNotes) {
     if (remaining <= 0) break;
@@ -244,6 +245,12 @@ if (cashMovementError) {
 
     const amountApplied = Math.min(remaining, currentBalance);
     const newBalance = Number((currentBalance - amountApplied).toFixed(2));
+
+    appliedDetails.push({
+      noteNumber: note.note_number || note.id.slice(0, 8),
+      applied: amountApplied,
+      newBalance,
+    });
 
     const { error: updateError } = await supabase
       .from("cxc_notes")
@@ -261,6 +268,14 @@ if (cashMovementError) {
     }
 
     remaining = Number((remaining - amountApplied).toFixed(2));
+  }
+
+  // Guardar desglose de notas afectadas
+  if (appliedDetails.length > 0) {
+    await supabase
+      .from("cxc_payments")
+      .update({ applied_notes: appliedDetails })
+      .eq("id", paymentData.id);
   }
 
   alert("Pago registrado y aplicado correctamente");

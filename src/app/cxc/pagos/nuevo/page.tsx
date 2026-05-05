@@ -346,6 +346,14 @@ if (cashMovementError) {
     remaining = Number((remaining - amountApplied).toFixed(2));
   }
 
+  // Guardar desglose de notas afectadas en el pago
+  if (appliedDetails.length > 0) {
+    await supabase
+      .from("cxc_payments")
+      .update({ applied_notes: appliedDetails })
+      .eq("id", paymentData.id);
+  }
+
   // ─── Imprimir ticket de abono ───
   printAbonoTicket({
     customerName: selectedCustomer.name,
