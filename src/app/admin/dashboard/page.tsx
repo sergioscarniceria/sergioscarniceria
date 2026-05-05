@@ -43,6 +43,10 @@ type Order = {
   edited_at?: string | null;
   edited_by?: string | null;
   original_items?: OrderItem[] | null;
+  discount_amount?: number | null;
+  rounding_amount?: number | null;
+  payment_method?: string | null;
+  captured_by?: string | null;
 };
 
 type ProductStats = {
@@ -100,6 +104,7 @@ export default function AdminDashboardPage() {
   const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
   const [roundingTotal, setRoundingTotal] = useState(0);
   const [roundingCount, setRoundingCount] = useState(0);
+  const [cashMovements, setCashMovements] = useState<{ amount: number; type: string; is_cancelled: boolean; payment_method?: string }[]>([]);
 
   // Market prices
   const [marketPrices, setMarketPrices] = useState<{ id: string; product_name: string; our_price: number; market_avg: number; market_low: number; market_high: number; sources: string; category: string; updated_at: string }[]>([]);
@@ -314,6 +319,16 @@ export default function AdminDashboardPage() {
       setRoundingCount(roundingData.length);
     }
 
+    // Cargar cash_movements del rango para conciliación
+    let cmQ = supabase
+      .from("cash_movements")
+      .select("amount, type, is_cancelled, payment_method")
+      .eq("is_cancelled", false);
+    if (dateFrom) cmQ = cmQ.gte("created_at", `${dateFrom}T00:00:00`);
+    if (dateTo) cmQ = cmQ.lte("created_at", `${dateTo}T23:59:59`);
+    const { data: cmData } = await cmQ;
+    setCashMovements((cmData as any[]) || []);
+
     // Load market prices
     try {
       const mpRes = await fetch("/api/admin/market-prices");
@@ -503,6 +518,63 @@ export default function AdminDashboardPage() {
       .reduce((acc, d) => acc + Number(d.venta || 0), 0);
     return ordersYearSales + histYearSales;
   }, [orders, historicalDays]);
+
+  // ─── Conciliación Ventas vs Cobros ───────────────────────
+  const conciliacion = useMemo(() => {
+    // Ventas según orders (productos × precio)
+    const activeOrders = orders.filter((o) => o.status !== "cancelado");
+    const cancelledOrders = orders.filter((o) => o.status === "cancelado");
+    const ventasBruto = activeOrders.reduce((acc, o) => acc + orderTotal(o), 0);
+
+    // Descuentos aplicados
+    const totalDescuentos = activeOrders.reduce((acc, o) => acc + Number(o.discount_amount || 0), 0);
+
+    // Redondeo solidario
+    const totalRedondeo = activeOrders.reduce((acc, o) => acc + Number(o.rounding_amount || 0), 0);
+
+    // Tickets pendientes de cobro (status pendiente = no cobrado aún)
+    const pendientes = activeOrders.filter((o) => o.status === "pendiente");
+    const totalPendientes = pendientes.reduce((acc, o) => acc + orderTotal(o), 0);
+
+    // Ventas a crédito
+    const creditOrders = activeOrders.filter((o) => o.payment_method === "credito");
+    const totalCredito = creditOrders.reduce((acc, o) => acc + orderTotal(o) - Number(o.discount_amount || 0), 0);
+
+    // Total cancelado
+    const totalCancelado = cancelledOrders.reduce((acc, o) => acc + orderTotal(o), 0);
+
+    // Total cobrado real (cash_movements)
+    const totalCobrado = cashMovements
+      .filter((m) => m.type === "venta")
+      .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+
+    // Abonos CxC cobrados
+    const totalAbonosCxc = cashMovements
+      .filter((m) => m.type === "cxc_pago")
+      .reduce((acc, m) => acc + Number(m.amount || 0), 0);
+
+    // Ventas netas esperadas (bruto - descuentos + redondeo)
+    const ventasNetas = ventasBruto - totalDescuentos + totalRedondeo;
+
+    // Diferencia
+    const diferencia = ventasNetas - totalCobrado - totalPendientes - totalCredito;
+
+    return {
+      ventasBruto,
+      totalDescuentos,
+      totalRedondeo,
+      ventasNetas,
+      totalCobrado,
+      totalAbonosCxc,
+      totalPendientes,
+      pendientesCount: pendientes.length,
+      totalCredito,
+      creditCount: creditOrders.length,
+      totalCancelado,
+      cancelledCount: cancelledOrders.length,
+      diferencia,
+    };
+  }, [orders, cashMovements]);
 
   // ─── Inventory Value ─────────────────────────────────────
   const inventoryStats = useMemo(() => {
@@ -1487,6 +1559,95 @@ export default function AdminDashboardPage() {
             ))
           )}
         </Section>
+        {/* Panel de conciliación ventas vs cobros */}
+        <Section id="conciliacion" title="Conciliación ventas vs cobros">
+          <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 16 }}>
+            Por qué difieren las ventas del Dashboard (pedidos) y las de Caja (cobros reales)
+          </div>
+          {(() => {
+            const c = conciliacion;
+            const rowStyle = (bold?: boolean, color?: string): React.CSSProperties => ({
+              display: "flex", justifyContent: "space-between", padding: "8px 12px",
+              borderBottom: `1px solid ${COLORS.border}`,
+              fontWeight: bold ? 700 : 400,
+              fontSize: bold ? 15 : 13,
+              color: color || COLORS.text,
+            });
+            const indentRow = (color?: string): React.CSSProperties => ({
+              display: "flex", justifyContent: "space-between", padding: "6px 12px 6px 28px",
+              borderBottom: `1px solid ${COLORS.border}`,
+              fontSize: 12, color: color || COLORS.muted,
+            });
+            return (
+              <div style={{ background: COLORS.cardStrong, borderRadius: 12, border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+                <div style={rowStyle(true)}>
+                  <span>Ventas brutas (productos × precio)</span>
+                  <span>${fmt(c.ventasBruto)}</span>
+                </div>
+                {c.totalDescuentos > 0 && (
+                  <div style={indentRow("#b45309")}>
+                    <span>− Descuentos aplicados</span>
+                    <span>−${fmt(c.totalDescuentos)}</span>
+                  </div>
+                )}
+                {c.totalRedondeo > 0 && (
+                  <div style={indentRow(COLORS.success)}>
+                    <span>+ Redondeo solidario</span>
+                    <span>+${fmt(c.totalRedondeo)}</span>
+                  </div>
+                )}
+                <div style={rowStyle(true)}>
+                  <span>= Ventas netas esperadas</span>
+                  <span>${fmt(c.ventasNetas)}</span>
+                </div>
+
+                <div style={{ height: 8, background: COLORS.bg }} />
+
+                <div style={rowStyle(true, COLORS.success)}>
+                  <span>Cobrado en caja (cash_movements)</span>
+                  <span>${fmt(c.totalCobrado)}</span>
+                </div>
+                {c.totalPendientes > 0 && (
+                  <div style={indentRow("#b45309")}>
+                    <span>Tickets pendientes de cobro ({c.pendientesCount})</span>
+                    <span>${fmt(c.totalPendientes)}</span>
+                  </div>
+                )}
+                {c.totalCredito > 0 && (
+                  <div style={indentRow("#7b2218")}>
+                    <span>Enviado a crédito CxC ({c.creditCount})</span>
+                    <span>${fmt(c.totalCredito)}</span>
+                  </div>
+                )}
+                {c.totalCancelado > 0 && (
+                  <div style={indentRow("#dc2626")}>
+                    <span>Tickets cancelados ({c.cancelledCount})</span>
+                    <span>${fmt(c.totalCancelado)}</span>
+                  </div>
+                )}
+                {c.totalAbonosCxc > 0 && (
+                  <div style={indentRow(COLORS.success)}>
+                    <span>Abonos CxC cobrados</span>
+                    <span>+${fmt(c.totalAbonosCxc)}</span>
+                  </div>
+                )}
+
+                <div style={{ height: 8, background: COLORS.bg }} />
+
+                <div style={rowStyle(true, Math.abs(c.diferencia) < 1 ? COLORS.success : "#dc2626")}>
+                  <span>Diferencia sin explicar</span>
+                  <span>{c.diferencia >= 0 ? "" : "−"}${fmt(Math.abs(c.diferencia))}</span>
+                </div>
+                {Math.abs(c.diferencia) < 1 && (
+                  <div style={{ padding: "10px 12px", fontSize: 12, color: COLORS.success, fontWeight: 600, textAlign: "center" }}>
+                    ✓ Todo cuadra correctamente
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </Section>
+
         {/* Panel de redondeo para donación */}
         <Section id="precios-mercado" title="Precios de mercado" count={marketPrices.length}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
