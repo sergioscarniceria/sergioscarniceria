@@ -24,29 +24,31 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 1. Find customer by phone
-    const { data: customer } = await supabase
+    // 1. Find customer by phone + PIN (soporta múltiples clientes con mismo teléfono)
+    const { data: customers } = await supabase
       .from("customers")
       .select("id, client_pin, portal_password")
-      .eq("phone", phone.trim())
-      .maybeSingle();
+      .eq("phone", phone.trim());
 
-    if (!customer) {
+    if (!customers || customers.length === 0) {
       return NextResponse.json(
         { error: "No encontramos una cuenta con ese teléfono" },
         { status: 404 }
       );
     }
 
-    // 2. Verify PIN
-    if (!customer.client_pin) {
-      return NextResponse.json(
-        { error: "Esta cuenta no tiene PIN. Entra con tu contraseña o pídele tu PIN al negocio." },
-        { status: 400 }
-      );
-    }
+    // 2. Find the customer whose PIN matches
+    const customer = customers.find((c) => c.client_pin === pin.trim());
 
-    if (customer.client_pin !== pin.trim()) {
+    if (!customer) {
+      // Check if any has a PIN at all
+      const anyHasPin = customers.some((c) => c.client_pin);
+      if (!anyHasPin) {
+        return NextResponse.json(
+          { error: "Esta cuenta no tiene PIN. Entra con tu contraseña o pídele tu PIN al negocio." },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
         { error: "PIN incorrecto" },
         { status: 401 }
