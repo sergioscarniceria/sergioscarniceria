@@ -73,24 +73,13 @@ export async function GET(req: Request) {
 
   // Estimate DB size (rough: ~0.5KB per row average for this type of data)
   const estimatedSizeMB = Number((totalRows * 0.5 / 1024).toFixed(2));
-  const limitMB = 500;
-  const usagePercent = Number(((estimatedSizeMB / limitMB) * 100).toFixed(1));
 
   let status = "ok";
-  let warning = null;
-
-  if (usagePercent > 80) {
-    status = "critical";
-    warning = "Base de datos arriba del 80%. Considera upgrade a Pro ($25/mes) o limpiar datos antiguos.";
-  } else if (usagePercent > 50) {
-    status = "warning";
-    warning = "Base de datos arriba del 50%. Monitorear crecimiento.";
-  }
+  let warning: string | null = null;
 
   // Check if we can write (not in read-only mode)
   let canWrite = false;
   try {
-    const testId = `health-check-${Date.now()}`;
     const { error: insertError } = await supabase
       .from("cash_movements")
       .insert([{ type: "_health_check", amount: 0, payment_method: "none", source: "health" }])
@@ -110,92 +99,110 @@ export async function GET(req: Request) {
     canWrite = false;
   }
 
-  // ─── Supabase Management API: Egress, Storage, DB size real ───
-  let quotaUsage: any = null;
-  let quotaDebug: any = {};
+  // ─── Tamaño real de la DB vía SQL + info del plan ───
+  let realDbSize: { size_mb: number; size_pretty: string } | null = null;
+  let storageSize: { size_mb: number; bucket_count: number } | null = null;
+  let planInfo: { plan: string; org: string; egress_quota_gb: number; db_limit_gb: number; storage_limit_gb: number } | null = null;
+
+  try {
+    // DB size real via función get_db_size()
+    const { data: dbSizeData, error: dbSizeErr } = await supabase
+      .rpc("get_db_size")
+      .single();
+
+    if (!dbSizeErr && dbSizeData) {
+      const row = dbSizeData as { bytes: number; size_pretty: string };
+      const bytes = Number(row.bytes);
+      realDbSize = {
+        size_mb: Number((bytes / 1024 / 1024).toFixed(2)),
+        size_pretty: row.size_pretty || `${(bytes / 1024 / 1024).toFixed(1)} MB`,
+      };
+    }
+  } catch { /* Si falla, usamos estimación por filas */ }
+
+  // Storage bucket sizes
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    if (buckets) {
+      storageSize = { size_mb: 0, bucket_count: buckets.length };
+    }
+  } catch { /* ignore */ }
+
+  // Plan info from Management API (solo metadata, no usage)
   const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
-  quotaDebug.hasToken = !!accessToken;
-  quotaDebug.tokenPrefix = accessToken ? accessToken.slice(0, 6) + "..." : null;
   if (accessToken && supabaseUrl) {
     try {
-      // Extraer project ref del URL (ej: https://xxxxx.supabase.co)
       const refMatch = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/);
       const projectRef = refMatch ? refMatch[1] : null;
-      quotaDebug.projectRef = projectRef;
-
       if (projectRef) {
-        // 1. Obtener org_id del proyecto
         const projRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
-        quotaDebug.projStatus = projRes.status;
         if (projRes.ok) {
           const projData = await projRes.json();
           const orgId = projData.organization_id;
-          quotaDebug.orgId = orgId;
-
-          if (orgId) {
-            // 2. Obtener usage de la organización (ciclo de facturación actual)
-            const usageRes = await fetch(
-              `https://api.supabase.com/v1/organizations/${orgId}/usage`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            quotaDebug.usageStatus = usageRes.status;
-            if (!usageRes.ok) {
-              quotaDebug.usageError = await usageRes.text();
-            }
-            if (usageRes.ok) {
-              const usageData = await usageRes.json();
-              // usageData es un array de métricas con { metric, usage, limit, cost, ... }
-              const metrics: Record<string, { usage: number; limit: number; pct: number }> = {};
-              const metricNames: Record<string, string> = {
-                EGRESS: "Egress (transferencia)",
-                DB_SIZE: "Base de datos",
-                STORAGE_SIZE: "Almacenamiento",
-                FUNC_INVOCATIONS: "Edge Functions",
-                REALTIME_PEAK_CONNECTIONS: "Realtime conexiones",
-                MONTHLY_ACTIVE_USERS: "Usuarios activos",
-              };
-
-              if (Array.isArray(usageData)) {
-                for (const m of usageData) {
-                  const name = metricNames[m.metric] || m.metric;
-                  const usage = m.usage ?? 0;
-                  const limit = m.limit ?? 0;
-                  const pct = limit > 0 ? Number(((usage / limit) * 100).toFixed(1)) : 0;
-                  metrics[name] = { usage, limit, pct };
-                }
-              }
-              quotaUsage = { metrics, raw: usageData };
-            }
+          // Get org details (plan name)
+          const orgRes = await fetch(`https://api.supabase.com/v1/organizations/${orgId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          if (orgRes.ok) {
+            const orgData = await orgRes.json();
+            const plan = orgData.plan || "free";
+            // Quotas por plan (valores oficiales Supabase 2026)
+            const quotas: Record<string, { egress: number; db: number; storage: number }> = {
+              free: { egress: 5, db: 0.5, storage: 1 },
+              pro: { egress: 250, db: 8, storage: 100 },
+              team: { egress: 250, db: 8, storage: 100 },
+            };
+            const q = quotas[plan] || quotas.pro;
+            planInfo = {
+              plan,
+              org: orgData.name || orgId,
+              egress_quota_gb: q.egress,
+              db_limit_gb: q.db,
+              storage_limit_gb: q.storage,
+            };
           }
         }
       }
-    } catch (e) {
-      // Si falla el management API, no romper el health check
-      console.error("Management API error:", e);
-    }
+    } catch { /* No romper health check */ }
+  }
+
+  // Calcular uso real vs límite del plan
+  const dbSizeMB = realDbSize?.size_mb || estimatedSizeMB;
+  const dbLimitMB = (planInfo?.db_limit_gb || 0.5) * 1024;
+  const dbUsagePct = Number(((dbSizeMB / dbLimitMB) * 100).toFixed(1));
+
+  if (dbUsagePct > 80) {
+    status = "critical";
+    warning = `Base de datos al ${dbUsagePct}% del límite del plan ${planInfo?.plan || "free"}.`;
+  } else if (dbUsagePct > 50) {
+    status = "warning";
+    warning = `Base de datos al ${dbUsagePct}% del límite del plan.`;
   }
 
   return NextResponse.json({
     status,
     timestamp: new Date().toISOString(),
+    plan: planInfo,
     database: {
       can_write: canWrite,
       total_rows: totalRows,
+      real_size_mb: realDbSize?.size_mb || null,
+      real_size_pretty: realDbSize?.size_pretty || null,
       estimated_size_mb: estimatedSizeMB,
-      limit_mb: limitMB,
-      usage_percent: usagePercent,
+      limit_mb: dbLimitMB,
+      usage_percent: dbUsagePct,
       warning,
     },
+    storage: storageSize,
     tables: tableCounts,
-    quota: quotaUsage,
-    quotaDebug,
     errors: errors.length > 0 ? errors : null,
     recommendations: [
-      usagePercent > 50 ? "Considerar upgrade a Supabase Pro ($25/mes)" : null,
+      dbUsagePct > 80 ? "Base de datos cerca del límite. Considerar archivar datos antiguos." : null,
       !canWrite ? "LA BASE ESTÁ EN MODO SOLO-LECTURA. Upgrade urgente." : null,
       totalRows > 50000 ? "Considerar archivar movimientos antiguos (>6 meses)" : null,
     ].filter(Boolean),
+    nota: "Egress (transferencia) no disponible vía API. Revisar en: https://supabase.com/dashboard/org/_/usage",
   });
 }
