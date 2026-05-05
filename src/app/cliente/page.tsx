@@ -480,6 +480,7 @@ export default function ClientePage() {
 
   const [cxcNotes, setCxcNotes] = useState<CxcNote[]>([]);
   const [cxcPayments, setCxcPayments] = useState<CxcPayment[]>([]);
+  const [expandedNoteId, setExpandedNoteId] = useState<string | null>(null);
   const [creditEnabled, setCreditEnabled] = useState(false);
   const [creditLimit, setCreditLimit] = useState(0);
   const [creditDays, setCreditDays] = useState(0);
@@ -644,7 +645,7 @@ export default function ClientePage() {
 
       const { data: notesData } = await supabase
         .from("cxc_notes")
-        .select("*")
+        .select("*, cxc_note_items(*)")
         .eq("customer_id", customerProfile.customer_id)
         .order("note_date", { ascending: false })
         .order("created_at", { ascending: false });
@@ -3054,20 +3055,46 @@ export default function ClientePage() {
                     )}
                     {openNotes.length > 0 && (
                       <div style={{ marginTop: 10, width: "100%" }}>
-                        {openNotes.map((note) => (
-                          <div key={note.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderTop: `1px solid ${COLORS.border}`, fontSize: 13 }}>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontWeight: 600, color: COLORS.text }}>{note.note_number || "Sin folio"}</div>
-                              <div style={{ color: COLORS.muted, fontSize: 12 }}>
-                                {formatCxcDate(note.note_date)}
-                                {isOverdue(note) && <span style={{ color: COLORS.danger, fontWeight: 600 }}> · Vencida</span>}
+                        {openNotes.map((note) => {
+                          const items = (note as any).cxc_note_items || [];
+                          const isExpanded = expandedNoteId === note.id;
+                          return (
+                            <div key={note.id} style={{ borderTop: `1px solid ${COLORS.border}`, padding: "8px 0" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, color: COLORS.text }}>{note.note_number || "Sin folio"}</div>
+                                  <div style={{ color: COLORS.muted, fontSize: 12 }}>
+                                    {formatCxcDate(note.note_date)}
+                                    {isOverdue(note) && <span style={{ color: COLORS.danger, fontWeight: 600 }}> · Vencida</span>}
+                                  </div>
+                                </div>
+                                <div style={{ fontWeight: 700, color: COLORS.danger, whiteSpace: "nowrap" }}>
+                                  ${Math.ceil(Number(note.balance_due || 0))}
+                                </div>
                               </div>
+                              {items.length > 0 && (
+                                <button
+                                  onClick={() => setExpandedNoteId(isExpanded ? null : note.id)}
+                                  style={{ background: "none", border: "none", color: COLORS.primary, fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "4px 0", marginTop: 2 }}
+                                >
+                                  {isExpanded ? "Ocultar desglose ▲" : "Ver desglose ▼"}
+                                </button>
+                              )}
+                              {isExpanded && items.length > 0 && (
+                                <div style={{ background: "rgba(0,0,0,0.03)", borderRadius: 8, padding: 10, marginTop: 6 }}>
+                                  {items.map((item: any, idx: number) => (
+                                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", borderBottom: idx < items.length - 1 ? `1px solid ${COLORS.border}` : "none" }}>
+                                      <span style={{ color: COLORS.text }}>{item.product}</span>
+                                      <span style={{ color: COLORS.muted, whiteSpace: "nowrap" }}>
+                                        {Number(item.quantity || 0).toFixed(item.unit === "kg" ? 2 : 0)} {item.unit || "kg"} × ${Number(item.price || 0).toFixed(0)} = <b style={{ color: COLORS.text }}>${Math.ceil(Number(item.line_total || 0))}</b>
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                            <div style={{ fontWeight: 700, color: COLORS.danger, whiteSpace: "nowrap" }}>
-                              ${Math.ceil(Number(note.balance_due || 0))}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
