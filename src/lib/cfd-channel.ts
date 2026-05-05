@@ -24,40 +24,63 @@ export type CfdMessage =
   | { type: "pago_confirmado"; total: number; customerName?: string; method?: string }
   | { type: "idle" };
 
-// Canal único por target (singleton para no crear duplicados)
-const channels: Record<string, ReturnType<ReturnType<typeof getSupabaseClient>["channel"]>> = {};
+// Estado por canal
+type ChannelState = {
+  channel: ReturnType<ReturnType<typeof getSupabaseClient>["channel"]>;
+  ready: boolean;
+  pending: Array<Record<string, unknown>>;
+};
 
-function getChannel(target: "mostrador" | "caja") {
+const channelStates: Record<string, ChannelState> = {};
+
+function ensureChannel(target: "mostrador" | "caja"): ChannelState {
   const name = `cfd-${target}`;
-  if (!channels[name]) {
+  if (!channelStates[name]) {
     const supabase = getSupabaseClient();
-    channels[name] = supabase.channel(name);
+    const channel = supabase.channel(name);
+    channelStates[name] = { channel, ready: false, pending: [] };
   }
-  return channels[name];
+  return channelStates[name];
+}
+
+function subscribeIfNeeded(cs: ChannelState) {
+  if (cs.ready) return;
+
+  const state = (cs.channel as unknown as { state?: string }).state;
+  if (state === "joined") {
+    cs.ready = true;
+    flushPending(cs);
+    return;
+  }
+  if (state === "joining") return; // ya está en proceso
+
+  cs.channel.subscribe((status: string) => {
+    if (status === "SUBSCRIBED") {
+      cs.ready = true;
+      flushPending(cs);
+    }
+  });
+}
+
+function flushPending(cs: ChannelState) {
+  while (cs.pending.length > 0) {
+    const payload = cs.pending.shift()!;
+    cs.channel.send({ type: "broadcast", event: "cfd-msg", payload });
+  }
 }
 
 // ─── Emisor (se usa en ventas / cobranza) ───
 
 export function sendCfd(target: "mostrador" | "caja", msg: CfdMessage) {
   try {
-    const channel = getChannel(target);
-    // Suscribirse si no está suscrito (necesario para poder enviar)
-    if ((channel as unknown as { state?: string }).state !== "joined") {
-      channel.subscribe((status: string) => {
-        if (status === "SUBSCRIBED") {
-          channel.send({
-            type: "broadcast",
-            event: "cfd-msg",
-            payload: { ...msg, _ts: Date.now() },
-          });
-        }
-      });
+    const cs = ensureChannel(target);
+    const payload = { ...msg, _ts: Date.now() };
+
+    if (cs.ready) {
+      cs.channel.send({ type: "broadcast", event: "cfd-msg", payload });
     } else {
-      channel.send({
-        type: "broadcast",
-        event: "cfd-msg",
-        payload: { ...msg, _ts: Date.now() },
-      });
+      cs.pending.push(payload);
+      subscribeIfNeeded(cs);
     }
   } catch {
     // Supabase no disponible — ignorar
@@ -70,9 +93,9 @@ export function listenCfd(
   target: "mostrador" | "caja",
   onMessage: (msg: CfdMessage) => void
 ): () => void {
-  const channel = getChannel(target);
+  const cs = ensureChannel(target);
 
-  channel
+  cs.channel
     .on("broadcast", { event: "cfd-msg" }, (payload: { payload: CfdMessage & { _ts?: number } }) => {
       try {
         onMessage(payload.payload as CfdMessage);
@@ -80,11 +103,15 @@ export function listenCfd(
         // ignorar
       }
     })
-    .subscribe();
+    .subscribe((status: string) => {
+      if (status === "SUBSCRIBED") {
+        cs.ready = true;
+      }
+    });
 
   return () => {
-    channel.unsubscribe();
+    cs.channel.unsubscribe();
     const name = `cfd-${target}`;
-    delete channels[name];
+    delete channelStates[name];
   };
 }
