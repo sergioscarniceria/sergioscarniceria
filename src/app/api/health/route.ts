@@ -128,9 +128,11 @@ export async function GET(req: Request) {
         const projRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+        quotaDebug.projStatus = projRes.status;
         if (projRes.ok) {
           const projData = await projRes.json();
           const orgId = projData.organization_id;
+          quotaDebug.orgId = orgId;
 
           if (orgId) {
             // 2. Obtener usage de la organización (ciclo de facturación actual)
@@ -138,6 +140,10 @@ export async function GET(req: Request) {
               `https://api.supabase.com/v1/organizations/${orgId}/usage`,
               { headers: { Authorization: `Bearer ${accessToken}` } }
             );
+            quotaDebug.usageStatus = usageRes.status;
+            if (!usageRes.ok) {
+              quotaDebug.usageError = await usageRes.text();
+            }
             if (usageRes.ok) {
               const usageData = await usageRes.json();
               // usageData es un array de métricas con { metric, usage, limit, cost, ... }
