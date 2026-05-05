@@ -89,6 +89,9 @@ export default function AdminDashboardPage() {
   // Utilidades data
   const [showUtilities, setShowUtilities] = useState(false);
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
+  const [opExpenses, setOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
+  const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
+  const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ created_at: string; amount: number; concept: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevYearExpenses, setPrevYearExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [prevMonthOrders, setPrevMonthOrders] = useState<{ created_at: string; order_items: { kilos: number; price: number; sale_type?: string; quantity?: number; is_fixed_price_piece?: boolean }[] }[]>([]);
@@ -202,6 +205,16 @@ export default function AdminDashboardPage() {
       .lte("expense_date", cmLastStr);
     setOwnerExpenses((oeData as any[]) || []);
 
+    // Gastos operativos del mes (cash_movements type="gasto")
+    const { data: opData } = await supabase
+      .from("cash_movements")
+      .select("created_at, amount, concept")
+      .eq("type", "gasto")
+      .eq("is_cancelled", false)
+      .gte("created_at", `${cmFirst}T00:00:00`)
+      .lte("created_at", `${cmLastStr}T23:59:59`);
+    setOpExpenses((opData as any[]) || []);
+
     // Mes anterior
     const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
     const pmFirst = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, "0")}-01`;
@@ -214,6 +227,15 @@ export default function AdminDashboardPage() {
       .gte("expense_date", pmFirst)
       .lte("expense_date", pmLastStr);
     setPrevMonthExpenses((pmOeData as any[]) || []);
+
+    const { data: pmOpData } = await supabase
+      .from("cash_movements")
+      .select("created_at, amount, concept")
+      .eq("type", "gasto")
+      .eq("is_cancelled", false)
+      .gte("created_at", `${pmFirst}T00:00:00`)
+      .lte("created_at", `${pmLastStr}T23:59:59`);
+    setPrevMonthOpExpenses((pmOpData as any[]) || []);
 
     const { data: pmOrders } = await supabase
       .from("orders")
@@ -234,6 +256,15 @@ export default function AdminDashboardPage() {
       .gte("expense_date", pyFirst)
       .lte("expense_date", pyLastStr);
     setPrevYearExpenses((pyOeData as any[]) || []);
+
+    const { data: pyOpData } = await supabase
+      .from("cash_movements")
+      .select("created_at, amount, concept")
+      .eq("type", "gasto")
+      .eq("is_cancelled", false)
+      .gte("created_at", `${pyFirst}T00:00:00`)
+      .lte("created_at", `${pyLastStr}T23:59:59`);
+    setPrevYearOpExpenses((pyOpData as any[]) || []);
 
     const { data: pyOrders } = await supabase
       .from("orders")
@@ -495,17 +526,23 @@ export default function AdminDashboardPage() {
         acc + (o.order_items || []).reduce((s: number, i: any) => s + itemSubtotal(i), 0), 0);
 
     const currentSales = salesThisMonth;
-    const currentExpenses = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const currentOwnerExp = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const currentOpExp = opExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const currentExpenses = currentOwnerExp + currentOpExp;
     const currentUtility = currentSales - currentExpenses;
     const currentMargin = currentSales > 0 ? (currentUtility / currentSales) * 100 : 0;
 
     const prevMSales = calcOrdersTotal(prevMonthOrders);
-    const prevMExpenses = prevMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevMOwnerExp = prevMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevMOpExp = prevMonthOpExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevMExpenses = prevMOwnerExp + prevMOpExp;
     const prevMUtility = prevMSales - prevMExpenses;
     const prevMMargin = prevMSales > 0 ? (prevMUtility / prevMSales) * 100 : 0;
 
     const prevYSales = calcOrdersTotal(prevYearOrders);
-    const prevYExpenses = prevYearExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevYOwnerExp = prevYearExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevYOpExp = prevYearOpExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevYExpenses = prevYOwnerExp + prevYOpExp;
     const prevYUtility = prevYSales - prevYExpenses;
     const prevYMargin = prevYSales > 0 ? (prevYUtility / prevYSales) * 100 : 0;
 
@@ -531,15 +568,26 @@ export default function AdminDashboardPage() {
 
     const totalDebt = supplierDebt.reduce((s, d) => s + d.debt, 0);
 
+    // Desglose gastos operativos por concepto
+    const opByConceptMap: Record<string, number> = {};
+    opExpenses.forEach((e) => {
+      const key = e.concept || "Sin concepto";
+      opByConceptMap[key] = (opByConceptMap[key] || 0) + Number(e.amount);
+    });
+    const opCategories = Object.entries(opByConceptMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([concept, total]) => ({ category: concept, total }));
+
     return {
-      current: { sales: currentSales, expenses: currentExpenses, utility: currentUtility, margin: currentMargin, label: monthNames[cm.getMonth()] },
+      current: { sales: currentSales, expenses: currentExpenses, ownerExp: currentOwnerExp, opExp: currentOpExp, utility: currentUtility, margin: currentMargin, label: monthNames[cm.getMonth()] },
       prevMonth: { sales: prevMSales, expenses: prevMExpenses, utility: prevMUtility, margin: prevMMargin, label: monthNames[pm.getMonth()] },
       prevYear: { sales: prevYSales, expenses: prevYExpenses, utility: prevYUtility, margin: prevYMargin, label: `${monthNames[py.getMonth()]} ${py.getFullYear()}` },
       cxc: { total: totalCxC, count: cxcCount, vencidas: cxcVencidas },
       debt: { total: totalDebt, count: supplierDebt.length },
       categories,
+      opCategories,
     };
-  }, [salesThisMonth, ownerExpenses, prevMonthOrders, prevMonthExpenses, prevYearOrders, prevYearExpenses, cxcNotes, supplierDebt]);
+  }, [salesThisMonth, ownerExpenses, opExpenses, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -728,7 +776,9 @@ export default function AdminDashboardPage() {
 
   <div class="grid">
     <div class="card"><div class="label">Ventas del mes</div><div class="value green">$${fmt(u.current.sales)}</div></div>
-    <div class="card"><div class="label">Gastos externos</div><div class="value red">$${fmt(u.current.expenses)}</div></div>
+    <div class="card"><div class="label">Gastos operación</div><div class="value red">$${fmt(u.current.opExp)}</div></div>
+    <div class="card"><div class="label">Gastos externos</div><div class="value red">$${fmt(u.current.ownerExp)}</div></div>
+    <div class="card"><div class="label">Total gastos</div><div class="value red">$${fmt(u.current.expenses)}</div></div>
     <div class="card"><div class="label">Utilidad</div><div class="value ${u.current.utility >= 0 ? "green" : "red"}">$${fmt(u.current.utility)}</div></div>
     <div class="card"><div class="label">Margen EBITDA</div><div class="value ${u.current.margin >= 10 ? "green" : "orange"}">${u.current.margin.toFixed(1)}%</div></div>
   </div>
@@ -912,7 +962,15 @@ export default function AdminDashboardPage() {
               <div style={{ ...heroValueStyle, color: COLORS.success }}>${fmt(utilityStats.current.sales)}</div>
             </div>
             <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Gastos operación</div>
+              <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.opExp)}</div>
+            </div>
+            <div style={heroCardStyle}>
               <div style={smallLabelStyle}>Gastos externos</div>
+              <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.ownerExp)}</div>
+            </div>
+            <div style={heroCardStyle}>
+              <div style={smallLabelStyle}>Total gastos</div>
               <div style={{ ...heroValueStyle, color: COLORS.danger }}>${fmt(utilityStats.current.expenses)}</div>
             </div>
             <div style={heroCardStyle}>
@@ -1017,7 +1075,7 @@ export default function AdminDashboardPage() {
                     gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
                     servicios: "Servicios", sueldos_extra: "Sueldos extra", otros: "Otros",
                   };
-                  const pct = utilityStats.current.expenses > 0 ? (cat.total / utilityStats.current.expenses) * 100 : 0;
+                  const pct = utilityStats.current.ownerExp > 0 ? (cat.total / utilityStats.current.ownerExp) * 100 : 0;
                   return (
                     <div key={i} style={{ marginBottom: 6 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
@@ -1031,6 +1089,29 @@ export default function AdminDashboardPage() {
                   );
                 })
               )}
+              <div style={{ fontSize: 12, fontWeight: 800, color: COLORS.danger, textAlign: "right", marginTop: 4 }}>Total: ${fmt(utilityStats.current.ownerExp)}</div>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Gastos de operación (caja)</div>
+              {utilityStats.opCategories.length === 0 ? (
+                <div style={{ fontSize: 13, color: COLORS.muted, padding: 10 }}>Sin gastos de operación este mes</div>
+              ) : (
+                utilityStats.opCategories.map((cat, i) => {
+                  const pct = utilityStats.current.opExp > 0 ? (cat.total / utilityStats.current.opExp) * 100 : 0;
+                  return (
+                    <div key={i} style={{ marginBottom: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 2 }}>
+                        <span style={{ color: COLORS.text, fontWeight: 600 }}>{cat.category}</span>
+                        <span style={{ fontWeight: 700, color: COLORS.text }}>${fmt(cat.total)} ({pct.toFixed(0)}%)</span>
+                      </div>
+                      <div style={{ height: 6, background: "#eee", borderRadius: 3, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${pct}%`, background: COLORS.warning, borderRadius: 3 }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div style={{ fontSize: 12, fontWeight: 800, color: COLORS.danger, textAlign: "right", marginTop: 4 }}>Total: ${fmt(utilityStats.current.opExp)}</div>
             </div>
           </div>
 
