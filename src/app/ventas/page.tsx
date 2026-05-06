@@ -140,6 +140,17 @@ export default function VentasPage() {
   const supabase = getSupabaseClient();
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  // Timeout: si loading lleva >15s, mostrar botón reintentar
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => {
+      setLoading(false);
+      setLoadError(true);
+    }, 15000);
+    return () => clearTimeout(t);
+  }, [loading]);
   const [saving, setSaving] = useState(false);
 
  const [products, setProducts] = useState<Product[]>([]);
@@ -840,11 +851,27 @@ const paidTickets = useMemo(() => {
   );
 }, [tickets]);
 
-  if (loading) {
+  if (loading || loadError) {
     return (
       <div style={pageStyle}>
         <div style={shellStyle}>
-          <div style={panelStyle}>Cargando productos...</div>
+          <div style={panelStyle}>
+            {loadError ? (
+              <div style={{ textAlign: "center", padding: 40 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: "#7b2218" }}>
+                  No se pudo cargar. Revisa tu conexión.
+                </div>
+                <button
+                  onClick={() => { setLoadError(false); setLoading(true); loadProducts(); loadTickets(); loadCustomers(); }}
+                  style={{ padding: "14px 36px", borderRadius: 14, border: "none", background: "#7b2218", color: "white", fontWeight: 800, fontSize: 16, cursor: "pointer" }}
+                >
+                  Reintentar
+                </button>
+              </div>
+            ) : (
+              "Cargando productos..."
+            )}
+          </div>
         </div>
       </div>
     );
