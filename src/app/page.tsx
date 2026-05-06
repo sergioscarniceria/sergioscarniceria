@@ -164,12 +164,26 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
     if (!pin.trim()) return;
     setChecking(true);
     setError("");
-    const { data: appPin } = await supabase.from("app_pins").select("role").eq("pin", pin.trim()).single();
-    if (appPin) { onSuccess(appPin.role, ""); setChecking(false); return; }
-    const { data: empCode } = await supabase.from("employee_codes").select("name, role").eq("code", pin.trim()).single();
-    if (empCode) { onSuccess(empCode.role === "cajera" ? "cajera" : "carnicero", empCode.name); setChecking(false); return; }
-    setError("PIN incorrecto");
-    setChecking(false);
+
+    // Timeout de 10 segundos para evitar cuelgue
+    const timeout = setTimeout(() => {
+      setChecking(false);
+      setError("Conexión lenta. Intenta de nuevo.");
+    }, 10000);
+
+    try {
+      const { data: appPin } = await supabase.from("app_pins").select("role").eq("pin", pin.trim()).single();
+      if (appPin) { clearTimeout(timeout); onSuccess(appPin.role, ""); setChecking(false); return; }
+      const { data: empCode } = await supabase.from("employee_codes").select("name, role").eq("code", pin.trim()).single();
+      if (empCode) { clearTimeout(timeout); onSuccess(empCode.role === "cajera" ? "cajera" : "carnicero", empCode.name); setChecking(false); return; }
+      clearTimeout(timeout);
+      setError("PIN incorrecto");
+      setChecking(false);
+    } catch {
+      clearTimeout(timeout);
+      setError("Error de conexión. Intenta de nuevo.");
+      setChecking(false);
+    }
   }
 
   return (

@@ -622,6 +622,16 @@ async function deliverTicket(id: string) {
 
     setSaving(true);
 
+    // Timeout de 20 segundos para evitar cuelgues
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      setSaving(false);
+      alert("La conexión está lenta. Verifica si el ticket se guardó en la lista de abajo antes de reintentar.");
+    }, 20000);
+
+    try {
+
 let customerName = "MOSTRADOR";
 let customerId: string | null = null;
 
@@ -788,9 +798,19 @@ setSearch("");
 setKilos("");
 setCustomerMode("general");
 setSelectedCustomerId("");
-setSaving(false);
+if (!timedOut) setSaving(false);
 
 await loadTickets();
+
+    } catch (err) {
+      console.error("saveTicket error:", err);
+      if (!timedOut) {
+        setSaving(false);
+        alert("Error al guardar. Revisa tu conexión e intenta de nuevo.");
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   const total = useMemo(() => {

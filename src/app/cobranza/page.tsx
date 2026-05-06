@@ -159,6 +159,26 @@ export default function CobranzaPage() {
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState<TabMode>("ticket");
 
+  // Timeout global: si saving lleva >25s, resetear para no quedarse colgado
+  useEffect(() => {
+    if (!saving) return;
+    const t = setTimeout(() => {
+      setSaving(false);
+      alert("La operación tardó demasiado. Verifica si se completó antes de reintentar.");
+    }, 25000);
+    return () => clearTimeout(t);
+  }, [saving]);
+
+  // Timeout global: si loading lleva >20s, resetear
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => {
+      setLoading(false);
+      alert("La carga tardó demasiado. Intenta recargar la página.");
+    }, 20000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
