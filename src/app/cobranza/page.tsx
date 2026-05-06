@@ -22,6 +22,7 @@ type OrderItem = {
   sale_type?: "kg" | "pieza" | null;
   quantity?: number | null;
   is_fixed_price_piece?: boolean | null;
+  fixed_piece_price?: number | null;
 };
 
 type CatalogProduct = {
@@ -1217,17 +1218,26 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       return;
     }
 
-    const noteItems = (selectedTicket.order_items || []).map((item) => {
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
-      return {
-        cxc_note_id: noteData.id,
-        product: item.product,
-        quantity: Number(kg.toFixed(3)),
-        unit: "kg",
-        price: Number(Number(item.price || 0).toFixed(2)),
-        line_total: Number((kg * Number(item.price || 0)).toFixed(2)),
-      };
-    });
+    const allTickets = allSelectedTickets();
+    const noteItems = allTickets.flatMap((t) =>
+      (t.order_items || []).map((item) => {
+        const isPieza = item.sale_type === "pieza" && item.is_fixed_price_piece;
+        const qty = isPieza
+          ? Number(item.quantity || 1)
+          : Number(item.prepared_kilos || item.kilos || 0);
+        const unitPrice = isPieza
+          ? Number(item.fixed_piece_price || item.price || 0)
+          : Number(item.price || 0);
+        return {
+          cxc_note_id: noteData.id,
+          product: item.product,
+          quantity: isPieza ? qty : Number(qty.toFixed(3)),
+          unit: isPieza ? "pieza" : "kg",
+          price: Number(unitPrice.toFixed(2)),
+          line_total: Number((qty * unitPrice).toFixed(2)),
+        };
+      })
+    );
 
     if (noteItems.length > 0) {
       const { error: noteItemsError } = await supabase
@@ -1242,6 +1252,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
     }
 
+    const allTicketIds = allTickets.map((t) => t.id);
     const { error: orderError } = await supabase
       .from("orders")
       .update({
@@ -1249,7 +1260,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         payment_method: "credito",
         paid_at: new Date().toISOString(),
       })
-      .eq("id", selectedTicket.id);
+      .in("id", allTicketIds);
 
     if (orderError) {
       console.log(orderError);
@@ -1259,20 +1270,24 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     }
 
     // Imprimir 2 tickets con pagaré integrado
-    const creditTicket: TicketData = {
-      folio: ticketFolio(selectedTicket.id),
-      customerName: customer.name,
-      attendant: null,
-      cashier: null,
-      items: (selectedTicket.order_items || []).map((item) => ({
+    const allPrintItems = allTickets.flatMap((t) =>
+      (t.order_items || []).map((item) => ({
         product: item.product,
         kilos: item.kilos,
         price: item.price,
-        quantity: null,
+        quantity: item.quantity,
         sale_type: item.sale_type,
-        is_fixed_price_piece: false,
+        is_fixed_price_piece: item.is_fixed_price_piece,
+        fixed_piece_price: item.fixed_piece_price,
         prepared_kilos: item.prepared_kilos,
-      })),
+      }))
+    );
+    const creditTicket: TicketData = {
+      folio: ticketFolio(selectedTicket.id) + (extraTickets.length > 0 ? ` +${extraTickets.length}` : ""),
+      customerName: customer.name,
+      attendant: null,
+      cashier: null,
+      items: allPrintItems,
       subtotal: subtotal,
       discount: moneyRound(descuento),
       total: moneyRound(finalTotal),
