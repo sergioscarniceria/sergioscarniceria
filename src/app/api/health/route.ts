@@ -28,6 +28,11 @@ const TABLES = [
   "app_pins",
 ];
 
+/** HEAD /api/health — lightweight ping (no auth needed) */
+export async function HEAD() {
+  return new Response(null, { status: 200 });
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const secret = searchParams.get("secret");
