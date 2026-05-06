@@ -261,7 +261,6 @@ function Section({ children, id, delay = 0, className = "" }: { children: React.
 
 // ═══════════ MAIN COMPONENT ═══════════
 export default function HomePage() {
-  const supabase = getSupabaseClient();
   const [openRecipe, setOpenRecipe] = useState<string | null>(null);
   const [showOps, setShowOps] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -274,14 +273,9 @@ export default function HomePage() {
   useEffect(() => {
     const role = typeof window !== "undefined" ? sessionStorage.getItem("pin_role") : null;
     if (role) setEmpRole(role);
-    // Cargar conteos reales
-    async function loadCounts() {
-      const { count: cCount } = await supabase.from("customers").select("id", { count: "exact", head: true });
-      if (cCount) setCustomerCount(cCount + 5000);
-      const { count: pCount } = await supabase.from("products").select("id", { count: "exact", head: true }).eq("is_active", true);
-      if (pCount) setProductCount(pCount);
-    }
-    loadCounts();
+    // Conteos estáticos para no saturar Supabase con tráfico público
+    setCustomerCount(5300);
+    setProductCount(120);
   }, []);
 
   useEffect(() => {
