@@ -1037,7 +1037,7 @@ export default function CajaPage() {
 
     const [movRes, expRes, creditRes, cxcNotesRes, cxcPaysRes, cancelledOrdersRes,
            dayOrdersRes, editedOrdersRes, cxcBalanceRes,
-           yMovRes, mMovRes, aMovRes, tomorrowOrdersRes] = await Promise.all([
+           yMovRes, mMovRes, aMovRes, tomorrowOrdersRes, dailySummariesRes] = await Promise.all([
       supabaseRef.from("cash_movements").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cash_expenses").select("*").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
@@ -1056,6 +1056,8 @@ export default function CajaPage() {
       supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", aStart).lte("created_at", aEnd),
       // Pedidos para mañana
       supabaseRef.from("orders").select("id, customer_name, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece)").in("status", ["nuevo", "pendiente", "proceso"]).gte("delivery_date", fmtD(tomorrowDate)).lte("delivery_date", fmtD(tomorrowDate)),
+      // Fallback: daily_summaries para comparativos históricos
+      supabaseRef.from("daily_summaries").select("date, venta").in("date", [fmtD(yesterdayDate), fmtD(lastMonthDate), fmtD(lastYearDate)]),
     ]);
 
     const dayMovements = (movRes.data || []) as Movement[];
@@ -1071,6 +1073,11 @@ export default function CajaPage() {
     const lastMonthMov = mMovRes.data || [];
     const lastYearMov = aMovRes.data || [];
     const tomorrowOrders = tomorrowOrdersRes.data || [];
+    // Mapa de daily_summaries para fallback histórico
+    const dsMap: Record<string, number> = {};
+    for (const ds of (dailySummariesRes.data || []) as any[]) {
+      dsMap[ds.date] = Number(ds.venta || 0);
+    }
 
     // Enriquecer movimientos con datos de orders (cliente y carnicero)
     const refIds = dayMovements.filter(m => m.reference_id).map(m => m.reference_id!);
@@ -1140,9 +1147,9 @@ export default function CajaPage() {
     const ventasHoy = active.filter((m: any) => m.type === "venta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const gastosOpHoy = dayExpenses.reduce((a: number, e: any) => a + Number(e.amount || 0), 0);
     const utilidadHoy = ventasHoy - gastosOpHoy;
-    const ventasAyer = sumMov(yesterdayMov);
-    const ventasMesAnt = sumMov(lastMonthMov);
-    const ventasAnioAnt = sumMov(lastYearMov);
+    const ventasAyer = sumMov(yesterdayMov) || dsMap[fmtD(yesterdayDate)] || 0;
+    const ventasMesAnt = sumMov(lastMonthMov) || dsMap[fmtD(lastMonthDate)] || 0;
+    const ventasAnioAnt = sumMov(lastYearMov) || dsMap[fmtD(lastYearDate)] || 0;
 
     // Saldo CxC acumulado
     const saldoCxcTotal = cxcBalanceAll.reduce((a: number, n: any) => a + Number(n.balance_due || 0), 0);
