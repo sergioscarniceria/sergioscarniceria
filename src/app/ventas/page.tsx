@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { resilientQuery } from "@/lib/resilience";
 import { smartPrintTicket, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import ScaleButton from "@/components/ScaleButton";
@@ -267,19 +268,24 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
   async function loadProducts() {
     setLoading(true);
 
-    const { data, error } = await supabase
-      .from("products")
-     .select("id, name, price, category, fixed_piece_price")
-      .order("category", { ascending: true })
-      .order("name", { ascending: true });
+    const { data, error, fromCache } = await resilientQuery(
+      () =>
+        supabase
+          .from("products")
+          .select("id, name, price, category, fixed_piece_price")
+          .order("category", { ascending: true })
+          .order("name", { ascending: true }),
+      "ventas_products"
+    );
 
-    if (error) {
+    if (error && !data) {
       console.log(error);
       alert("No se pudieron cargar los productos");
       setLoading(false);
       return;
     }
 
+    if (fromCache) console.log("[Resilience] Productos cargados desde cache local");
     setProducts((data as Product[]) || []);
     setLoading(false);
   }

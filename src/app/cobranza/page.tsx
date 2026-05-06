@@ -3,6 +3,7 @@
 import Link from "next/link";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { resilientQuery } from "@/lib/resilience";
 import { logAudit } from "@/lib/audit-log";
 import QrScanner from "@/components/QrScanner";
 import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketData } from "@/lib/printer";
@@ -390,11 +391,20 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     const ticketsError = pendientesRes.error || pagadosRes.error;
 
     const [customersRes, productsRes] = await Promise.all([
-      supabase.from("customers").select("id, name, credit_enabled, credit_days, customer_type").order("name", { ascending: true }),
-      supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").order("name", { ascending: true }),
+      resilientQuery(
+        () => supabase.from("customers").select("id, name, credit_enabled, credit_days, customer_type").order("name", { ascending: true }),
+        "cobranza_customers"
+      ),
+      resilientQuery(
+        () => supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").order("name", { ascending: true }),
+        "cobranza_products"
+      ),
     ]);
 
-    if (ticketsError || customersRes.error) {
+    if (customersRes.fromCache) console.log("[Resilience] Clientes cargados desde cache");
+    if (productsRes.fromCache) console.log("[Resilience] Productos cargados desde cache");
+
+    if (ticketsError || (customersRes.error && !customersRes.data)) {
       console.log(ticketsError || customersRes.error);
       alert("No se pudo cargar cobranza");
       setLoading(false);
