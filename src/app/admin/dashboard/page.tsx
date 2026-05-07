@@ -126,14 +126,15 @@ export default function AdminDashboardPage() {
 
   async function loadDashboard() {
     setLoading(true);
+    try {
 
-    // Fetch ALL orders in range (Supabase default limit = 1000, paginate to get all)
+    // Fetch orders in range (max 2000 to avoid overload)
     let allOrders: any[] = [];
     let page = 0;
     const PAGE_SIZE = 1000;
-    let hasMore = true;
+    const MAX_PAGES = 2;
 
-    while (hasMore) {
+    while (page < MAX_PAGES) {
       let query = supabase
         .from("orders")
         .select(`
@@ -155,13 +156,11 @@ export default function AdminDashboardPage() {
 
       if (pageError) {
         console.log(pageError);
-        alert("No se pudo cargar el dashboard");
-        setLoading(false);
-        return;
+        break;
       }
 
       allOrders = allOrders.concat(pageData || []);
-      hasMore = (pageData || []).length === PAGE_SIZE;
+      if ((pageData || []).length < PAGE_SIZE) break;
       page++;
     }
 
@@ -338,7 +337,11 @@ export default function AdminDashboardPage() {
       }
     } catch { /* ignore */ }
 
-    setLoading(false);
+    } catch (err) {
+      console.log("Dashboard load error:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function refreshMarketPrices() {

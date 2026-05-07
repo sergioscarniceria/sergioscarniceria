@@ -76,35 +76,38 @@ export default function AdminClientesPage() {
 
   async function loadCustomers() {
     setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("*")
-      .order("name", { ascending: true });
-
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los clientes");
-      setLoading(false);
-      return;
-    }
-
-    setCustomers((data as Customer[]) || []);
-
-    // Check which customers have portal access
-    const { data: profiles } = await supabase
-      .from("customer_profiles")
-      .select("customer_id");
-
-    if (profiles) {
-      const accessMap: Record<string, boolean> = {};
-      for (const p of profiles) {
-        if (p.customer_id) accessMap[p.customer_id] = true;
+      if (error) {
+        console.log(error);
+        return;
       }
-      setPortalAccess(accessMap);
-    }
 
-    setLoading(false);
+      setCustomers((data as Customer[]) || []);
+
+      // Check which customers have portal access
+      const { data: profiles } = await supabase
+        .from("customer_profiles")
+        .select("customer_id")
+        .limit(500);
+
+      if (profiles) {
+        const accessMap: Record<string, boolean> = {};
+        for (const p of profiles) {
+          if (p.customer_id) accessMap[p.customer_id] = true;
+        }
+        setPortalAccess(accessMap);
+      }
+    } catch (err) {
+      console.log("Error loading customers:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createPortalAccess() {
