@@ -385,6 +385,7 @@ export default function AdminCxcPage() {
   async function loadRecentPayments() {
     setLoadingMovimientos(true);
     setShowMovimientos(true);
+    try {
 
     const [paymentsRes, notesRes] = await Promise.all([
       supabase
@@ -401,7 +402,6 @@ export default function AdminCxcPage() {
 
     if (paymentsRes.error || notesRes.error) {
       console.log(paymentsRes.error, notesRes.error);
-      alert("No se pudieron cargar los movimientos");
       setLoadingMovimientos(false);
       return;
     }
@@ -426,40 +426,47 @@ export default function AdminCxcPage() {
 
     const combined = [...payments, ...newNotes].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30);
     setRecentMovements(combined);
-    setLoadingMovimientos(false);
+
+    } catch (err) {
+      console.log("Error loading recent payments:", err);
+    } finally {
+      setLoadingMovimientos(false);
+    }
   }
 
   async function loadData() {
     setLoading(true);
+    try {
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      const { data: notesData, error: notesError } = await supabase
+        .from("cxc_notes")
+        .select("*")
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    const { data: notesData, error: notesError } = await supabase
-      .from("cxc_notes")
-      .select("*")
-      .order("note_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      if (customersError) {
+        console.log("Error cargando clientes:", customersError);
+        return;
+      }
 
-    if (customersError) {
-      console.log(customersError);
-      alert("No se pudieron cargar los clientes");
+      if (notesError) {
+        console.log("Error cargando notas CxC:", notesError);
+        return;
+      }
+
+      setCustomers((customersData as Customer[]) || []);
+      setNotes((notesData as CxcNote[]) || []);
+    } catch (err) {
+      console.log("Error en loadData CxC:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (notesError) {
-      console.log(notesError);
-      alert("No se pudieron cargar las cuentas por cobrar");
-      setLoading(false);
-      return;
-    }
-
-    setCustomers((customersData as Customer[]) || []);
-    setNotes((notesData as CxcNote[]) || []);
-    setLoading(false);
   }
 
   async function loadItemsForCustomer(customerId: string) {

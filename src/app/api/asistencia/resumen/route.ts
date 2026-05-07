@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
       `)
       .gte("fecha", desde)
       .lte("fecha", hasta)
-      .order("fecha", { ascending: true });
+      .order("fecha", { ascending: true })
+      .limit(5000);
 
     if (resumenError) {
       console.log(resumenError);
@@ -59,7 +60,8 @@ export async function GET(req: NextRequest) {
       `)
       .gte("timestamp_evento", `${desde}T00:00:00`)
       .lte("timestamp_evento", `${hasta}T23:59:59`)
-      .order("timestamp_evento", { ascending: true });
+      .order("timestamp_evento", { ascending: true })
+      .limit(5000);
 
     if (eventosError) {
       console.log(eventosError);

@@ -47,55 +47,59 @@ CREATE POLICY "cash_expenses_all" ON cash_expenses FOR ALL USING (true) WITH CHE
 `;
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const secret = searchParams.get("secret");
+  try {
+    const { searchParams } = new URL(req.url);
+    const secret = searchParams.get("secret");
 
-  if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
-    return NextResponse.json(
-      {
-        error: "Secret inválido",
-        sql: SQL_TABLES,
-      },
-      { status: 401 }
-    );
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
+      return NextResponse.json(
+        {
+          error: "Secret inválido",
+          sql: SQL_TABLES,
+        },
+        { status: 401 }
+      );
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        {
+          error: "Faltan variables de entorno (SUPABASE_SERVICE_ROLE_KEY)",
+          sql: SQL_TABLES,
+          hint: "Corre este SQL manualmente en Supabase SQL Editor",
+        },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Intentar insertar una apertura de prueba para verificar que la tabla existe
+    const { error: testError } = await supabase
+      .from("cash_openings")
+      .select("id")
+      .limit(1);
+
+    if (testError) {
+      return NextResponse.json(
+        {
+          error: "Las tablas no existen todavía",
+          sql: SQL_TABLES,
+          hint: "Corre el SQL de arriba en Supabase SQL Editor y luego vuelve a llamar este endpoint",
+        },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: "Tablas de caja verificadas correctamente",
+      tables: ["cash_openings", "cash_expenses"],
+    });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json(
-      {
-        error: "Faltan variables de entorno (SUPABASE_SERVICE_ROLE_KEY)",
-        sql: SQL_TABLES,
-        hint: "Corre este SQL manualmente en Supabase SQL Editor",
-      },
-      { status: 500 }
-    );
-  }
-
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  // Intentar insertar una apertura de prueba para verificar que la tabla existe
-  const { error: testError } = await supabase
-    .from("cash_openings")
-    .select("id")
-    .limit(1);
-
-  if (testError) {
-    return NextResponse.json(
-      {
-        error: "Las tablas no existen todavía",
-        sql: SQL_TABLES,
-        hint: "Corre el SQL de arriba en Supabase SQL Editor y luego vuelve a llamar este endpoint",
-      },
-      { status: 400 }
-    );
-  }
-
-  return NextResponse.json({
-    ok: true,
-    message: "Tablas de caja verificadas correctamente",
-    tables: ["cash_openings", "cash_expenses"],
-  });
 }

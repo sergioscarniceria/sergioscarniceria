@@ -56,17 +56,26 @@ export default function ProveedoresPage() {
 
   async function loadData() {
     setLoading(true);
-    const [s, p, e, pay] = await Promise.all([
-      supabase.from("suppliers").select("*").order("name"),
-      supabase.from("livestock_purchases").select("supplier_id, total_cost, total_live"),
-      supabase.from("supplier_expenses").select("supplier_id, amount"),
-      supabase.from("supplier_payments").select("supplier_id, amount"),
-    ]);
-    if (s.data) setSuppliers(s.data);
-    if (p.data) setPurchases(p.data);
-    if (e.data) setExpenses(e.data);
-    if (pay.data) setPayments(pay.data);
-    setLoading(false);
+    try {
+      const [s, p, e, pay] = await Promise.all([
+        supabase.from("suppliers").select("*").order("name").limit(500),
+        supabase.from("livestock_purchases").select("supplier_id, total_cost, total_live").limit(500),
+        supabase.from("supplier_expenses").select("supplier_id, amount").limit(500),
+        supabase.from("supplier_payments").select("supplier_id, amount").limit(500),
+      ]);
+      if (s.error) console.log("Error cargando suppliers:", s.error);
+      if (p.error) console.log("Error cargando purchases:", p.error);
+      if (e.error) console.log("Error cargando expenses:", e.error);
+      if (pay.error) console.log("Error cargando payments:", pay.error);
+      if (s.data) setSuppliers(s.data);
+      if (p.data) setPurchases(p.data);
+      if (e.data) setExpenses(e.data);
+      if (pay.data) setPayments(pay.data);
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const balances = useMemo(() => {

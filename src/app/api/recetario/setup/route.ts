@@ -47,26 +47,30 @@ CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredient
 `;
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const secret = searchParams.get("secret");
+  try {
+    const { searchParams } = new URL(req.url);
+    const secret = searchParams.get("secret");
 
-  if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
-    return NextResponse.json({ error: "Secret inválido", sql: SQL_TABLES }, { status: 401 });
+    if (![process.env.ADMIN_SECRET, process.env.NEXT_PUBLIC_ADMIN_SECRET].filter(Boolean).includes(secret || "")) {
+      return NextResponse.json({ error: "Secret inválido", sql: SQL_TABLES }, { status: 401 });
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json({ error: "Faltan variables", sql: SQL_TABLES, hint: "Corre el SQL manualmente" }, { status: 500 });
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const { error } = await supabase.from("recipes").select("id").limit(1);
+
+    if (error) {
+      return NextResponse.json({ error: "Tablas no existen", sql: SQL_TABLES, hint: "Corre el SQL en Supabase SQL Editor" }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true, message: "Tablas de recetario verificadas", tables: ["recipes", "recipe_ingredients"] });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json({ error: "Faltan variables", sql: SQL_TABLES, hint: "Corre el SQL manualmente" }, { status: 500 });
-  }
-
-  const supabase = createClient(supabaseUrl, serviceKey);
-  const { error } = await supabase.from("recipes").select("id").limit(1);
-
-  if (error) {
-    return NextResponse.json({ error: "Tablas no existen", sql: SQL_TABLES, hint: "Corre el SQL en Supabase SQL Editor" }, { status: 400 });
-  }
-
-  return NextResponse.json({ ok: true, message: "Tablas de recetario verificadas", tables: ["recipes", "recipe_ingredients"] });
 }

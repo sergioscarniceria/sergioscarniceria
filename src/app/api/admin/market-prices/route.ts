@@ -14,19 +14,23 @@ function getSupabase() {
  * Returns all market prices with comparison to our prices
  */
 export async function GET() {
-  const supabase = getSupabase();
+  try {
+    const supabase = getSupabase();
 
-  const { data: marketPrices, error } = await supabase
-    .from("market_prices")
-    .select("*")
-    .order("category", { ascending: true })
-    .order("product_name", { ascending: true });
+    const { data: marketPrices, error } = await supabase
+      .from("market_prices")
+      .select("*")
+      .order("category", { ascending: true })
+      .order("product_name", { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ prices: marketPrices || [] });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  return NextResponse.json({ prices: marketPrices || [] });
 }
 
 /**

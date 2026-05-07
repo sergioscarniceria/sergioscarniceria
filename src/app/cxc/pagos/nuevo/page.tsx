@@ -93,51 +93,55 @@ export default function NuevoPagoCxcPage() {
 
   async function loadCustomers() {
     setLoading(true);
+    try {
+      // Traer clientes que tengan notas abiertas (con saldo > 0), no solo los de crédito activo
+      const { data: notesWithBalance } = await supabase
+        .from("cxc_notes")
+        .select("customer_id")
+        .eq("status", "abierta")
+        .gt("balance_due", 0);
 
-    // Traer clientes que tengan notas abiertas (con saldo > 0), no solo los de crédito activo
-    const { data: notesWithBalance } = await supabase
-      .from("cxc_notes")
-      .select("customer_id")
-      .eq("status", "abierta")
-      .gt("balance_due", 0);
+      const customerIdsWithBalance = [...new Set((notesWithBalance || []).map((n: any) => n.customer_id).filter(Boolean))];
 
-    const customerIdsWithBalance = [...new Set((notesWithBalance || []).map((n: any) => n.customer_id).filter(Boolean))];
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_days")
+        .in("id", customerIdsWithBalance.length > 0 ? customerIdsWithBalance : ["__none__"])
+        .order("name", { ascending: true });
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_days")
-      .in("id", customerIdsWithBalance.length > 0 ? customerIdsWithBalance : ["__none__"])
-      .order("name", { ascending: true });
+      if (error) {
+        console.log("Error cargando clientes con crédito:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los clientes con crédito");
+      setCustomers((data as Customer[]) || []);
+    } catch (err) {
+      console.log("Error en loadCustomers:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setCustomers((data as Customer[]) || []);
-    setLoading(false);
   }
 
   async function selectCustomer(customer: Customer) {
     setSelectedCustomer(customer);
+    try {
+      const { data, error } = await supabase
+        .from("cxc_notes")
+        .select("id, customer_id, customer_name, note_number, note_date, due_date, total_amount, balance_due, status, notes")
+        .eq("customer_id", customer.id)
+        .gt("balance_due", 0)
+        .order("note_date", { ascending: true })
+        .order("created_at", { ascending: true });
 
-    const { data, error } = await supabase
-      .from("cxc_notes")
-      .select("id, customer_id, customer_name, note_number, note_date, due_date, total_amount, balance_due, status, notes")
-      .eq("customer_id", customer.id)
-      .gt("balance_due", 0)
-      .order("note_date", { ascending: true })
-      .order("created_at", { ascending: true });
+      if (error) {
+        console.log("Error cargando notas abiertas:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar las notas abiertas");
-      return;
+      setOpenNotes((data as CxcNote[]) || []);
+    } catch (err) {
+      console.log("Error en selectCustomer:", err);
     }
-
-    setOpenNotes((data as CxcNote[]) || []);
   }
 
   function clearForm() {
@@ -263,112 +267,110 @@ export default function NuevoPagoCxcPage() {
   }
 
   setSaving(true);
+  try {
+    const { data: paymentData, error: paymentError } = await supabase
+      .from("cxc_payments")
+      .insert([
+        {
+          customer_id: selectedCustomer.id,
+          customer_name: selectedCustomer.name,
+          payment_date: paymentDate,
+          amount: Number(paymentAmount.toFixed(2)),
+          payment_method: paymentMethod,
+          reference: reference.trim() || null,
+          notes: notes.trim() || null,
+        },
+      ])
+      .select()
+      .single();
 
-  const { data: paymentData, error: paymentError } = await supabase
-    .from("cxc_payments")
+    if (paymentError || !paymentData) {
+      console.log("Error guardando pago:", paymentError);
+      return;
+    }
+    const { error: cashMovementError } = await supabase
+    .from("cash_movements")
     .insert([
       {
-        customer_id: selectedCustomer.id,
-        customer_name: selectedCustomer.name,
-        payment_date: paymentDate,
+        type: "cxc_pago",
+        source: "cxc",
         amount: Number(paymentAmount.toFixed(2)),
         payment_method: paymentMethod,
-        reference: reference.trim() || null,
-        notes: notes.trim() || null,
+        reference_id: paymentData.id,
       },
-    ])
-    .select()
-    .single();
+    ]);
 
-  if (paymentError || !paymentData) {
-    console.log(paymentError);
-    alert("No se pudo guardar el pago");
-    setSaving(false);
-    return;
-  }
-  const { error: cashMovementError } = await supabase
-  .from("cash_movements")
-  .insert([
-    {
-      type: "cxc_pago",
-      source: "cxc",
-      amount: Number(paymentAmount.toFixed(2)),
-      payment_method: paymentMethod,
-      reference_id: paymentData.id,
-    },
-  ]);
-
-if (cashMovementError) {
-  console.log(cashMovementError);
-  alert("El pago se guardó, pero falló el movimiento de caja");
-  setSaving(false);
-  return;
-}
-
-  let remaining = paymentAmount;
-  const appliedDetails: { noteNumber: string; applied: number; newBalance: number }[] = [];
-  let newTotalBalance = 0;
-
-  for (const note of openNotes) {
-    if (remaining <= 0) {
-      newTotalBalance += Number(note.balance_due || 0);
-      continue;
-    }
-
-    const currentBalance = Number(note.balance_due || 0);
-    if (currentBalance <= 0) continue;
-
-    const amountApplied = Math.min(remaining, currentBalance);
-    const newBalance = Number((currentBalance - amountApplied).toFixed(2));
-
-    appliedDetails.push({
-      noteNumber: note.note_number || note.id.slice(0, 8),
-      applied: amountApplied,
-      newBalance,
-    });
-    newTotalBalance += newBalance;
-
-    const { error: updateError } = await supabase
-      .from("cxc_notes")
-      .update({
-        balance_due: newBalance,
-        status: newBalance <= 0 ? "pagada" : "abierta",
-      })
-      .eq("id", note.id);
-
-    if (updateError) {
-      console.log(updateError);
-      alert("El pago se guardó, pero falló la aplicación a las notas");
-      setSaving(false);
+    if (cashMovementError) {
+      console.log("El pago se guardó, pero falló el movimiento de caja:", cashMovementError);
       return;
     }
 
-    remaining = Number((remaining - amountApplied).toFixed(2));
+    let remaining = paymentAmount;
+    const appliedDetails: { noteNumber: string; applied: number; newBalance: number }[] = [];
+    let newTotalBalance = 0;
+
+    for (const note of openNotes) {
+      if (remaining <= 0) {
+        newTotalBalance += Number(note.balance_due || 0);
+        continue;
+      }
+
+      const currentBalance = Number(note.balance_due || 0);
+      if (currentBalance <= 0) continue;
+
+      const amountApplied = Math.min(remaining, currentBalance);
+      const newBalance = Number((currentBalance - amountApplied).toFixed(2));
+
+      appliedDetails.push({
+        noteNumber: note.note_number || note.id.slice(0, 8),
+        applied: amountApplied,
+        newBalance,
+      });
+      newTotalBalance += newBalance;
+
+      const { error: updateError } = await supabase
+        .from("cxc_notes")
+        .update({
+          balance_due: newBalance,
+          status: newBalance <= 0 ? "pagada" : "abierta",
+        })
+        .eq("id", note.id);
+
+      if (updateError) {
+        console.log("El pago se guardó, pero falló la aplicación a las notas:", updateError);
+        return;
+      }
+
+      remaining = Number((remaining - amountApplied).toFixed(2));
+    }
+
+    // Guardar desglose de notas afectadas en el pago
+    if (appliedDetails.length > 0) {
+      await supabase
+        .from("cxc_payments")
+        .update({ applied_notes: appliedDetails })
+        .eq("id", paymentData.id);
+    }
+
+    // ─── Imprimir ticket de abono ───
+    printAbonoTicket({
+      customerName: selectedCustomer.name,
+      paymentDate,
+      paymentAmount,
+      paymentMethod,
+      appliedDetails,
+      newTotalBalance,
+    });
+
+    alert("Pago registrado y aplicado correctamente");
+
+    clearForm();
+    await loadCustomers();
+  } catch (err) {
+    console.log("Error en savePaymentBase:", err);
+  } finally {
+    setSaving(false);
   }
-
-  // Guardar desglose de notas afectadas en el pago
-  if (appliedDetails.length > 0) {
-    await supabase
-      .from("cxc_payments")
-      .update({ applied_notes: appliedDetails })
-      .eq("id", paymentData.id);
-  }
-
-  // ─── Imprimir ticket de abono ───
-  printAbonoTicket({
-    customerName: selectedCustomer.name,
-    paymentDate,
-    paymentAmount,
-    paymentMethod,
-    appliedDetails,
-    newTotalBalance,
-  });
-
-  alert("Pago registrado y aplicado correctamente");
-
-  clearForm();
-  await loadCustomers();
-  setSaving(false);
 }
 
   if (loading) {

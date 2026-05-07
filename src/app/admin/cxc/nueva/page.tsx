@@ -118,35 +118,37 @@ export default function NuevaNotaCxcPage() {
 
   async function loadData() {
     setLoading(true);
+    try {
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select("id, name, price, fixed_piece_price, sale_type, is_active, is_excluded_from_discount")
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: productsData, error: productsError } = await supabase
-      .from("products")
-      .select("id, name, price, fixed_piece_price, sale_type, is_active, is_excluded_from_discount")
-      .eq("is_active", true)
-      .order("name", { ascending: true });
+      if (customersError) {
+        console.log("Error cargando clientes:", customersError);
+        return;
+      }
 
-    if (customersError) {
-      console.log(customersError);
-      alert("No se pudieron cargar los clientes");
+      if (productsError) {
+        console.log("Error cargando productos:", productsError);
+        return;
+      }
+
+      setCustomers((customersData as Customer[]) || []);
+      setProducts((productsData as Product[]) || []);
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (productsError) {
-      console.log(productsError);
-      alert("No se pudieron cargar los productos");
-      setLoading(false);
-      return;
-    }
-
-    setCustomers((customersData as Customer[]) || []);
-    setProducts((productsData as Product[]) || []);
-    setLoading(false);
   }
 
   async function selectCustomer(customer: Customer) {

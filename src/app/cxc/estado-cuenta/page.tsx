@@ -133,80 +133,84 @@ export default function EstadoCuentaAdminPage() {
 
   async function loadCustomers() {
     setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      if (error) {
+        console.log("Error cargando clientes:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los clientes");
+      setCustomers((data as Customer[]) || []);
+    } catch (err) {
+      console.log("Error en loadCustomers:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setCustomers((data as Customer[]) || []);
-    setLoading(false);
   }
 
   async function loadCustomerStatement(customer: Customer) {
     setLoading(true);
     setSelectedCustomer(customer);
+    try {
+      const [notesRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .eq("customer_id", customer.id)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("cxc_payments")
+          .select("*")
+          .eq("customer_id", customer.id)
+          .order("payment_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+      ]);
 
-    const [notesRes, paymentsRes] = await Promise.all([
-      supabase
-        .from("cxc_notes")
-        .select("*")
-        .eq("customer_id", customer.id)
-        .order("note_date", { ascending: false })
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("cxc_payments")
-        .select("*")
-        .eq("customer_id", customer.id)
-        .order("payment_date", { ascending: false })
-        .order("created_at", { ascending: false }),
-    ]);
-
-    if (notesRes.error) {
-      console.log(notesRes.error);
-      alert("No se pudieron cargar las notas");
-      setLoading(false);
-      return;
-    }
-
-    if (paymentsRes.error) {
-      console.log(paymentsRes.error);
-      alert("No se pudieron cargar los pagos");
-      setLoading(false);
-      return;
-    }
-
-    const loadedNotes = (notesRes.data as CxcNote[]) || [];
-    setNotes(loadedNotes);
-    setPayments((paymentsRes.data as CxcPayment[]) || []);
-    setLoading(false);
-
-    // Load items for all notes
-    if (loadedNotes.length > 0) {
-      setLoadingItems(true);
-      const noteIds = loadedNotes.map((n) => n.id);
-      const { data: itemsData, error: itemsError } = await supabase
-        .from("cxc_note_items")
-        .select("*")
-        .in("cxc_note_id", noteIds);
-
-      if (!itemsError && itemsData) {
-        const grouped: Record<string, CxcNoteItem[]> = {};
-        for (const id of noteIds) grouped[id] = [];
-        for (const row of (itemsData as CxcNoteItem[])) {
-          if (!grouped[row.cxc_note_id]) grouped[row.cxc_note_id] = [];
-          grouped[row.cxc_note_id].push(row);
-        }
-        setNoteItemsMap(grouped);
+      if (notesRes.error) {
+        console.log("Error cargando notas:", notesRes.error);
+        return;
       }
-      setLoadingItems(false);
+
+      if (paymentsRes.error) {
+        console.log("Error cargando pagos:", paymentsRes.error);
+        return;
+      }
+
+      const loadedNotes = (notesRes.data as CxcNote[]) || [];
+      setNotes(loadedNotes);
+      setPayments((paymentsRes.data as CxcPayment[]) || []);
+      setLoading(false);
+
+      // Load items for all notes
+      if (loadedNotes.length > 0) {
+        setLoadingItems(true);
+        const noteIds = loadedNotes.map((n) => n.id);
+        const { data: itemsData, error: itemsError } = await supabase
+          .from("cxc_note_items")
+          .select("*")
+          .in("cxc_note_id", noteIds);
+
+        if (!itemsError && itemsData) {
+          const grouped: Record<string, CxcNoteItem[]> = {};
+          for (const id of noteIds) grouped[id] = [];
+          for (const row of (itemsData as CxcNoteItem[])) {
+            if (!grouped[row.cxc_note_id]) grouped[row.cxc_note_id] = [];
+            grouped[row.cxc_note_id].push(row);
+          }
+          setNoteItemsMap(grouped);
+        }
+        setLoadingItems(false);
+      }
+    } catch (err) {
+      console.log("Error en loadCustomerStatement:", err);
+    } finally {
+      setLoading(false);
     }
   }
 

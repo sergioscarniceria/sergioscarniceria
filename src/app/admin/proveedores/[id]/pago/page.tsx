@@ -42,20 +42,25 @@ export default function PagoProveedorPage() {
 
   async function loadData() {
     setLoading(true);
-    const [s, pur, exp, pay] = await Promise.all([
-      supabase.from("suppliers").select("name, type").eq("id", supplierId).single(),
-      supabase.from("livestock_purchases").select("total_cost, total_live").eq("supplier_id", supplierId),
-      supabase.from("supplier_expenses").select("amount").eq("supplier_id", supplierId),
-      supabase.from("supplier_payments").select("amount").eq("supplier_id", supplierId),
-    ]);
+    try {
+      const [s, pur, exp, pay] = await Promise.all([
+        supabase.from("suppliers").select("name, type").eq("id", supplierId).single(),
+        supabase.from("livestock_purchases").select("total_cost, total_live").eq("supplier_id", supplierId),
+        supabase.from("supplier_expenses").select("amount").eq("supplier_id", supplierId),
+        supabase.from("supplier_payments").select("amount").eq("supplier_id", supplierId),
+      ]);
 
-    if (s.data) setSupplierName(s.data.name);
+      if (s.data) setSupplierName(s.data.name);
 
-    const cargos = (pur.data || []).reduce((a, p) => a + Number(p.total_cost || p.total_live || 0), 0)
-      + (exp.data || []).reduce((a, e) => a + Number(e.amount || 0), 0);
-    const pagos = (pay.data || []).reduce((a, p) => a + Number(p.amount || 0), 0);
-    setSaldoActual(Math.max(0, cargos - pagos));
-    setLoading(false);
+      const cargos = (pur.data || []).reduce((a, p) => a + Number(p.total_cost || p.total_live || 0), 0)
+        + (exp.data || []).reduce((a, e) => a + Number(e.amount || 0), 0);
+      const pagos = (pay.data || []).reduce((a, p) => a + Number(p.amount || 0), 0);
+      setSaldoActual(Math.max(0, cargos - pagos));
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function generateFolio() {

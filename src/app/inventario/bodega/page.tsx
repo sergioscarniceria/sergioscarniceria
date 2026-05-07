@@ -87,13 +87,19 @@ export default function InventarioBodegaPage() {
 
   async function loadItems() {
     setLoading(true);
+    try {
     const { data } = await supabase
       .from("bodega_items")
       .select("*")
       .eq("is_active", true)
-      .order("name");
+      .order("name")
+      .limit(500);
     setItems((data as BodegaItem[]) || []);
-    setLoading(false);
+    } catch (err) {
+      console.log("Error en loadItems bodega:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleNewItem() {

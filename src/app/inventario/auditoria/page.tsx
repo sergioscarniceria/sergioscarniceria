@@ -97,11 +97,11 @@ export default function AuditoriaPage() {
 
   async function loadAll() {
     setLoading(true);
-
+    try {
     const [bodegaRes, productsRes, auditsRes] = await Promise.all([
       supabase.from("bodega_items").select("id, name, unit, stock, cost").eq("is_active", true).order("name"),
       supabase.from("products").select("id, name, stock, purchase_price, category, fixed_piece_price, is_active").eq("is_active", true).order("name"),
-      supabase.from("inventory_audits").select("*").order("audit_date", { ascending: false }).order("created_at", { ascending: false }),
+      supabase.from("inventory_audits").select("*").order("audit_date", { ascending: false }).order("created_at", { ascending: false }).limit(500),
     ]);
 
     const bodegaItems: CatalogItem[] = ((bodegaRes.data as any[]) || []).map((b) => ({
@@ -132,8 +132,11 @@ export default function AuditoriaPage() {
       setActiveItems([]);
       setCountDrafts({});
     }
-
-    setLoading(false);
+    } catch (err) {
+      console.log("Error en loadAll auditoria:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadActiveAudit(audit: Audit) {

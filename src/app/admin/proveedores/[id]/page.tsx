@@ -70,17 +70,26 @@ export default function ProveedorDetallePage() {
 
   async function loadData() {
     setLoading(true);
-    const [s, p, e, pay] = await Promise.all([
-      supabase.from("suppliers").select("*").eq("id", supplierId).single(),
-      supabase.from("livestock_purchases").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }),
-      supabase.from("supplier_expenses").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }),
-      supabase.from("supplier_payments").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }),
-    ]);
-    if (s.data) setSupplier(s.data);
-    if (p.data) setPurchases(p.data);
-    if (e.data) setExpenses(e.data);
-    if (pay.data) setPayments(pay.data);
-    setLoading(false);
+    try {
+      const [s, p, e, pay] = await Promise.all([
+        supabase.from("suppliers").select("*").eq("id", supplierId).single(),
+        supabase.from("livestock_purchases").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }).limit(500),
+        supabase.from("supplier_expenses").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }).limit(500),
+        supabase.from("supplier_payments").select("*").eq("supplier_id", supplierId).order("date", { ascending: false }).limit(500),
+      ]);
+      if (s.error) console.log("Error cargando supplier:", s.error);
+      if (p.error) console.log("Error cargando purchases:", p.error);
+      if (e.error) console.log("Error cargando expenses:", e.error);
+      if (pay.error) console.log("Error cargando payments:", pay.error);
+      if (s.data) setSupplier(s.data);
+      if (p.data) setPurchases(p.data);
+      if (e.data) setExpenses(e.data);
+      if (pay.data) setPayments(pay.data);
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const totalCargos = useMemo(() => {

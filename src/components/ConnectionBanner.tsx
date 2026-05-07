@@ -55,7 +55,7 @@ export default function ConnectionBanner() {
     }
 
     ping();
-    pingRef.current = setInterval(ping, 15000);
+    pingRef.current = setInterval(ping, 30000);
     return () => {
       if (pingRef.current) clearInterval(pingRef.current);
     };

@@ -51,18 +51,23 @@ export default function AdminDisplayPage() {
   }, []);
 
   async function loadMedia() {
-    const { data, error } = await supabase
-      .from("display_media")
-      .select("*")
-      .order("sort_order", { ascending: true })
-      .order("created_at", { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from("display_media")
+        .select("*")
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false })
+        .limit(200);
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los medios");
+      if (error) {
+        console.log(error);
+      }
+      setMedia((data as MediaItem[]) || []);
+    } catch (err) {
+      console.log("Error loading media:", err);
+    } finally {
+      setLoading(false);
     }
-    setMedia((data as MediaItem[]) || []);
-    setLoading(false);
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {

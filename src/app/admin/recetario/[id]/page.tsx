@@ -97,13 +97,14 @@ export default function EditRecetaPage() {
 
   async function loadAll() {
     setLoading(true);
+    try {
     const [recipeRes, productsRes] = await Promise.all([
       supabase.from("recipes").select("*, recipe_ingredients (*)").eq("id", recipeId).single(),
-      supabase.from("products").select("id, name, price, sell_by_weight").eq("active", true).order("name"),
+      supabase.from("products").select("id, name, price, sell_by_weight").eq("active", true).order("name").limit(500),
     ]);
 
     if (recipeRes.error || !recipeRes.data) {
-      alert("No se encontró la receta");
+      console.log("Recipe not found:", recipeRes.error);
       router.push("/admin/recetario");
       return;
     }
@@ -127,7 +128,11 @@ export default function EditRecetaPage() {
       }))
     );
     setProducts((productsRes.data as Product[]) || []);
-    setLoading(false);
+    } catch (err) {
+      console.log("Error loading recipe:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const filteredProducts = products.filter((p) =>

@@ -162,7 +162,8 @@ export async function POST(req: NextRequest) {
     const { data: allEventos, error: evError } = await supabase
       .from("asistencias_eventos")
       .select("id, empleado_id, tipo_evento, timestamp_evento")
-      .order("timestamp_evento", { ascending: true });
+      .order("timestamp_evento", { ascending: true })
+      .limit(10000);
 
     if (evError || !allEventos) {
       return NextResponse.json({ error: "No se pudieron cargar eventos" }, { status: 500 });

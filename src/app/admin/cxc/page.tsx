@@ -122,53 +122,59 @@ export default function AdminCxcPage() {
   async function loadRecentPayments() {
     setLoadingMovimientos(true);
     setShowMovimientos(true);
-    const { data, error } = await supabase
-      .from("cxc_payments")
-      .select("id, customer_name, amount, payment_method, payment_date, notes")
-      .order("payment_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(25);
+    try {
+      const { data, error } = await supabase
+        .from("cxc_payments")
+        .select("id, customer_name, amount, payment_method, payment_date, notes")
+        .order("payment_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(25);
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los movimientos");
-    } else {
-      setRecentPayments(data || []);
+      if (error) {
+        console.log("Error cargando movimientos:", error);
+      } else {
+        setRecentPayments(data || []);
+      }
+    } catch (err) {
+      console.log("Error en loadRecentPayments:", err);
+    } finally {
+      setLoadingMovimientos(false);
     }
-    setLoadingMovimientos(false);
   }
 
   async function loadData() {
     setLoading(true);
+    try {
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      const { data: notesData, error: notesError } = await supabase
+        .from("cxc_notes")
+        .select("*")
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    const { data: notesData, error: notesError } = await supabase
-      .from("cxc_notes")
-      .select("*")
-      .order("note_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      if (customersError) {
+        console.log("Error cargando clientes:", customersError);
+        return;
+      }
 
-    if (customersError) {
-      console.log(customersError);
-      alert("No se pudieron cargar los clientes");
+      if (notesError) {
+        console.log("Error cargando notas CxC:", notesError);
+        return;
+      }
+
+      setCustomers((customersData as Customer[]) || []);
+      setNotes((notesData as CxcNote[]) || []);
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (notesError) {
-      console.log(notesError);
-      alert("No se pudieron cargar las cuentas por cobrar");
-      setLoading(false);
-      return;
-    }
-
-    setCustomers((customersData as Customer[]) || []);
-    setNotes((notesData as CxcNote[]) || []);
-    setLoading(false);
   }
 
   async function loadItemsForCustomer(customerId: string) {

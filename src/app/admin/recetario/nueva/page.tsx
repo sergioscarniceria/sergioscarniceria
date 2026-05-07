@@ -71,12 +71,17 @@ export default function NuevaRecetaPage() {
   }, []);
 
   async function loadProducts() {
-    const { data } = await supabase
-      .from("products")
-      .select("id, name, price, sell_by_weight")
-      .eq("active", true)
-      .order("name");
-    setProducts((data as Product[]) || []);
+    try {
+      const { data } = await supabase
+        .from("products")
+        .select("id, name, price, sell_by_weight")
+        .eq("active", true)
+        .order("name")
+        .limit(500);
+      setProducts((data as Product[]) || []);
+    } catch (err) {
+      console.log("Error loading products:", err);
+    }
   }
 
   const filteredProducts = products.filter((p) =>

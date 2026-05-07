@@ -95,42 +95,48 @@ export default function NuevoPagoCxcPage() {
 
   async function loadCustomers() {
     setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_days")
+        .eq("credit_enabled", true)
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_days")
-      .eq("credit_enabled", true)
-      .order("name", { ascending: true });
+      if (error) {
+        console.log("Error cargando clientes con crédito:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los clientes con crédito");
+      setCustomers((data as Customer[]) || []);
+    } catch (err) {
+      console.log("Error en loadCustomers:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setCustomers((data as Customer[]) || []);
-    setLoading(false);
   }
 
   async function selectCustomer(customer: Customer) {
     setSelectedCustomer(customer);
+    try {
+      const { data, error } = await supabase
+        .from("cxc_notes")
+        .select("id, customer_id, customer_name, note_number, note_date, due_date, total_amount, balance_due, status, notes")
+        .eq("customer_id", customer.id)
+        .gt("balance_due", 0)
+        .order("note_date", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(200);
 
-    const { data, error } = await supabase
-      .from("cxc_notes")
-      .select("id, customer_id, customer_name, note_number, note_date, due_date, total_amount, balance_due, status, notes")
-      .eq("customer_id", customer.id)
-      .gt("balance_due", 0)
-      .order("note_date", { ascending: true })
-      .order("created_at", { ascending: true });
+      if (error) {
+        console.log(error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar las notas abiertas");
-      return;
+      setOpenNotes((data as CxcNote[]) || []);
+    } catch (err) {
+      console.log("Error loading open notes:", err);
     }
-
-    setOpenNotes((data as CxcNote[]) || []);
   }
 
   function clearForm() {

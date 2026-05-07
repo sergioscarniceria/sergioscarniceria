@@ -70,21 +70,24 @@ const [recommendSearch, setRecommendSearch] = useState("");
 
   async function loadProducts() {
     setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data, error } = await supabase
-      .from("products")
-      .select("*")
-      .order("name", { ascending: true });
+      if (error) {
+        console.log(error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los productos");
+      setProducts((data as Product[]) || []);
+    } catch (err) {
+      console.log("Error loading products:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setProducts((data as Product[]) || []);
-    setLoading(false);
   }
 
  function resetForm() {

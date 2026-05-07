@@ -103,11 +103,11 @@ export default function ComprasPage() {
 
   async function loadAll() {
     setLoading(true);
-
+    try {
     const [bodegaRes, productsRes, ordersRes] = await Promise.all([
       supabase.from("bodega_items").select("id, name, unit, stock, cost").eq("is_active", true).order("name"),
       supabase.from("products").select("id, name, stock, purchase_price, category, fixed_piece_price, is_active").eq("is_active", true).order("name"),
-      supabase.from("purchase_orders").select("*").order("purchase_date", { ascending: false }).order("created_at", { ascending: false }),
+      supabase.from("purchase_orders").select("*").order("purchase_date", { ascending: false }).order("created_at", { ascending: false }).limit(500),
     ]);
 
     const bodegaItems: CatalogItem[] = ((bodegaRes.data as any[]) || []).map((b) => ({
@@ -133,18 +133,27 @@ export default function ComprasPage() {
 
     setCatalog([...bodegaItems, ...complementoItems]);
     setOrders((ordersRes.data as PurchaseOrder[]) || []);
-    setLoading(false);
+    } catch (err) {
+      console.log("Error en loadAll compras:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadOrderItems(orderId: string) {
     if (orderItemsMap[orderId]) return;
     setLoadingItems(orderId);
+    try {
     const { data } = await supabase
       .from("purchase_order_items")
       .select("*")
       .eq("purchase_order_id", orderId);
     setOrderItemsMap((prev) => ({ ...prev, [orderId]: (data as PurchaseItem[]) || [] }));
-    setLoadingItems(null);
+    } catch (err) {
+      console.log("Error cargando items de orden:", err);
+    } finally {
+      setLoadingItems(null);
+    }
   }
 
   function toggleExpandOrder(id: string) {
@@ -197,6 +206,7 @@ export default function ComprasPage() {
     }
 
     setSaving(true);
+    try {
     const creator = typeof window !== "undefined" ? (sessionStorage.getItem("pin_role") || "admin") : "admin";
     const orderNumber = `OC-${Date.now().toString().slice(-6)}`;
 
@@ -282,6 +292,10 @@ export default function ComprasPage() {
     setSaving(false);
     alert(`Orden ${orderNumber} guardada. Inventario actualizado.`);
     loadAll();
+    } catch (err) {
+      console.log("Error guardando orden:", err);
+      setSaving(false);
+    }
   }
 
   // Filtrado por mes

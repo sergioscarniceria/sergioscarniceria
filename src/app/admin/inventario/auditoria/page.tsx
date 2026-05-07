@@ -97,43 +97,45 @@ export default function AuditoriaPage() {
 
   async function loadAll() {
     setLoading(true);
+    try {
+      const [bodegaRes, productsRes, auditsRes] = await Promise.all([
+        supabase.from("bodega_items").select("id, name, unit, stock, cost").eq("is_active", true).order("name").limit(500),
+        supabase.from("products").select("id, name, stock, purchase_price, category, fixed_piece_price, is_active").eq("is_active", true).order("name").limit(500),
+        supabase.from("inventory_audits").select("*").order("audit_date", { ascending: false }).order("created_at", { ascending: false }).limit(100),
+      ]);
 
-    const [bodegaRes, productsRes, auditsRes] = await Promise.all([
-      supabase.from("bodega_items").select("id, name, unit, stock, cost").eq("is_active", true).order("name"),
-      supabase.from("products").select("id, name, stock, purchase_price, category, fixed_piece_price, is_active").eq("is_active", true).order("name"),
-      supabase.from("inventory_audits").select("*").order("audit_date", { ascending: false }).order("created_at", { ascending: false }),
-    ]);
+      const bodegaItems: CatalogItem[] = ((bodegaRes.data as any[]) || []).map((b) => ({
+        id: b.id, name: b.name, type: "bodega", unit: b.unit || "piezas",
+        current_cost: Number(b.cost || 0), stock: Number(b.stock || 0),
+      }));
 
-    const bodegaItems: CatalogItem[] = ((bodegaRes.data as any[]) || []).map((b) => ({
-      id: b.id, name: b.name, type: "bodega", unit: b.unit || "piezas",
-      current_cost: Number(b.cost || 0), stock: Number(b.stock || 0),
-    }));
+      const complementos = ((productsRes.data as any[]) || []).filter(
+        (p) => p.category === "Complementos" || (p.fixed_piece_price !== null && Number(p.fixed_piece_price) > 0)
+      );
+      const complementoItems: CatalogItem[] = complementos.map((p) => ({
+        id: p.id, name: p.name, type: "complemento", unit: "piezas",
+        current_cost: Number(p.purchase_price || 0), stock: Number(p.stock || 0),
+      }));
 
-    const complementos = ((productsRes.data as any[]) || []).filter(
-      (p) => p.category === "Complementos" || (p.fixed_piece_price !== null && Number(p.fixed_piece_price) > 0)
-    );
-    const complementoItems: CatalogItem[] = complementos.map((p) => ({
-      id: p.id, name: p.name, type: "complemento", unit: "piezas",
-      current_cost: Number(p.purchase_price || 0), stock: Number(p.stock || 0),
-    }));
+      const fullCatalog = [...bodegaItems, ...complementoItems];
+      setCatalog(fullCatalog);
 
-    const fullCatalog = [...bodegaItems, ...complementoItems];
-    setCatalog(fullCatalog);
+      const allAudits = (auditsRes.data as Audit[]) || [];
+      setAudits(allAudits);
 
-    const allAudits = (auditsRes.data as Audit[]) || [];
-    setAudits(allAudits);
-
-    // Si hay una abierta, cargarla
-    const open = allAudits.find((a) => a.status === "abierta");
-    if (open) {
-      await loadActiveAudit(open);
-    } else {
-      setActiveAudit(null);
-      setActiveItems([]);
-      setCountDrafts({});
+      const open = allAudits.find((a) => a.status === "abierta");
+      if (open) {
+        await loadActiveAudit(open);
+      } else {
+        setActiveAudit(null);
+        setActiveItems([]);
+        setCountDrafts({});
+      }
+    } catch (err) {
+      console.log("Error loading audit data:", err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function loadActiveAudit(audit: Audit) {

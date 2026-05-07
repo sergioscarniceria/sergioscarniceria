@@ -105,58 +105,63 @@ export default function EstadoCuentaAdminPage() {
 
   async function loadCustomers() {
     setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data, error } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      if (error) {
+        console.log("Error cargando clientes:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los clientes");
+      setCustomers((data as Customer[]) || []);
+    } catch (err) {
+      console.log("Error en loadCustomers:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setCustomers((data as Customer[]) || []);
-    setLoading(false);
   }
 
   async function loadCustomerStatement(customer: Customer) {
     setLoading(true);
     setSelectedCustomer(customer);
+    try {
+      const { data: notesData, error: notesError } = await supabase
+        .from("cxc_notes")
+        .select("*")
+        .eq("customer_id", customer.id)
+        .order("note_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    const { data: notesData, error: notesError } = await supabase
-      .from("cxc_notes")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("note_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from("cxc_payments")
+        .select("*")
+        .eq("customer_id", customer.id)
+        .order("payment_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(500);
 
-    const { data: paymentsData, error: paymentsError } = await supabase
-      .from("cxc_payments")
-      .select("*")
-      .eq("customer_id", customer.id)
-      .order("payment_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      if (notesError) {
+        console.log("Error cargando notas:", notesError);
+        return;
+      }
 
-    if (notesError) {
-      console.log(notesError);
-      alert("No se pudieron cargar las notas");
+      if (paymentsError) {
+        console.log("Error cargando pagos:", paymentsError);
+        return;
+      }
+
+      setNotes((notesData as CxcNote[]) || []);
+      setPayments((paymentsData as CxcPayment[]) || []);
+    } catch (err) {
+      console.log("Error en loadCustomerStatement:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (paymentsError) {
-      console.log(paymentsError);
-      alert("No se pudieron cargar los pagos");
-      setLoading(false);
-      return;
-    }
-
-    setNotes((notesData as CxcNote[]) || []);
-    setPayments((paymentsData as CxcPayment[]) || []);
-    setLoading(false);
   }
 
   const filteredCustomers = useMemo(() => {

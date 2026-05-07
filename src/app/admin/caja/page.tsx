@@ -399,58 +399,70 @@ export default function CajaPage() {
 
   // ─── Loaders ───────────────────────────────────────────────
   const loadMovements = useCallback(async () => {
-    const start = mxToISO(dateFrom, "start");
-    const end = mxToISO(dateTo, "end");
-    const { data } = await supabase
-      .from("cash_movements")
-      .select("*")
-      .gte("created_at", start)
-      .lte("created_at", end)
-      .order("created_at", { ascending: false });
-    setMovements((data as Movement[]) || []);
+    try {
+      const start = mxToISO(dateFrom, "start");
+      const end = mxToISO(dateTo, "end");
+      const { data } = await supabase
+        .from("cash_movements")
+        .select("*")
+        .gte("created_at", start)
+        .lte("created_at", end)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      setMovements((data as Movement[]) || []);
 
-    // Cargar IDs de órdenes editadas en el mismo rango
-    const { data: editedOrders } = await supabase
-      .from("orders")
-      .select("id")
-      .not("edited_at", "is", null)
-      .gte("created_at", start)
-      .lte("created_at", end);
-    setEditedOrderIds(new Set((editedOrders || []).map((o: { id: string }) => o.id)));
+      // Cargar IDs de órdenes editadas en el mismo rango
+      const { data: editedOrders } = await supabase
+        .from("orders")
+        .select("id")
+        .not("edited_at", "is", null)
+        .gte("created_at", start)
+        .lte("created_at", end);
+      setEditedOrderIds(new Set((editedOrders || []).map((o: { id: string }) => o.id)));
+    } catch (err) {
+      console.log("Error loading movements:", err);
+    }
   }, [dateFrom, dateTo]);
 
   const loadTodayClosure = useCallback(async () => {
-    const { data } = await supabase
-      .from("cash_closures")
-      .select("*")
-      .eq("closure_date", today)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const c = (data as CashClosure | null) || null;
-    setTodayClosure(c);
-    if (c) {
-      setCountedCash(String(Number(c.counted_cash || 0)));
-      setClosureNotes(c.notes || "");
-      // Precargar denominaciones si existen
-      const drafts: Record<string, string> = {};
-      let anyDenom = false;
-      for (const d of DENOMINATIONS) {
-        const val = Number((c as any)[d.key] || 0);
-        if (val > 0) { drafts[d.key] = String(val); anyDenom = true; }
+    try {
+      const { data } = await supabase
+        .from("cash_closures")
+        .select("*")
+        .eq("closure_date", today)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const c = (data as CashClosure | null) || null;
+      setTodayClosure(c);
+      if (c) {
+        setCountedCash(String(Number(c.counted_cash || 0)));
+        setClosureNotes(c.notes || "");
+        const drafts: Record<string, string> = {};
+        let anyDenom = false;
+        for (const d of DENOMINATIONS) {
+          const val = Number((c as any)[d.key] || 0);
+          if (val > 0) { drafts[d.key] = String(val); anyDenom = true; }
+        }
+        setClosureDenoms(drafts);
+        setUseDenoms(anyDenom || true);
       }
-      setClosureDenoms(drafts);
-      setUseDenoms(anyDenom || true);
+    } catch (err) {
+      console.log("Error loading closure:", err);
     }
   }, [today]);
 
   const loadClosureHistory = useCallback(async () => {
-    const { data } = await supabase
-      .from("cash_closures")
-      .select("*")
-      .order("closure_date", { ascending: false })
-      .limit(30);
-    setClosureHistory((data as CashClosure[]) || []);
+    try {
+      const { data } = await supabase
+        .from("cash_closures")
+        .select("*")
+        .order("closure_date", { ascending: false })
+        .limit(30);
+      setClosureHistory((data as CashClosure[]) || []);
+    } catch (err) {
+      console.log("Error loading closure history:", err);
+    }
   }, []);
 
   const loadOpening = useCallback(async () => {

@@ -103,36 +103,38 @@ export default function CxcVencidosPage() {
 
   async function loadData() {
     setLoading(true);
+    try {
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
-      .order("name", { ascending: true });
+      const { data: notesData, error: notesError } = await supabase
+        .from("cxc_notes")
+        .select("*")
+        .gt("balance_due", 0)
+        .order("due_date", { ascending: true })
+        .order("note_date", { ascending: true })
+        .limit(500);
 
-    const { data: notesData, error: notesError } = await supabase
-      .from("cxc_notes")
-      .select("*")
-      .gt("balance_due", 0)
-      .order("due_date", { ascending: true })
-      .order("note_date", { ascending: true });
+      if (customersError) {
+        console.log("Error cargando clientes:", customersError);
+        return;
+      }
 
-    if (customersError) {
-      console.log(customersError);
-      alert("No se pudieron cargar los clientes");
+      if (notesError) {
+        console.log("Error cargando notas:", notesError);
+        return;
+      }
+
+      setCustomers((customersData as Customer[]) || []);
+      setNotes((notesData as CxcNote[]) || []);
+    } catch (err) {
+      console.log("Error en loadData:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    if (notesError) {
-      console.log(notesError);
-      alert("No se pudieron cargar las notas");
-      setLoading(false);
-      return;
-    }
-
-    setCustomers((customersData as Customer[]) || []);
-    setNotes((notesData as CxcNote[]) || []);
-    setLoading(false);
   }
 
   const overdueNotes = useMemo(() => {

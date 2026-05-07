@@ -102,30 +102,35 @@ export default function NuevoPedidoPage() {
   async function loadData() {
     setLoading(true);
 
-    const { data: customersData, error: customersError } = await supabase
-      .from("customers")
-      .select("*")
-      .order("name", { ascending: true });
+    try {
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("*")
+        .order("name", { ascending: true })
+        .limit(500);
 
-    const { data: productsData, error: productsError } = await supabase
-      .from("products")
-      .select("*")
-      .eq("is_active", true)
-      .order("name", { ascending: true });
+      const { data: productsData, error: productsError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("is_active", true)
+        .order("name", { ascending: true })
+        .limit(500);
 
-    if (customersError) {
-      console.log(customersError);
-      alert("No se pudieron cargar los clientes");
+      if (customersError) {
+        console.log(customersError);
+      }
+
+      if (productsError) {
+        console.log(productsError);
+      }
+
+      setCustomers((customersData as Customer[]) || []);
+      setProducts((productsData as Product[]) || []);
+    } catch (err) {
+      console.log("Error loading data:", err);
+    } finally {
+      setLoading(false);
     }
-
-    if (productsError) {
-      console.log(productsError);
-      alert("No se pudieron cargar los productos");
-    }
-
-    setCustomers((customersData as Customer[]) || []);
-    setProducts((productsData as Product[]) || []);
-    setLoading(false);
   }
 
   function getPrice(product: Product) {

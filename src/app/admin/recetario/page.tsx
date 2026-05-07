@@ -53,30 +53,38 @@ export default function RecetarioPage() {
 
   async function loadRecipes() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("recipes")
-      .select("*, recipe_ingredients (*)")
-      .order("name", { ascending: true });
+    try {
+      const { data, error } = await supabase
+        .from("recipes")
+        .select("*, recipe_ingredients (*)")
+        .order("name", { ascending: true })
+        .limit(200);
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar las recetas. Verifica que las tablas existan.");
+      if (error) {
+        console.log(error);
+        return;
+      }
+      setRecipes((data as Recipe[]) || []);
+    } catch (err) {
+      console.log("Error loading recipes:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-    setRecipes((data as Recipe[]) || []);
-    setLoading(false);
   }
 
   async function toggleActive(recipe: Recipe) {
-    await supabase.from("recipes").update({ is_active: !recipe.is_active }).eq("id", recipe.id);
-    await loadRecipes();
+    try {
+      await supabase.from("recipes").update({ is_active: !recipe.is_active }).eq("id", recipe.id);
+      await loadRecipes();
+    } catch (err) { console.log("Error toggling recipe:", err); }
   }
 
   async function deleteRecipe(recipe: Recipe) {
     if (!confirm(`¿Eliminar receta "${recipe.name}"? Se borran también sus ingredientes.`)) return;
-    await supabase.from("recipes").delete().eq("id", recipe.id);
-    await loadRecipes();
+    try {
+      await supabase.from("recipes").delete().eq("id", recipe.id);
+      await loadRecipes();
+    } catch (err) { console.log("Error deleting recipe:", err); }
   }
 
   const filtered = useMemo(() => {

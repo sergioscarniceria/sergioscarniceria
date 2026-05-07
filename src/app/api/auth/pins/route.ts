@@ -15,20 +15,24 @@ function isAuthorized(req: Request): boolean {
  * PUT /api/auth/pins — actualizar un PIN { role, pin } (requiere auth)
  */
 export async function GET(req: Request) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
+  try {
+    if (!isAuthorized(req)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
 
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase
-    .from("app_pins")
-    .select("role, pin, label, updated_at")
-    .order("role");
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .from("app_pins")
+      .select("role, pin, label, updated_at")
+      .order("role");
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+    return NextResponse.json(data);
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-  return NextResponse.json(data);
 }
 
 export async function PUT(req: Request) {

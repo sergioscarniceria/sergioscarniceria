@@ -7,34 +7,38 @@ import { getSupabaseClient } from "@/lib/supabase";
  * Las tablas deben crearse primero en Supabase SQL Editor.
  */
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.ADMIN_SECRET) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  try {
+    const { searchParams } = new URL(req.url);
+    if (searchParams.get("secret") !== process.env.ADMIN_SECRET) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const supabase = getSupabaseClient();
+
+    const defaults = [
+      { name: "Sergio Vega Marín", type: "interno", phone: null, notes: "Reembolsos y gastos personales por la empresa" },
+      { name: "Pepe", type: "puerco", phone: null, notes: null },
+      { name: "Tello", type: "puerco", phone: null, notes: null },
+      { name: "Octavio", type: "res", phone: null, notes: null },
+      { name: "Emanuel Pedraza", type: "res", phone: null, notes: null },
+    ];
+
+    const { data, error } = await supabase
+      .from("suppliers")
+      .upsert(defaults, { onConflict: "name" })
+      .select();
+
+    if (error) {
+      return NextResponse.json({
+        error: error.message,
+        sql: SQL_TABLES,
+      }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true, suppliers: data, message: "Proveedores configurados correctamente" });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  const supabase = getSupabaseClient();
-
-  const defaults = [
-    { name: "Sergio Vega Marín", type: "interno", phone: null, notes: "Reembolsos y gastos personales por la empresa" },
-    { name: "Pepe", type: "puerco", phone: null, notes: null },
-    { name: "Tello", type: "puerco", phone: null, notes: null },
-    { name: "Octavio", type: "res", phone: null, notes: null },
-    { name: "Emanuel Pedraza", type: "res", phone: null, notes: null },
-  ];
-
-  const { data, error } = await supabase
-    .from("suppliers")
-    .upsert(defaults, { onConflict: "name" })
-    .select();
-
-  if (error) {
-    return NextResponse.json({
-      error: error.message,
-      sql: SQL_TABLES,
-    }, { status: 500 });
-  }
-
-  return NextResponse.json({ ok: true, suppliers: data, message: "Proveedores configurados correctamente" });
 }
 
 const SQL_TABLES = `

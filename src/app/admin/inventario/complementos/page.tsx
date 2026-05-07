@@ -82,17 +82,22 @@ export default function InventarioComplementosPage() {
 
   async function loadProducts() {
     setLoading(true);
-    const { data } = await supabase
-      .from("products")
-      .select("id, name, price, category, fixed_piece_price, purchase_price, stock, min_stock, is_active")
-      .eq("is_active", true)
-      .order("name");
-    // Filter to complementos (by piece)
-    const complementos = (data || []).filter(
-      (p: any) => p.category === "Complementos" || (p.fixed_piece_price !== null && p.fixed_piece_price > 0)
-    );
-    setProducts(complementos as Product[]);
-    setLoading(false);
+    try {
+      const { data } = await supabase
+        .from("products")
+        .select("id, name, price, category, fixed_piece_price, purchase_price, stock, min_stock, is_active")
+        .eq("is_active", true)
+        .order("name")
+        .limit(500);
+      const complementos = (data || []).filter(
+        (p: any) => p.category === "Complementos" || (p.fixed_piece_price !== null && p.fixed_piece_price > 0)
+      );
+      setProducts(complementos as Product[]);
+    } catch (err) {
+      console.log("Error loading complementos:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleMovement() {

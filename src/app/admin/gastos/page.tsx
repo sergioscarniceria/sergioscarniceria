@@ -52,22 +52,28 @@ export default function GastosPage() {
   const [editId, setEditId] = useState<string | null>(null);
 
   async function loadExpenses() {
-    const startDate = `${filterMonth}-01`;
-    const endParts = filterMonth.split("-");
-    const y = Number(endParts[0]);
-    const m = Number(endParts[1]);
-    const lastDay = new Date(y, m, 0).getDate();
-    const endDate = `${filterMonth}-${String(lastDay).padStart(2, "0")}`;
+    try {
+      const startDate = `${filterMonth}-01`;
+      const endParts = filterMonth.split("-");
+      const y = Number(endParts[0]);
+      const m = Number(endParts[1]);
+      const lastDay = new Date(y, m, 0).getDate();
+      const endDate = `${filterMonth}-${String(lastDay).padStart(2, "0")}`;
 
-    const { data } = await supabase
-      .from("owner_expenses")
-      .select("*")
-      .gte("expense_date", startDate)
-      .lte("expense_date", endDate)
-      .order("expense_date", { ascending: false });
+      const { data } = await supabase
+        .from("owner_expenses")
+        .select("*")
+        .gte("expense_date", startDate)
+        .lte("expense_date", endDate)
+        .order("expense_date", { ascending: false })
+        .limit(500);
 
-    setExpenses(data || []);
-    setLoading(false);
+      setExpenses(data || []);
+    } catch (err) {
+      console.log("Error loading expenses:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {

@@ -77,32 +77,34 @@ export default function CxcPagosPage() {
 
   async function loadPayments() {
     setLoading(true);
+    try {
+      let query = supabase
+        .from("cxc_payments")
+        .select("*")
+        .order("payment_date", { ascending: false })
+        .order("created_at", { ascending: false });
 
-    let query = supabase
-      .from("cxc_payments")
-      .select("*")
-      .order("payment_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      if (dateFrom) {
+        query = query.gte("payment_date", dateFrom);
+      }
 
-    if (dateFrom) {
-      query = query.gte("payment_date", dateFrom);
-    }
+      if (dateTo) {
+        query = query.lte("payment_date", dateTo);
+      }
 
-    if (dateTo) {
-      query = query.lte("payment_date", dateTo);
-    }
+      const { data, error } = await query.limit(500);
 
-    const { data, error } = await query;
+      if (error) {
+        console.log("Error cargando pagos:", error);
+        return;
+      }
 
-    if (error) {
-      console.log(error);
-      alert("No se pudieron cargar los pagos");
+      setPayments((data as Payment[]) || []);
+    } catch (err) {
+      console.log("Error en loadPayments:", err);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setPayments((data as Payment[]) || []);
-    setLoading(false);
   }
 
   const filteredPayments = useMemo(() => {
