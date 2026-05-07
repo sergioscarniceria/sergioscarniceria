@@ -121,10 +121,10 @@ export default function NotificationBell() {
     }
   }, [seenIds, hasInteracted]);
 
-  // Poll every 15 seconds
+  // Poll every 30 seconds
   useEffect(() => {
     fetchNewOrders();
-    const interval = setInterval(fetchNewOrders, 15000);
+    const interval = setInterval(fetchNewOrders, 30000);
     return () => clearInterval(interval);
   }, [fetchNewOrders]);
 

@@ -156,6 +156,7 @@ export default function RepartidoresPage() {
         customers ( phone, address )
       `)
       .not("source", "in", "(mostrador,caja_manual)")
+      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
       .order("created_at", { ascending: false });
 
     if (error) {

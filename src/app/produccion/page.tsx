@@ -86,6 +86,7 @@ export default function ProduccionPage() {
         *,
         order_items (*)
       `)
+      .in("status", ["nuevo", "proceso"])
       .order("delivery_date", { ascending: true })
       .order("created_at", { ascending: true });
 
@@ -98,8 +99,7 @@ export default function ProduccionPage() {
     if (!ordersError) {
       const activeOrders = ((ordersData as Order[]) || []).filter((o) => {
   const hasItems = (o.order_items || []).length > 0;
-  const isActive = o.status === "nuevo" || o.status === "proceso";
-  return hasItems && isActive;
+  return hasItems;
 });
 
       setOrders(activeOrders);
@@ -115,7 +115,7 @@ export default function ProduccionPage() {
 
     const interval = setInterval(() => {
       loadData();
-    }, 3000);
+    }, 15000);
 
     return () => clearInterval(interval);
   }, []);
