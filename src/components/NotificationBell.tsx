@@ -9,7 +9,6 @@ type NewOrder = {
   created_at: string;
   status: string;
   delivery_date?: string | null;
-  total?: number | null;
 };
 
 // Simple bell sound using Web Audio API (works on Safari/iPad)
@@ -93,28 +92,32 @@ export default function NotificationBell() {
   }, []);
 
   const fetchNewOrders = useCallback(async () => {
-    const supabase = getSupabaseClient();
+    try {
+      const supabase = getSupabaseClient();
 
-    // Get orders created in the last 12 hours with status "nuevo"
-    const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+      // Get orders created in the last 12 hours with status "nuevo"
+      const since = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
 
-    const { data } = await supabase
-      .from("orders")
-      .select("id, customer_name, created_at, status, delivery_date, total")
-      .eq("status", "nuevo")
-      .gte("created_at", since)
-      .order("created_at", { ascending: false })
-      .limit(20);
+      const { data } = await supabase
+        .from("orders")
+        .select("id, customer_name, created_at, status, delivery_date")
+        .eq("status", "nuevo")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(20);
 
-    if (data) {
-      setOrders(data);
+      if (data) {
+        setOrders(data);
 
-      // Play sound if there are NEW orders we haven't seen
-      const newUnseen = data.filter((o) => !seenIds.has(o.id));
-      if (newUnseen.length > prevCountRef.current && hasInteracted && prevCountRef.current >= 0) {
-        playNotificationSound();
+        // Play sound if there are NEW orders we haven't seen
+        const newUnseen = data.filter((o) => !seenIds.has(o.id));
+        if (newUnseen.length > prevCountRef.current && hasInteracted && prevCountRef.current >= 0) {
+          playNotificationSound();
+        }
+        prevCountRef.current = newUnseen.length;
       }
-      prevCountRef.current = newUnseen.length;
+    } catch {
+      // Silently ignore — notification bell should never block operations
     }
   }, [seenIds, hasInteracted]);
 
@@ -336,18 +339,6 @@ export default function NotificationBell() {
                       )}
                     </div>
                   </div>
-                  {order.total != null && (
-                    <div
-                      style={{
-                        fontWeight: 700,
-                        color: "#1f7a4d",
-                        fontSize: 14,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      ${order.total.toLocaleString("es-MX", { minimumFractionDigits: 2 })}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
