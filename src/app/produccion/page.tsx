@@ -78,36 +78,43 @@ export default function ProduccionPage() {
   const [scaleConnected, setScaleConnected] = useState<boolean>(false);
 
   async function loadData() {
-    const supabase = getSupabaseClient();
+    try {
+      const supabase = getSupabaseClient();
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: ordersData, error: ordersError } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        order_items (*)
-      `)
-      .in("status", ["nuevo", "proceso"])
-      .order("delivery_date", { ascending: true })
-      .order("created_at", { ascending: true });
+      const { data: ordersData, error: ordersError } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .in("status", ["nuevo", "proceso"])
+        .gte("created_at", since)
+        .order("delivery_date", { ascending: true })
+        .order("created_at", { ascending: true })
+        .limit(100);
 
-    const { data: butchersData } = await supabase
-      .from("butchers")
-      .select("*")
-      .eq("is_active", true)
-      .order("name", { ascending: true });
+      const { data: butchersData } = await supabase
+        .from("butchers")
+        .select("*")
+        .eq("is_active", true)
+        .order("name", { ascending: true });
 
-    if (!ordersError) {
-      const activeOrders = ((ordersData as Order[]) || []).filter((o) => {
-  const hasItems = (o.order_items || []).length > 0;
-  return hasItems;
-});
+      if (!ordersError) {
+        const activeOrders = ((ordersData as Order[]) || []).filter((o) => {
+          const hasItems = (o.order_items || []).length > 0;
+          return hasItems;
+        });
 
-      setOrders(activeOrders);
-    } else {
-      console.log(ordersError);
+        setOrders(activeOrders);
+      } else {
+        console.log(ordersError);
+      }
+
+      setButchers((butchersData as Butcher[]) || []);
+    } catch {
+      // Silent — polling should never block operations
     }
-
-    setButchers((butchersData as Butcher[]) || []);
   }
 
   useEffect(() => {

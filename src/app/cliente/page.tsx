@@ -639,7 +639,8 @@ export default function ClientePage() {
         .from("orders")
         .select("*, order_items(*)")
         .eq("customer_id", customerProfile.customer_id)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(50);
 
       setOrders((ordersData as Order[]) || []);
 

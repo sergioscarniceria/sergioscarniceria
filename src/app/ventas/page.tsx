@@ -215,7 +215,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
     loadTickets();
     loadHeldSales();
     loadProdOrders();
-  }, 5000);
+  }, 30000);
 
   return () => clearInterval(interval);
 }, []);
@@ -301,36 +301,42 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
     setLoading(false);
   }
   async function loadTickets() {
-  const { data, error } = await supabase
-    .from("orders")
-   .select(`
-      id,
-      customer_name,
-      status,
-      payment_status,
-      payment_method,
-      created_at,
-      source,
-      order_items (
-  id,
-  product,
-  kilos,
-  price,
-  sale_type,
-  quantity,
-  is_fixed_price_piece
-)
-    `)
-    .eq("source", "mostrador")
-    .order("created_at", { ascending: false })
-    .limit(12);
+  try {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from("orders")
+      .select(`
+        id,
+        customer_name,
+        status,
+        payment_status,
+        payment_method,
+        created_at,
+        source,
+        order_items (
+          id,
+          product,
+          kilos,
+          price,
+          sale_type,
+          quantity,
+          is_fixed_price_piece
+        )
+      `)
+      .eq("source", "mostrador")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(12);
 
-  if (error) {
-    console.log(error);
-    return;
+    if (error) {
+      console.log(error);
+      return;
+    }
+
+    setTickets((data as Ticket[]) || []);
+  } catch {
+    // Silent — polling should never block operations
   }
-
-  setTickets((data as Ticket[]) || []);
 }
 
 async function loadCustomers() {
@@ -372,24 +378,34 @@ function pullProdOrder(order: Ticket) {
 }
 
 async function loadProdOrders() {
-  const { data } = await supabase
-    .from("orders")
-    .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
-    .not("source", "in", "(mostrador,caja_manual,pedido_mostrador)")
-    .or("payment_status.eq.pendiente,payment_status.is.null")
-    .not("status", "eq", "cancelado")
-    .order("created_at", { ascending: false })
-    .limit(30);
-  setProdOrders((data as Ticket[]) || []);
+  try {
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data } = await supabase
+      .from("orders")
+      .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
+      .not("source", "in", "(mostrador,caja_manual,pedido_mostrador)")
+      .or("payment_status.eq.pendiente,payment_status.is.null")
+      .not("status", "eq", "cancelado")
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    setProdOrders((data as Ticket[]) || []);
+  } catch {
+    // Silent — polling should never block operations
+  }
 }
 
 async function loadHeldSales() {
-  const { data } = await supabase
-    .from("held_sales")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(10);
-  setHeldSales((data as HeldSale[]) || []);
+  try {
+    const { data } = await supabase
+      .from("held_sales")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    setHeldSales((data as HeldSale[]) || []);
+  } catch {
+    // Silent — polling should never block operations
+  }
 }
 
 async function holdCurrentSale() {

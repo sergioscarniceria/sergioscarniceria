@@ -43,19 +43,23 @@ export default function DisplayPromo() {
 
   /* ─── Load products ─── */
   const loadProducts = useCallback(async () => {
-    const sb = getSupabaseClient();
-    const { data } = await sb
-      .from("products")
-      .select("id, name, price, category, sale_type, fixed_piece_price, image_url")
-      .eq("is_active", true)
-      .order("category", { ascending: true })
-      .order("name", { ascending: true });
+    try {
+      const sb = getSupabaseClient();
+      const { data } = await sb
+        .from("products")
+        .select("id, name, price, category, sale_type, fixed_piece_price, image_url")
+        .eq("is_active", true)
+        .order("category", { ascending: true })
+        .order("name", { ascending: true });
 
-    if (data && data.length > 0) {
-      // Shuffle to keep it interesting
-      const shuffled = [...data].sort(() => Math.random() - 0.5);
-      setProducts(shuffled);
-      setSlideIndex(0);
+      if (data && data.length > 0) {
+        // Shuffle to keep it interesting
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+        setProducts(shuffled);
+        setSlideIndex(0);
+      }
+    } catch {
+      // Silent — display should never cause errors
     }
   }, []);
 

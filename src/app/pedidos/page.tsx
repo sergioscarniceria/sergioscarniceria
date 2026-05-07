@@ -92,12 +92,15 @@ const [changingId, setChangingId] = useState<string | null>(null);
   async function loadOrders() {
     const supabase = getSupabaseClient();
 
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
     const { data, error } = await supabase
       .from("orders")
       .select(`*, order_items(*)`)
       .not("source", "in", "(mostrador,caja_manual)")
+      .gte("created_at", since)
       .order("delivery_date", { ascending: true })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .limit(200);
 
     if (error) {
       console.log(error);

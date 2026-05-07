@@ -389,18 +389,22 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   async function loadData() {
     setLoading(true);
 
-    // Cargar todos los tickets pendientes + últimos 40 pagados
+    // Cargar tickets pendientes (últimos 30 días) + últimos 30 pagados (últimas 24h)
+    const pendientesSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const pagadosSince = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const [pendientesRes, pagadosRes] = await Promise.all([
       supabase
         .from("orders")
         .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
         .or("payment_status.eq.pendiente,payment_status.is.null")
+        .gte("created_at", pendientesSince)
         .order("created_at", { ascending: false })
         .limit(100),
       supabase
         .from("orders")
         .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
         .eq("payment_status", "pagado")
+        .gte("created_at", pagadosSince)
         .order("created_at", { ascending: false })
         .limit(30),
     ]);
