@@ -79,13 +79,18 @@ export default function DisplayMostradorPage() {
 
   // ─── Load media from Supabase ───
   const loadMedia = useCallback(async () => {
-    const { data } = await supabase
-      .from("display_media")
-      .select("id, file_url, media_type")
-      .eq("is_active", true)
-      .or("target.eq.mostrador,target.eq.ambos")
-      .order("sort_order", { ascending: true });
-    setMedia((data as MediaItem[]) || []);
+    try {
+      const { data } = await supabase
+        .from("display_media")
+        .select("id, file_url, media_type")
+        .eq("is_active", true)
+        .or("target.eq.mostrador,target.eq.ambos")
+        .order("sort_order", { ascending: true })
+        .limit(50);
+      setMedia((data as MediaItem[]) || []);
+    } catch {
+      // Silent — display should never crash
+    }
   }, []);
 
   useEffect(() => {

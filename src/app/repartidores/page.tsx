@@ -134,7 +134,7 @@ export default function RepartidoresPage() {
   // Auto-refresh every 15 seconds
   useEffect(() => {
     loadOrders(true);
-    const interval = setInterval(() => loadOrders(false), 15000);
+    const interval = setInterval(() => loadOrders(false), 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -145,29 +145,34 @@ export default function RepartidoresPage() {
   }, []);
 
   const loadOrders = useCallback(async (showLoader = false) => {
-    if (showLoader) setLoading(true); else setRefreshing(true);
+    try {
+      if (showLoader) setLoading(true); else setRefreshing(true);
 
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
-        id, customer_name, status, delivery_status, delivery_started_at,
-        delivered_at, delivery_address, delivery_driver, delivery_date,
-        delivery_notes, notes, created_at, payment_status, payment_method,
-        customers ( phone, address )
-      `)
-      .not("source", "in", "(mostrador,caja_manual)")
-      .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-      .order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          id, customer_name, status, delivery_status, delivery_started_at,
+          delivered_at, delivery_address, delivery_driver, delivery_date,
+          delivery_notes, notes, created_at, payment_status, payment_method,
+          customers ( phone, address )
+        `)
+        .not("source", "in", "(mostrador,caja_manual)")
+        .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-    if (error) {
-      console.log(error);
-      if (showLoader) alert("No se pudieron cargar los pedidos");
-    } else {
-      setOrders((data as Order[]) || []);
+      if (error) {
+        console.log(error);
+      } else {
+        setOrders((data as Order[]) || []);
+      }
+      setLastUpdated(new Date());
+    } catch {
+      // Silent — polling should never block operations
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-    setLastUpdated(new Date());
-    setLoading(false);
-    setRefreshing(false);
   }, []);
 
   // ─── Actions ───────────────────────────────────────────────
