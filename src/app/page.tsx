@@ -72,10 +72,11 @@ const moduleCategories = {
   },
   pantallas: {
     label: "Pantallas cliente",
-    roles: ["admin"],
+    roles: ["admin", "cajera", "carnicero"],
     items: [
       { title: "Display mostrador", href: "/display/mostrador", desc: "Pantalla para cliente en mostrador", target: "_blank" as const },
       { title: "Display caja", href: "/display/caja", desc: "Pantalla para cliente en caja", target: "_blank" as const },
+      { title: "Display TV", href: "/display/promo", desc: "Pantalla promocional para televisión", target: "_blank" as const },
     ],
   },
 };
