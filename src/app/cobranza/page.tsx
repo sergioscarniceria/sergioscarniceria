@@ -300,6 +300,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   const [historialResults, setHistorialResults] = useState<Ticket[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
   const [historialTicket, setHistorialTicket] = useState<Ticket | null>(null);
+  const [historialRecentsLoaded, setHistorialRecentsLoaded] = useState(false);
 
   // Identificación cajera
   const [cashierName, setCashierName] = useState("");
@@ -1708,10 +1709,37 @@ if (cashError) {
   setSaving(false);
 }
 
+  // Cargar últimos 25 tickets cobrados para reimpresión rápida
+  async function loadRecentTickets() {
+    if (historialRecentsLoaded && historialResults.length > 0 && !historialSearch.trim()) return;
+    setHistorialLoading(true);
+    setHistorialTicket(null);
+    try {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data } = await supabase
+        .from("orders")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+        .in("payment_status", ["pagado", "credito_autorizado", "credito"])
+        .gte("created_at", since)
+        .order("paid_at", { ascending: false })
+        .limit(25);
+      setHistorialResults((data as Ticket[]) || []);
+      setHistorialRecentsLoaded(true);
+    } catch (err) {
+      console.log("Error loading recent tickets:", err);
+    } finally {
+      setHistorialLoading(false);
+    }
+  }
+
   // Buscar tickets pagados para reimpresión
   async function searchHistorial() {
     const q = historialSearch.trim();
-    if (!q) return;
+    if (!q) {
+      setHistorialRecentsLoaded(false);
+      loadRecentTickets();
+      return;
+    }
     setHistorialLoading(true);
     setHistorialTicket(null);
 
@@ -1862,7 +1890,7 @@ if (cashError) {
           </button>
 
           <button
-            onClick={() => setTab("historial")}
+            onClick={() => { setTab("historial"); loadRecentTickets(); }}
             style={{
               ...tabButtonStyle,
               background: tab === "historial" ? COLORS.primary : "white",
@@ -3398,11 +3426,11 @@ if (cashError) {
                 </div>
 
                 <div style={{ marginTop: 14 }}>
-                  <div style={miniTitleStyle}>Resultados</div>
+                  <div style={miniTitleStyle}>{historialSearch.trim() ? "Resultados" : "Últimos tickets cobrados"}</div>
                   <div style={listWrapStyle}>
                     {historialResults.length === 0 ? (
                       <div style={emptyBoxStyle}>
-                        {historialLoading ? "Buscando..." : "Busca un ticket para reimprimir"}
+                        {historialLoading ? "Cargando..." : "No se encontraron tickets"}
                       </div>
                     ) : (
                       historialResults.map((ticket) => (
