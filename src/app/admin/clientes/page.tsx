@@ -14,6 +14,7 @@ type Customer = {
   email: string | null;
   business_name?: string | null;
   customer_type?: string | null;
+  discount_percent?: number | null;
   address?: string | null;
   created_at?: string | null;
   credit_enabled?: boolean | null;
@@ -216,10 +217,11 @@ export default function AdminClientesPage() {
 
   async function updateType(id: string, type: string) {
     setUpdatingId(id);
+    const newDiscount = type === "mayoreo" ? 10 : 0;
 
     const { error } = await supabase
       .from("customers")
-      .update({ customer_type: type })
+      .update({ customer_type: type, discount_percent: newDiscount })
       .eq("id", id);
 
     if (error) {
@@ -230,7 +232,29 @@ export default function AdminClientesPage() {
     }
 
     setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, customer_type: type } : c))
+      prev.map((c) => (c.id === id ? { ...c, customer_type: type, discount_percent: newDiscount } : c))
+    );
+
+    setUpdatingId(null);
+  }
+
+  async function updateDiscount(id: string, pct: number) {
+    setUpdatingId(id);
+
+    const { error } = await supabase
+      .from("customers")
+      .update({ discount_percent: pct })
+      .eq("id", id);
+
+    if (error) {
+      console.log(error);
+      alert("Error al actualizar descuento");
+      setUpdatingId(null);
+      return;
+    }
+
+    setCustomers((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, discount_percent: pct } : c))
     );
 
     setUpdatingId(null);
@@ -596,6 +620,36 @@ export default function AdminClientesPage() {
                       <option value="menudeo">Menudeo</option>
                       <option value="mayoreo">Mayoreo</option>
                     </select>
+
+                    {c.customer_type === "mayoreo" && (
+                      <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(166,106,16,0.08)", border: "1px solid rgba(166,106,16,0.2)" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#a66a10", marginBottom: 6 }}>
+                          Descuento mayoreo
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          {[5, 10, 15].map((pct) => (
+                            <button
+                              key={pct}
+                              onClick={() => updateDiscount(c.id, pct)}
+                              disabled={updatingId === c.id}
+                              style={{
+                                flex: 1,
+                                padding: "8px 0",
+                                borderRadius: 10,
+                                border: (c.discount_percent || 0) === pct ? "none" : "1px solid rgba(92,27,17,0.10)",
+                                background: (c.discount_percent || 0) === pct ? "#a66a10" : "white",
+                                color: (c.discount_percent || 0) === pct ? "white" : "#3b1c16",
+                                fontWeight: 800,
+                                fontSize: 15,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div style={creditBoxStyle}>

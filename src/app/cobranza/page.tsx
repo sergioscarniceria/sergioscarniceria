@@ -49,6 +49,7 @@ type Ticket = {
   canceled_at?: string | null;
   attendant_name?: string | null;
   discount_amount?: number | null;
+  discount_percent?: number | null;
   order_items?: OrderItem[];
 };
 
@@ -396,14 +397,14 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     const [pendientesRes, pagadosRes] = await Promise.all([
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
         .or("payment_status.eq.pendiente,payment_status.is.null")
         .gte("created_at", pendientesSince)
         .order("created_at", { ascending: false })
         .limit(100),
       supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
         .eq("payment_status", "pagado")
         .gte("created_at", pagadosSince)
         .order("created_at", { ascending: false })
@@ -575,7 +576,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     const { data, error } = await supabase
       .from("orders")
       .select(
-        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
+        "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)"
       )
       .eq("id", id)
       .single();
@@ -598,7 +599,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     if (extraTickets.some((t) => t.id === id)) return;
     const { data, error } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
       .eq("id", id)
       .single();
     if (error || !data) { alert("No se pudo agregar el ticket"); return; }
@@ -637,7 +638,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)"
         )
         .eq("id", full)
         .single();
@@ -653,7 +654,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       const { data, error } = await supabase
         .from("orders")
         .select(
-          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)"
+          "id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)"
         )
         .ilike("id", `${shortCode}%`)
         .order("created_at", { ascending: false })
@@ -1723,7 +1724,7 @@ if (cashError) {
       const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data } = await supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
         .in("payment_status", ["pagado", "credito_autorizado", "credito"])
         .gte("created_at", since)
         .order("paid_at", { ascending: false })
@@ -1754,7 +1755,7 @@ if (cashError) {
     if (full) {
       const { data } = await supabase
         .from("orders")
-        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+        .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
         .eq("id", full)
         .single();
       if (data) {
@@ -1767,7 +1768,7 @@ if (cashError) {
     // Buscar por folio parcial o nombre
     const { data } = await supabase
       .from("orders")
-      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, order_items(*)")
+      .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
       .or(`id.ilike.${shortCode || q}%,customer_name.ilike.%${q}%`)
       .in("payment_status", ["pagado", "credito_autorizado", "credito", "cancelado"])
       .order("created_at", { ascending: false })
@@ -2326,10 +2327,11 @@ if (cashError) {
                       )}
                     </div>
 
-                    {/* Badge mayoreo */}
-                    {getCustomerType(selectedTicket) === "mayoreo" && (
+                    {/* Badge mayoreo con descuento del ticket */}
+                    {(getCustomerType(selectedTicket) === "mayoreo" || (selectedTicket.discount_percent && selectedTicket.discount_percent > 0)) && (
                       <div style={mayoreoBadgeStyle}>
-                        Este cliente es <b>mayoreo</b> — descuento del 10% ya aplicado en precios
+                        Cliente <b>mayoreo</b> — descuento {selectedTicket.discount_percent || 0}%
+                        {selectedTicket.discount_amount && selectedTicket.discount_amount > 0 ? ` (-$${money(selectedTicket.discount_amount)})` : ""}
                       </div>
                     )}
 

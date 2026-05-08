@@ -51,6 +51,7 @@ type Customer = {
   id: string;
   name: string;
   customer_type?: string;
+  discount_percent?: number;
 };
 
 const COLORS = {
@@ -168,7 +169,7 @@ const [lastSavedFolio, setLastSavedFolio] = useState("");
 
 const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
 const [selectedCustomerId, setSelectedCustomerId] = useState("");
-const [mayoreoDiscount, setMayoreoDiscount] = useState<number>(10);
+// El descuento mayoreo se lee del cliente, no se elige en Mostrador
 const [printTicketData, setPrintTicketData] = useState<{
   folio: string;
   orderId: string;
@@ -346,7 +347,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
 async function loadCustomers() {
   const { data, error } = await supabase
     .from("customers")
-    .select("id, name, customer_type")
+    .select("id, name, customer_type, discount_percent")
     .order("name", { ascending: true });
 
   if (error) {
@@ -855,18 +856,19 @@ await loadTickets();
       // SIEMPRE resetear cliente y estado de guardado, aunque haya error
       setCustomerMode("general");
       setSelectedCustomerId("");
-      setMayoreoDiscount(10);
       setSaving(false);
       clearTimeout(timeoutId);
     }
   }
 
-  // ¿El cliente seleccionado es mayoreo?
-  const selectedCustomerIsMayoreo = useMemo(() => {
-    if (customerMode !== "existente" || !selectedCustomerId) return false;
-    const cust = customers.find((c) => c.id === selectedCustomerId);
-    return cust?.customer_type === "mayoreo";
+  // Cliente mayoreo y su % de descuento (configurado en admin/clientes)
+  const selectedCustomer = useMemo(() => {
+    if (customerMode !== "existente" || !selectedCustomerId) return null;
+    return customers.find((c) => c.id === selectedCustomerId) || null;
   }, [customerMode, selectedCustomerId, customers]);
+
+  const selectedCustomerIsMayoreo = selectedCustomer?.customer_type === "mayoreo";
+  const mayoreoDiscount = selectedCustomer?.discount_percent || 0;
 
   // Subtotal sin descuento
   const subtotal = useMemo(() => {
@@ -1247,31 +1249,13 @@ const paidTickets = useMemo(() => {
             ))}
           </select>
 
-          {selectedCustomerIsMayoreo && (
+          {selectedCustomerIsMayoreo && mayoreoDiscount > 0 && (
             <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(166,106,16,0.08)", border: "1px solid rgba(166,106,16,0.2)" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.warning, marginBottom: 6 }}>
-                Cliente mayoreo — Descuento:
+              <div style={{ fontSize: 13, fontWeight: 800, color: COLORS.warning }}>
+                Mayoreo — {mayoreoDiscount}% de descuento
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                {[5, 10, 15].map((pct) => (
-                  <button
-                    key={pct}
-                    onClick={() => setMayoreoDiscount(pct)}
-                    style={{
-                      flex: 1,
-                      padding: "8px 0",
-                      borderRadius: 10,
-                      border: mayoreoDiscount === pct ? "none" : `1px solid ${COLORS.border}`,
-                      background: mayoreoDiscount === pct ? COLORS.warning : "white",
-                      color: mayoreoDiscount === pct ? "white" : COLORS.text,
-                      fontWeight: 800,
-                      fontSize: 15,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {pct}%
-                  </button>
-                ))}
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                Se aplica automáticamente (configurado en admin)
               </div>
             </div>
           )}
