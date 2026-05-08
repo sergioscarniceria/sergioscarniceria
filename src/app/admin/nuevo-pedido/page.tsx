@@ -12,6 +12,7 @@ type Customer = {
   customer_type: string | null;
   business_name?: string | null;
   address?: string | null;
+  discount_percent?: number;
 };
 
 type Product = {
@@ -29,6 +30,7 @@ type CartItem = {
   kilos: number;
   quantity: number;
   is_fixed_price_piece?: boolean | null;
+  is_excluded_from_discount?: boolean;
 };
 
 const COLORS = {
@@ -133,14 +135,14 @@ export default function NuevoPedidoPage() {
     }
   }
 
+  const isMayoreo = selectedCustomer?.customer_type === "mayoreo";
+  const customerDiscount = selectedCustomer?.discount_percent || 0;
+
   function getPrice(product: Product) {
     const basePrice = Number(product.price || 0);
 
-    if (
-      selectedCustomer?.customer_type === "mayoreo" &&
-      !product.is_excluded_from_discount
-    ) {
-      return Number((basePrice * 0.9).toFixed(2));
+    if (isMayoreo && customerDiscount > 0 && !product.is_excluded_from_discount) {
+      return Number((basePrice * (1 - customerDiscount / 100)).toFixed(2));
     }
 
     return basePrice;
@@ -240,6 +242,7 @@ export default function NuevoPedidoPage() {
           sale_type: "pieza",
           kilos: 0,
           quantity,
+          is_excluded_from_discount: Boolean(product.is_excluded_from_discount),
         },
       ]);
 
@@ -281,6 +284,7 @@ export default function NuevoPedidoPage() {
         sale_type: "kg",
         kilos,
         quantity: 0,
+        is_excluded_from_discount: Boolean(product.is_excluded_from_discount),
       },
     ]);
   }
@@ -329,6 +333,20 @@ export default function NuevoPedidoPage() {
         return acc + Number(item.quantity || 0) * Number(item.price || 0);
       }
       return acc + Number(item.price || 0) * Number(item.kilos || 0);
+    }, 0);
+  }
+
+  function calcDiscountAmount() {
+    if (!isMayoreo || customerDiscount <= 0) return 0;
+    return cart.reduce((acc, item) => {
+      if (item.is_excluded_from_discount) return acc;
+      let lineTotal = 0;
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+      } else {
+        lineTotal = Number(item.price || 0) * Number(item.kilos || 0);
+      }
+      return acc + lineTotal * (customerDiscount / 100);
     }, 0);
   }
 
@@ -398,6 +416,9 @@ export default function NuevoPedidoPage() {
       return;
     }
 
+    const discountAmt = calcDiscountAmount();
+    const discountPct = isMayoreo ? customerDiscount : 0;
+
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert([
@@ -406,11 +427,15 @@ export default function NuevoPedidoPage() {
           customer_name: selectedCustomer.name,
           status: "nuevo",
           source: "telefono",
-          notes: finalNotes,
+          notes: discountPct > 0
+            ? `${finalNotes} | Descuento mayoreo ${discountPct}%`
+            : finalNotes,
           delivery_status: "pendiente",
           delivery_address: deliveryAddress.trim(),
           delivery_date: deliveryDate,
           captured_by: takenByText,
+          discount_percent: discountPct,
+          discount_amount: Number(discountAmt.toFixed(2)),
         },
       ])
       .select()
@@ -576,6 +601,20 @@ export default function NuevoPedidoPage() {
                     <div style={{ color: COLORS.muted, marginTop: 4 }}>
                       Tipo: <b>{selectedCustomer.customer_type || "menudeo"}</b>
                     </div>
+                    {isMayoreo && customerDiscount > 0 && (
+                      <div style={{
+                        marginTop: 6,
+                        padding: "6px 12px",
+                        borderRadius: 999,
+                        background: "rgba(166,106,16,0.12)",
+                        color: COLORS.warning,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        display: "inline-block",
+                      }}>
+                        Mayoreo — {customerDiscount}% de descuento
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -972,9 +1011,27 @@ export default function NuevoPedidoPage() {
                     ))}
                   </div>
 
-                                    <div style={totalBoxStyle}>
+                                    {isMayoreo && customerDiscount > 0 && calcDiscountAmount() > 0 && (
+                    <div style={{
+                      marginTop: 14,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "12px 16px",
+                      borderRadius: 16,
+                      background: "rgba(166,106,16,0.08)",
+                      border: "1px solid rgba(166,106,16,0.2)",
+                      color: COLORS.warning,
+                      fontWeight: 700,
+                      fontSize: 15,
+                    }}>
+                      <span>Descuento {customerDiscount}%</span>
+                      <span>-${Math.ceil(calcDiscountAmount())}</span>
+                    </div>
+                  )}
+
+                  <div style={totalBoxStyle}>
                     <span>Total estimado</span>
-                    <span>${Math.ceil(cartTotal())}</span>
+                    <span>${Math.ceil(cartTotal() - calcDiscountAmount())}</span>
                   </div>
 
                   <button

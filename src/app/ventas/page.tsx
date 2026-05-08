@@ -682,7 +682,7 @@ let orderId: string;
 
 if (pulledOrderId) {
   // ── Actualizar pedido existente de producción ──
-  // Conservar datos del cliente original del pedido
+  // Conservar datos del cliente original del pedido y buscar su descuento
   const { data: origOrder } = await supabase
     .from("orders")
     .select("customer_id, customer_name")
@@ -691,8 +691,31 @@ if (pulledOrderId) {
   if (origOrder?.customer_name) customerName = origOrder.customer_name;
   if (origOrder?.customer_id) customerId = origOrder.customer_id;
 
-  const pulledDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
-  const pulledDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+  // Buscar descuento del cliente original (no depender del UI)
+  let pulledDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
+  let pulledDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+
+  if (pulledDiscount === 0 && origOrder?.customer_id) {
+    const { data: origCustomer } = await supabase
+      .from("customers")
+      .select("customer_type, discount_percent")
+      .eq("id", origOrder.customer_id)
+      .single();
+    if (origCustomer?.customer_type === "mayoreo" && Number(origCustomer.discount_percent || 0) > 0) {
+      const pct = Number(origCustomer.discount_percent);
+      pulledDiscount = pct;
+      pulledDiscountAmount = items.reduce((acc, item) => {
+        if (item.is_excluded_from_discount) return acc;
+        let lineTotal = 0;
+        if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+          lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+        } else {
+          lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+        }
+        return acc + lineTotal * (pct / 100);
+      }, 0);
+    }
+  }
 
   const { error: updateError } = await supabase
     .from("orders")
