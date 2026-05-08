@@ -1034,14 +1034,20 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     setEditedItems([]);
   }
 
-  function updateEditedItem(index: number, field: "kilos" | "price", value: string) {
+  function updateEditedItem(index: number, field: "kilos" | "price" | "quantity", value: string) {
     setEditedItems((prev) => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: Number(value) || 0 };
-      // Si editan kilos, también actualizar prepared_kilos para que el total refleje el cambio
-      if (field === "kilos") {
-        copy[index].prepared_kilos = Number(value) || 0;
+      const item = { ...copy[index] };
+      if (field === "quantity") {
+        // Producto por pieza — actualizar quantity
+        item.quantity = Math.max(1, Math.round(Number(value) || 1));
+      } else if (field === "kilos") {
+        item.kilos = Number(value) || 0;
+        item.prepared_kilos = Number(value) || 0;
+      } else {
+        item[field] = Number(value) || 0;
       }
+      copy[index] = item;
       return copy;
     });
   }
@@ -1076,10 +1082,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   }
 
   function editedTotal() {
-    return editedItems.reduce((sum, item) => {
-      const qty = Number(item.prepared_kilos || item.kilos || 0);
-      return sum + qty * Number(item.price || 0);
-    }, 0);
+    return editedItems.reduce((sum, item) => sum + itemLineTotal(item), 0);
   }
 
   async function saveTicketEdits() {
@@ -1105,6 +1108,8 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         price: item.price,
         prepared_kilos: item.prepared_kilos || null,
         sale_type: item.sale_type || null,
+        quantity: item.quantity ?? null,
+        is_fixed_price_piece: item.is_fixed_price_piece ?? null,
       }));
 
       const { error: insertError } = await supabase.from("order_items").insert(newItems);
@@ -2216,16 +2221,37 @@ if (cashError) {
                               <div style={{ display: "flex", gap: 8, alignItems: "center", width: "100%" }}>
                                 <div style={{ flex: 1 }}>
                                   <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>
-                                    {item.sale_type === "pieza" ? "Cantidad" : "Kilos"}
+                                    {item.sale_type === "pieza" || item.is_fixed_price_piece ? "Cantidad (pzas)" : "Kilos"}
                                   </label>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    value={item.prepared_kilos ?? item.kilos}
-                                    onChange={(e) => updateEditedItem(index, "kilos", e.target.value)}
-                                    style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 16, fontWeight: 600 }}
-                                  />
+                                  {item.sale_type === "pieza" || item.is_fixed_price_piece ? (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <button
+                                        onClick={() => updateEditedItem(index, "quantity", String(Math.max(1, (item.quantity || 1) - 1)))}
+                                        style={{ width: 40, height: 40, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: "#fff", fontSize: 20, fontWeight: 700, cursor: "pointer" }}
+                                      >−</button>
+                                      <input
+                                        type="number"
+                                        step="1"
+                                        min="1"
+                                        value={item.quantity || 1}
+                                        onChange={(e) => updateEditedItem(index, "quantity", e.target.value)}
+                                        style={{ width: 60, padding: "8px 6px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 16, fontWeight: 600, textAlign: "center" as const }}
+                                      />
+                                      <button
+                                        onClick={() => updateEditedItem(index, "quantity", String((item.quantity || 1) + 1))}
+                                        style={{ width: 40, height: 40, borderRadius: 10, border: `1px solid ${COLORS.border}`, background: "#fff", fontSize: 20, fontWeight: 700, cursor: "pointer" }}
+                                      >+</button>
+                                    </div>
+                                  ) : (
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={item.prepared_kilos ?? item.kilos}
+                                      onChange={(e) => updateEditedItem(index, "kilos", e.target.value)}
+                                      style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, fontSize: 16, fontWeight: 600 }}
+                                    />
+                                  )}
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>Precio</label>
