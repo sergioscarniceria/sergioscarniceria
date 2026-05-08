@@ -697,7 +697,6 @@ if (pulledOrderId) {
   if (updateError) {
     console.log(updateError);
     alert("No se pudo actualizar el pedido");
-    setSaving(false);
     return;
   }
 
@@ -718,7 +717,6 @@ if (pulledOrderId) {
   if (itemsError) {
     console.log(itemsError);
     alert("El pedido se actualizó, pero fallaron los renglones");
-    setSaving(false);
     return;
   }
 
@@ -746,7 +744,6 @@ if (pulledOrderId) {
   if (orderError || !orderData) {
     console.log(orderError);
     alert("No se pudo guardar la orden");
-    setSaving(false);
     return;
   }
 
@@ -767,7 +764,6 @@ if (pulledOrderId) {
   if (itemsError) {
     console.log(itemsError);
     alert("La orden se guardó, pero fallaron los renglones");
-    setSaving(false);
     return;
   }
 
@@ -823,19 +819,19 @@ setSelectedProduct("");
 setSelectedCategory(null);
 setSearch("");
 setKilos("");
-setCustomerMode("general");
-setSelectedCustomerId("");
-if (!timedOut) setSaving(false);
 
 await loadTickets();
 
     } catch (err) {
       console.error("saveTicket error:", err);
       if (!timedOut) {
-        setSaving(false);
         alert("Error al guardar. Revisa tu conexión e intenta de nuevo.");
       }
     } finally {
+      // SIEMPRE resetear cliente y estado de guardado, aunque haya error
+      setCustomerMode("general");
+      setSelectedCustomerId("");
+      setSaving(false);
       clearTimeout(timeoutId);
     }
   }
