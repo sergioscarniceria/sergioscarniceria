@@ -533,8 +533,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   }
 
   function ticketFinalTotal(ticket: Ticket | null): number {
+    if (!ticket) return 0;
     const sub = ticketTotal(ticket);
-    return moneyRound(Math.max(0, sub - calcDiscount(sub)));
+    const mayoreo = Number(ticket.discount_amount || 0);
+    return moneyRound(Math.max(0, sub - mayoreo - calcDiscount(sub)));
   }
 
   const filteredTickets = useMemo(() => {
@@ -620,9 +622,16 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     return allSelectedTickets().reduce((acc, t) => acc + ticketTotal(t), 0);
   }
 
+  // Descuento mayoreo que ya viene grabado en la orden (desde Ventas)
+  function combinedMayoreoDiscount(): number {
+    return allSelectedTickets().reduce((acc, t) => acc + Number(t.discount_amount || 0), 0);
+  }
+
   function combinedFinalTotal(): number {
     const sub = combinedTotal();
-    return moneyRound(Math.max(0, sub - calcDiscount(sub)));
+    const mayoreo = combinedMayoreoDiscount();
+    const manual = calcDiscount(sub);
+    return moneyRound(Math.max(0, sub - mayoreo - manual));
   }
 
   /**
@@ -682,8 +691,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
     const allTickets = allSelectedTickets();
     const subtotal = combinedTotal();
+    const mayoreoDesc = combinedMayoreoDiscount();
     const descuento = calcDiscount(subtotal);
-    const finalTotal = Math.max(0, subtotal - descuento);
+    const finalTotal = Math.max(0, subtotal - mayoreoDesc - descuento);
 
     const paidAt = new Date().toISOString();
     const isMulti = allTickets.length > 1;
@@ -1217,8 +1227,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       Number(customer.credit_days || 0) > 0 ? Number(customer.credit_days) : 7
     );
     const subtotal = combinedTotal();
+    const mayoreoDesc = combinedMayoreoDiscount();
     const descuento = calcDiscount(subtotal);
-    const finalTotal = Math.max(0, subtotal - descuento);
+    const finalTotal = Math.max(0, subtotal - mayoreoDesc - descuento);
 
     // Guardar info de descuento en notes del ticket
     if (descuento > 0) {
@@ -2058,7 +2069,8 @@ if (cashError) {
                               Cliente: {ticket.customer_name || "Mostrador"}
                             </div>
                             <div style={searchMetaStyle}>
-                              Total: ${money(ticketTotal(ticket))}
+                              Total: ${money(ticketTotal(ticket) - Number(ticket.discount_amount || 0))}
+                              {Number(ticket.discount_amount || 0) > 0 ? ` (${ticket.discount_percent || 0}% dto)` : ""}
                             </div>
                           </div>
 
@@ -2461,6 +2473,12 @@ if (cashError) {
                         <span>Subtotal{extraTickets.length > 0 ? ` (${allSelectedTickets().length} tickets)` : ""}</span>
                         <span>${money(combinedTotal())}</span>
                       </div>
+                      {combinedMayoreoDiscount() > 0 && (
+                        <div style={{ ...summaryRowStyle, color: "#a66a10" }}>
+                          <span>Descuento mayoreo ({selectedTicket?.discount_percent || 0}%)</span>
+                          <span>-${money(combinedMayoreoDiscount())}</span>
+                        </div>
+                      )}
                       {calcDiscount(combinedTotal()) > 0 && (
                         <div style={{ ...summaryRowStyle, color: COLORS.success }}>
                           <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
