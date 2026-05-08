@@ -17,6 +17,7 @@ type Item = {
   sale_type?: "kg" | "pieza";
   quantity?: number | null;
   is_fixed_price_piece?: boolean;
+  is_excluded_from_discount?: boolean;
 };
 
 type Product = {
@@ -25,6 +26,7 @@ type Product = {
   price: number;
   category: string | null;
   fixed_piece_price?: number | null;
+  is_excluded_from_discount?: boolean;
 };
 type Ticket = {
   id: string;
@@ -48,6 +50,7 @@ type Ticket = {
 type Customer = {
   id: string;
   name: string;
+  customer_type?: string;
 };
 
 const COLORS = {
@@ -165,6 +168,7 @@ const [lastSavedFolio, setLastSavedFolio] = useState("");
 
 const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
 const [selectedCustomerId, setSelectedCustomerId] = useState("");
+const [mayoreoDiscount, setMayoreoDiscount] = useState<number>(10);
 const [printTicketData, setPrintTicketData] = useState<{
   folio: string;
   orderId: string;
@@ -283,7 +287,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
       () =>
         supabase
           .from("products")
-          .select("id, name, price, category, fixed_piece_price")
+          .select("id, name, price, category, fixed_piece_price, is_excluded_from_discount")
           .order("category", { ascending: true })
           .order("name", { ascending: true }),
       "ventas_products"
@@ -342,7 +346,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
 async function loadCustomers() {
   const { data, error } = await supabase
     .from("customers")
-    .select("id, name")
+    .select("id, name, customer_type")
     .order("name", { ascending: true });
 
   if (error) {
@@ -529,6 +533,7 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
         sale_type: "pieza",
         quantity: cleanQuantity,
         is_fixed_price_piece: true,
+        is_excluded_from_discount: Boolean(product.is_excluded_from_discount),
       },
     ]);
 
@@ -567,6 +572,7 @@ if (isFixedPieceProduct && !Number.isInteger(Number(kilos))) {
       sale_type: "kg",
       quantity: null,
       is_fixed_price_piece: false,
+      is_excluded_from_discount: Boolean(product.is_excluded_from_discount),
     },
   ]);
 
@@ -684,6 +690,9 @@ if (pulledOrderId) {
   if (origOrder?.customer_name) customerName = origOrder.customer_name;
   if (origOrder?.customer_id) customerId = origOrder.customer_id;
 
+  const pulledDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
+  const pulledDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+
   const { error: updateError } = await supabase
     .from("orders")
     .update({
@@ -691,6 +700,9 @@ if (pulledOrderId) {
       status: "terminado",
       attendant_name: attendant || null,
       captured_by: attendant || "Mostrador",
+      discount_percent: pulledDiscount,
+      discount_amount: Number(pulledDiscountAmount.toFixed(2)),
+      notes: pulledDiscount > 0 ? `Descuento mayoreo ${pulledDiscount}%` : null,
     })
     .eq("id", pulledOrderId);
 
@@ -724,6 +736,9 @@ if (pulledOrderId) {
 
 } else {
   // ── Crear ticket nuevo de mostrador ──
+  const appliedDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
+  const appliedDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
     .insert([
@@ -733,9 +748,11 @@ if (pulledOrderId) {
         status: "pendiente",
         source: "mostrador",
         payment_status: "pendiente",
-        notes: null,
+        notes: appliedDiscount > 0 ? `Descuento mayoreo ${appliedDiscount}%` : null,
         attendant_name: attendant || null,
         captured_by: attendant || "Mostrador",
+        discount_percent: appliedDiscount,
+        discount_amount: Number(appliedDiscountAmount.toFixed(2)),
       },
     ])
         .select()
@@ -771,12 +788,17 @@ if (pulledOrderId) {
 }
 
     const folio = ticketFolio(orderId);
-    const ticketTotal = items.reduce((acc, item) => {
+    const ticketSubtotal = items.reduce((acc, item) => {
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         return acc + Number(item.quantity || 0) * Number(item.price || 0);
       }
       return acc + Number(item.kilos || 0) * Number(item.price || 0);
     }, 0);
+
+    // Calcular descuento mayoreo al momento de guardar
+    const saveDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
+    const saveDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+    const ticketTotal = ticketSubtotal - saveDiscountAmount;
 
    const savedItems = [...items];
 
@@ -802,10 +824,12 @@ if (pulledOrderId) {
        sale_type: item.sale_type,
        is_fixed_price_piece: item.is_fixed_price_piece,
      })),
-     subtotal: ticketTotal,
+     subtotal: ticketSubtotal,
+     discount: saveDiscountAmount > 0 ? saveDiscountAmount : undefined,
      total: ticketTotal,
      qrData: orderId,
      type: "venta",
+     notes: saveDiscount > 0 ? `Mayoreo ${saveDiscount}%` : undefined,
    };
    smartPrintTicket(ticketForPrint);
 
@@ -831,20 +855,45 @@ await loadTickets();
       // SIEMPRE resetear cliente y estado de guardado, aunque haya error
       setCustomerMode("general");
       setSelectedCustomerId("");
+      setMayoreoDiscount(10);
       setSaving(false);
       clearTimeout(timeoutId);
     }
   }
 
-  const total = useMemo(() => {
+  // ¿El cliente seleccionado es mayoreo?
+  const selectedCustomerIsMayoreo = useMemo(() => {
+    if (customerMode !== "existente" || !selectedCustomerId) return false;
+    const cust = customers.find((c) => c.id === selectedCustomerId);
+    return cust?.customer_type === "mayoreo";
+  }, [customerMode, selectedCustomerId, customers]);
+
+  // Subtotal sin descuento
+  const subtotal = useMemo(() => {
   return items.reduce((acc, item) => {
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       return acc + Number(item.quantity || 0) * Number(item.price || 0);
     }
-
     return acc + Number(item.kilos || 0) * Number(item.price || 0);
   }, 0);
 }, [items]);
+
+  // Monto del descuento mayoreo (solo sobre productos elegibles)
+  const mayoreoDiscountAmount = useMemo(() => {
+    if (!selectedCustomerIsMayoreo || mayoreoDiscount <= 0) return 0;
+    return items.reduce((acc, item) => {
+      if (item.is_excluded_from_discount) return acc;
+      let lineTotal = 0;
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+      } else {
+        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+      }
+      return acc + lineTotal * (mayoreoDiscount / 100);
+    }, 0);
+  }, [items, selectedCustomerIsMayoreo, mayoreoDiscount]);
+
+  const total = useMemo(() => subtotal - mayoreoDiscountAmount, [subtotal, mayoreoDiscountAmount]);
   const pendingTickets = useMemo(() => {
   return tickets.filter(
     (ticket) =>
@@ -1184,18 +1233,49 @@ const paidTickets = useMemo(() => {
       </div>
 
       {customerMode === "existente" ? (
-        <select
-          value={selectedCustomerId}
-          onChange={(e) => setSelectedCustomerId(e.target.value)}
-          style={inputStyle}
-        >
-          <option value="">Seleccionar cliente</option>
-          {customers.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
+        <>
+          <select
+            value={selectedCustomerId}
+            onChange={(e) => setSelectedCustomerId(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="">Seleccionar cliente</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name}{customer.customer_type === "mayoreo" ? " (Mayoreo)" : ""}
+              </option>
+            ))}
+          </select>
+
+          {selectedCustomerIsMayoreo && (
+            <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 12, background: "rgba(166,106,16,0.08)", border: "1px solid rgba(166,106,16,0.2)" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.warning, marginBottom: 6 }}>
+                Cliente mayoreo — Descuento:
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {[5, 10, 15].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setMayoreoDiscount(pct)}
+                    style={{
+                      flex: 1,
+                      padding: "8px 0",
+                      borderRadius: 10,
+                      border: mayoreoDiscount === pct ? "none" : `1px solid ${COLORS.border}`,
+                      background: mayoreoDiscount === pct ? COLORS.warning : "white",
+                      color: mayoreoDiscount === pct ? "white" : COLORS.text,
+                      fontWeight: 800,
+                      fontSize: 15,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div style={customerHintStyle}>Se guardará como MOSTRADOR</div>
       )}
@@ -1420,6 +1500,16 @@ const paidTickets = useMemo(() => {
     <p style={panelSubtitleStyle}>Resumen rápido del pedido</p>
 
     <div style={totalCardStyle}>
+      {selectedCustomerIsMayoreo && mayoreoDiscountAmount > 0 ? (
+        <>
+          <div style={{ fontSize: 13, color: COLORS.muted, fontWeight: 600, marginBottom: 2 }}>
+            Subtotal: ${money(subtotal)}
+          </div>
+          <div style={{ fontSize: 13, color: COLORS.warning, fontWeight: 700, marginBottom: 4 }}>
+            Descuento {mayoreoDiscount}%: -${money(mayoreoDiscountAmount)}
+          </div>
+        </>
+      ) : null}
       <div style={totalLabelStyle}>Importe total</div>
       <div style={totalValueStyle}>${money(total)}</div>
     </div>
@@ -1433,6 +1523,13 @@ const paidTickets = useMemo(() => {
             : "MOSTRADOR"}
         </b>
       </div>
+
+      {selectedCustomerIsMayoreo && (
+        <div style={summaryRowStyle}>
+          <span>Tipo</span>
+          <b style={{ color: COLORS.warning }}>Mayoreo {mayoreoDiscount}%</b>
+        </div>
+      )}
 
       <div style={summaryRowStyle}>
         <span>Renglones</span>
