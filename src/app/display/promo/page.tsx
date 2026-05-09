@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { useKeepAwake } from "@/lib/useKeepAwake";
 
 /* ─── Types ─── */
 type Product = {
@@ -42,6 +43,7 @@ const C = {
 };
 
 export default function DisplayPromo() {
+  useKeepAwake();
   const [products, setProducts] = useState<Product[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());

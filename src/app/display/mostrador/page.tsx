@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { listenCfd, type CfdMessage, type CfdItemLine } from "@/lib/cfd-channel";
+import { useKeepAwake } from "@/lib/useKeepAwake";
 
 type DisplayMode = "idle" | "active" | "done";
 
@@ -53,6 +54,7 @@ const FRASES_TICKET = [
 ];
 
 export default function DisplayMostradorPage() {
+  useKeepAwake();
   const supabase = getSupabaseClient();
 
   const [mode, setMode] = useState<DisplayMode>("idle");

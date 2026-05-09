@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { listenCfd, type CfdMessage, type CfdItemLine } from "@/lib/cfd-channel";
+import { useKeepAwake } from "@/lib/useKeepAwake";
 
 type DisplayMode = "idle" | "active" | "done";
 
@@ -30,6 +31,7 @@ const DONE_TIMEOUT = 8000;
 const MEDIA_REFRESH = 300000;
 
 export default function DisplayCajaPage() {
+  useKeepAwake();
   const supabase = getSupabaseClient();
 
   const [mode, setMode] = useState<DisplayMode>("idle");
