@@ -104,6 +104,7 @@ export default function AdminDashboardPage() {
   const [supplierDebt, setSupplierDebt] = useState<{ name: string; debt: number }[]>([]);
   const [roundingTotal, setRoundingTotal] = useState(0);
   const [roundingCount, setRoundingCount] = useState(0);
+  const [productSearch, setProductSearch] = useState("");
   const [cashMovements, setCashMovements] = useState<{ amount: number; type: string; is_cancelled: boolean; payment_method?: string }[]>([]);
 
   // Market prices
@@ -742,6 +743,12 @@ export default function AdminDashboardPage() {
     return Object.values(totals).sort((a, b) => b.revenue - a.revenue);
   }, [orders]);
 
+  const filteredProductStats = useMemo(() => {
+    if (!productSearch.trim()) return productStats;
+    const q = productSearch.toLowerCase().trim();
+    return productStats.filter(p => p.product.toLowerCase().includes(q));
+  }, [productStats, productSearch]);
+
   const bottomProducts = useMemo(() => {
     return [...productStats].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
   }, [productStats]);
@@ -774,6 +781,14 @@ export default function AdminDashboardPage() {
 
   function setMonthFilter() {
     setDateFrom(firstDayMonthStr);
+    setDateTo(todayStr);
+  }
+  function setWeekFilter() {
+    const t = new Date();
+    const day = t.getDay();
+    const diff = day === 0 ? 6 : day - 1; // lunes
+    const monday = new Date(t.getFullYear(), t.getMonth(), t.getDate() - diff);
+    setDateFrom(toDateInputValue(monday));
     setDateTo(todayStr);
   }
 
@@ -1393,12 +1408,31 @@ export default function AdminDashboardPage() {
         </div>
         </Section>
 
-        <Section id="productos" title="Ventas por producto" count={productStats.length}>
+        <Section id="productos" title="Ventas por producto" count={filteredProductStats.length}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, alignItems: "center" }}>
+            <button onClick={setTodayFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Hoy</button>
+            <button onClick={setWeekFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Semana</button>
+            <button onClick={setMonthFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Mes</button>
+            <button onClick={setYearFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Año</button>
+            <input
+              type="text"
+              placeholder="Buscar producto (ej: hielo, birria...)"
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              style={{ flex: 1, minWidth: 200, padding: "8px 12px", fontSize: 14, border: `1px solid ${COLORS.border}`, borderRadius: 8, background: COLORS.cardStrong, color: COLORS.text }}
+            />
+            {productSearch && (
+              <button onClick={() => setProductSearch("")} style={{ ...secondaryButtonStyle, padding: "6px 12px", fontSize: 13 }}>Limpiar</button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10 }}>
+            Rango: {dateFrom || "inicio"} → {dateTo || "hoy"} · {filteredProductStats.length} producto{filteredProductStats.length !== 1 ? "s" : ""}
+          </div>
 
-          {productStats.length === 0 ? (
-            <div style={emptyBoxStyle}>No hay datos</div>
+          {filteredProductStats.length === 0 ? (
+            <div style={emptyBoxStyle}>{productSearch ? `Sin resultados para "${productSearch}"` : "No hay datos"}</div>
           ) : (
-            productStats.map((product, index) => (
+            filteredProductStats.map((product, index) => (
               <div key={product.product} style={productRowStyle}>
                 <div style={{ flex: 2, color: COLORS.text, minWidth: 0 }}>
                   #{index + 1} <b>{product.product}</b>

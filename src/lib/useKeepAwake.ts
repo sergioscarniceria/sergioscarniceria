@@ -15,28 +15,20 @@ import { useEffect, useRef } from "react";
 const SILENT_MP4 =
   "data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAGF21kYXTeBAAAbGliZmFhYyAxLjI4AABCAJMgBDIARwAAArEGBf//rdxF6b3m2Ui3lizYINkj7v3JMYfBcwsTfaT6/wj8gNXEbmJj4Hnq2IvSXFLqkP2C0+xS3RqPtKB1FAVYcyStSUgvlYKKyWl5WYuD9ndaBmWEPGEyHGBZbgAAA1gZYiCgABFAAB+AAAfwAACgkA39//u9xz/eXwj4y//+78z70nIw/vUuUyiNMYkS//H/v+5N7/EmsAAAAAAAACAAACAAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAAAAAAAAA";
 
-declare global {
-  interface Navigator {
-    wakeLock?: {
-      request: (type: "screen") => Promise<{
-        release: () => Promise<void>;
-        addEventListener: (type: "release", cb: () => void) => void;
-      }>;
-    };
-  }
-}
+type WakeLockSentinelLike = { release: () => Promise<void> };
 
 export function useKeepAwake() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
 
   useEffect(() => {
     let active = true;
 
     const requestWakeLock = async () => {
       try {
-        if (typeof navigator !== "undefined" && navigator.wakeLock) {
-          const lock = await navigator.wakeLock.request("screen");
+        const nav = navigator as unknown as { wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinelLike> } };
+        if (typeof navigator !== "undefined" && nav.wakeLock) {
+          const lock = await nav.wakeLock.request("screen");
           wakeLockRef.current = lock;
         }
       } catch {
