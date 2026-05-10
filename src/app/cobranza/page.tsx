@@ -208,6 +208,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   const [showCreditPrint, setShowCreditPrint] = useState(false);
   const [creditPrintTicket, setCreditPrintTicket] = useState<TicketData | null>(null);
   const [showQrScanner, setShowQrScanner] = useState(false);
+  const [showRemoveDiscount, setShowRemoveDiscount] = useState(false);
+  const [removeDiscountCashier, setRemoveDiscountCashier] = useState("");
+  const [removingDiscount, setRemovingDiscount] = useState(false);
 
   // Modo edición de ticket
   const [hideUnprepared, setHideUnprepared] = useState(false);
@@ -2342,8 +2345,108 @@ if (cashError) {
                     {/* Badge mayoreo con descuento del ticket */}
                     {(getCustomerType(selectedTicket) === "mayoreo" || (selectedTicket.discount_percent && selectedTicket.discount_percent > 0)) && (
                       <div style={mayoreoBadgeStyle}>
-                        Cliente <b>mayoreo</b> — descuento {selectedTicket.discount_percent || 0}%
-                        {selectedTicket.discount_amount && selectedTicket.discount_amount > 0 ? ` (-$${money(selectedTicket.discount_amount)})` : ""}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                          <div>
+                            Cliente <b>mayoreo</b> — descuento {selectedTicket.discount_percent || 0}%
+                            {selectedTicket.discount_amount && selectedTicket.discount_amount > 0 ? ` (-$${money(selectedTicket.discount_amount)})` : ""}
+                          </div>
+                          {!editMode && selectedTicket.payment_status === "pendiente" && Number(selectedTicket.discount_amount || 0) > 0 && (
+                            <button
+                              onClick={() => { setRemoveDiscountCashier(""); setShowRemoveDiscount(true); }}
+                              style={{
+                                padding: "6px 12px",
+                                fontSize: 13,
+                                fontWeight: 700,
+                                background: "#fff",
+                                color: COLORS.danger,
+                                border: `1.5px solid ${COLORS.danger}`,
+                                borderRadius: 8,
+                                cursor: "pointer",
+                              }}
+                            >
+                              Quitar descuento
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {/* Modal: quitar descuento preestablecido */}
+                    {showRemoveDiscount && selectedTicket && (
+                      <div
+                        onClick={() => !removingDiscount && setShowRemoveDiscount(false)}
+                        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}
+                      >
+                        <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, padding: 24, maxWidth: 460, width: "100%", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}>
+                          <h2 style={{ margin: 0, marginBottom: 8, color: COLORS.danger, fontSize: 22 }}>Quitar descuento preestablecido</h2>
+                          <p style={{ color: COLORS.muted, fontSize: 14, marginBottom: 16 }}>
+                            Vas a eliminar el descuento del <b>{selectedTicket.discount_percent || 0}%</b> (-${money(Number(selectedTicket.discount_amount || 0))}) de este ticket. Esto NO se puede deshacer desde la UI.
+                          </p>
+                          <label style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6, color: COLORS.text }}>
+                            Identificación de cajera (nombre)
+                          </label>
+                          <input
+                            type="text"
+                            value={removeDiscountCashier}
+                            onChange={(e) => setRemoveDiscountCashier(e.target.value)}
+                            placeholder="Ej. Maria, Sergio, etc."
+                            autoFocus
+                            style={{ width: "100%", padding: "10px 12px", fontSize: 15, border: `1px solid ${COLORS.border}`, borderRadius: 10, marginBottom: 16 }}
+                          />
+                          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                            <button
+                              onClick={() => setShowRemoveDiscount(false)}
+                              disabled={removingDiscount}
+                              style={{ padding: "10px 18px", fontSize: 14, fontWeight: 600, background: "#f3f3f3", color: COLORS.text, border: "none", borderRadius: 10, cursor: "pointer" }}
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!removeDiscountCashier.trim()) {
+                                  alert("Escribe el nombre de la cajera para continuar");
+                                  return;
+                                }
+                                if (!selectedTicket) return;
+                                if (selectedTicket.payment_status !== "pendiente") {
+                                  alert("Solo se puede quitar descuento de tickets pendientes");
+                                  return;
+                                }
+                                setRemovingDiscount(true);
+                                try {
+                                  const prevPct = selectedTicket.discount_percent || 0;
+                                  const prevAmt = Number(selectedTicket.discount_amount || 0);
+                                  const prevNotes = selectedTicket.notes || "";
+                                  const stamp = new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+                                  const newNotes = `${prevNotes ? prevNotes + " | " : ""}Descuento removido por ${removeDiscountCashier.trim()} (${stamp}) — era ${prevPct}% (-$${money(prevAmt)})`;
+                                  const { error } = await supabase
+                                    .from("orders")
+                                    .update({ discount_percent: 0, discount_amount: 0, notes: newNotes })
+                                    .eq("id", selectedTicket.id);
+                                  if (error) throw error;
+                                  setShowRemoveDiscount(false);
+                                  setRemoveDiscountCashier("");
+                                  // Refrescar ticket
+                                  const { data: refreshed } = await supabase
+                                    .from("orders")
+                                    .select("id, customer_id, customer_name, status, source, notes, created_at, payment_status, payment_method, paid_at, canceled_at, attendant_name, discount_amount, discount_percent, order_items(*)")
+                                    .eq("id", selectedTicket.id)
+                                    .single();
+                                  if (refreshed) setSelectedTicket(refreshed as Ticket);
+                                  alert("Descuento removido. Registrado en notas del ticket.");
+                                } catch (err) {
+                                  console.error(err);
+                                  alert("Error al quitar el descuento");
+                                } finally {
+                                  setRemovingDiscount(false);
+                                }
+                              }}
+                              disabled={removingDiscount || !removeDiscountCashier.trim()}
+                              style={{ padding: "10px 18px", fontSize: 14, fontWeight: 700, background: COLORS.danger, color: "#fff", border: "none", borderRadius: 10, cursor: removingDiscount ? "wait" : "pointer", opacity: !removeDiscountCashier.trim() ? 0.5 : 1 }}
+                            >
+                              {removingDiscount ? "Quitando..." : "Confirmar"}
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
 

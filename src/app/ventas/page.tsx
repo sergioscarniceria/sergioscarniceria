@@ -704,8 +704,17 @@ if (pulledOrderId) {
     if (origCustomer?.customer_type === "mayoreo" && Number(origCustomer.discount_percent || 0) > 0) {
       const pct = Number(origCustomer.discount_percent);
       pulledDiscount = pct;
+      // Re-fetch products para validar is_excluded_from_discount con datos FRESCOS de BD
+      const productNames = Array.from(new Set(items.map((i) => i.product).filter(Boolean)));
+      const { data: freshProducts } = await supabase
+        .from("products")
+        .select("name, is_excluded_from_discount")
+        .in("name", productNames);
+      const excludedMap = new Map<string, boolean>(
+        (freshProducts || []).map((p: { name: string; is_excluded_from_discount: boolean | null }) => [p.name, !!p.is_excluded_from_discount])
+      );
       pulledDiscountAmount = items.reduce((acc, item) => {
-        if (item.is_excluded_from_discount) return acc;
+        if (excludedMap.get(item.product)) return acc;
         let lineTotal = 0;
         if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
           lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
@@ -715,6 +724,27 @@ if (pulledOrderId) {
         return acc + lineTotal * (pct / 100);
       }, 0);
     }
+  }
+  // Si el descuento viene del UI (cliente seleccionado en mostrador), re-validar también
+  if (pulledDiscount > 0 && selectedCustomerIsMayoreo) {
+    const productNames2 = Array.from(new Set(items.map((i) => i.product).filter(Boolean)));
+    const { data: freshProducts2 } = await supabase
+      .from("products")
+      .select("name, is_excluded_from_discount")
+      .in("name", productNames2);
+    const excludedMap2 = new Map<string, boolean>(
+      (freshProducts2 || []).map((p: { name: string; is_excluded_from_discount: boolean | null }) => [p.name, !!p.is_excluded_from_discount])
+    );
+    pulledDiscountAmount = items.reduce((acc, item) => {
+      if (excludedMap2.get(item.product)) return acc;
+      let lineTotal = 0;
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+      } else {
+        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+      }
+      return acc + lineTotal * (pulledDiscount / 100);
+    }, 0);
   }
 
   const { error: updateError } = await supabase
@@ -761,7 +791,29 @@ if (pulledOrderId) {
 } else {
   // ── Crear ticket nuevo de mostrador ──
   const appliedDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
-  const appliedDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+  // Re-fetch products para validar is_excluded_from_discount con datos FRESCOS de BD
+  // (evita bug cuando un producto se marca excluido despues de cargar la pagina)
+  let appliedDiscountAmount = 0;
+  if (selectedCustomerIsMayoreo && appliedDiscount > 0) {
+    const productNamesN = Array.from(new Set(items.map((i) => i.product).filter(Boolean)));
+    const { data: freshProductsN } = await supabase
+      .from("products")
+      .select("name, is_excluded_from_discount")
+      .in("name", productNamesN);
+    const excludedMapN = new Map<string, boolean>(
+      (freshProductsN || []).map((p: { name: string; is_excluded_from_discount: boolean | null }) => [p.name, !!p.is_excluded_from_discount])
+    );
+    appliedDiscountAmount = items.reduce((acc, item) => {
+      if (excludedMapN.get(item.product)) return acc;
+      let lineTotal = 0;
+      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+        lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+      } else {
+        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+      }
+      return acc + lineTotal * (appliedDiscount / 100);
+    }, 0);
+  }
 
   const { data: orderData, error: orderError } = await supabase
     .from("orders")
