@@ -871,9 +871,25 @@ if (pulledOrderId) {
       return acc + Number(item.kilos || 0) * Number(item.price || 0);
     }, 0);
 
-    // Calcular descuento mayoreo al momento de guardar
-    const saveDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
-    const saveDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+    // Calcular descuento al momento de imprimir: leer del ticket recién guardado
+    // (evita que la impresión muestre descuento sobre productos excluidos)
+    let saveDiscount = 0;
+    let saveDiscountAmount = 0;
+    try {
+      const { data: savedOrder } = await supabase
+        .from("orders")
+        .select("discount_percent, discount_amount")
+        .eq("id", orderId)
+        .single();
+      if (savedOrder) {
+        saveDiscount = Number(savedOrder.discount_percent || 0);
+        saveDiscountAmount = Number(savedOrder.discount_amount || 0);
+      }
+    } catch (e) {
+      // Si falla, fallback al cálculo del state (que ya considera is_excluded_from_discount)
+      saveDiscount = selectedCustomerIsMayoreo ? mayoreoDiscount : 0;
+      saveDiscountAmount = selectedCustomerIsMayoreo ? mayoreoDiscountAmount : 0;
+    }
     const ticketTotal = ticketSubtotal - saveDiscountAmount;
 
    const savedItems = [...items];
