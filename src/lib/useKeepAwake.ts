@@ -17,7 +17,7 @@ import { useEffect, useRef } from "react";
 const SILENT_MP4 =
   "data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAGF21kYXTeBAAAbGliZmFhYyAxLjI4AABCAJMgBDIARwAAArEGBf//rdxF6b3m2Ui3lizYINkj7v3JMYfBcwsTfaT6/wj8gNXEbmJj4Hnq2IvSXFLqkP2C0+xS3RqPtKB1FAVYcyStSUgvlYKKyWl5WYuD9ndaBmWEPGEyHGBZbgAAA1gZYiCgABFAAB+AAAfwAACgkA39//u9xz/eXwj4y//+78z70nIw/vUuUyiNMYkS//H/v+5N7/EmsAAAAAAAACAAACAAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAAAAAAAAA";
 
-const RELOAD_AFTER_MS = 4 * 60 * 1000; // 4 minutos (antes del screensaver de 5min)
+const RELOAD_AFTER_MS = 2 * 60 * 1000; // 2 minutos (mas agresivo para Fire TV)
 const ACTIVITY_INTERVAL_MS = 20_000; // simular actividad cada 20s
 const DOM_TICK_MS = 1000; // tick visual cada 1s
 
@@ -43,6 +43,23 @@ export function useKeepAwake() {
         // fallback to video / activity
       }
     };
+
+    // ─── 0. Intentar entrar a fullscreen (algunos Fire TVs solo respetan keep-awake en fullscreen) ───
+    const tryFullscreen = () => {
+      try {
+        const docEl = document.documentElement as HTMLElement & {
+          webkitRequestFullscreen?: () => Promise<void>;
+        };
+        if (docEl.requestFullscreen) {
+          docEl.requestFullscreen().catch(() => {});
+        } else if (docEl.webkitRequestFullscreen) {
+          docEl.webkitRequestFullscreen();
+        }
+      } catch {}
+    };
+    // Solo intentar fullscreen al primer click (requerimiento de navegadores)
+    const fsHandler = () => { tryFullscreen(); document.removeEventListener("click", fsHandler); };
+    document.addEventListener("click", fsHandler);
 
     // ─── 1. Video silencioso oculto ───
     const v = document.createElement("video");
@@ -142,6 +159,7 @@ export function useKeepAwake() {
       clearInterval(activityTimer);
       clearTimeout(reloadTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      document.removeEventListener("click", fsHandler);
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.remove();
