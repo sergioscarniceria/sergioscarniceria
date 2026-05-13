@@ -1,25 +1,17 @@
 "use client";
 /**
- * Hook agresivo para evitar que la pantalla se apague — especialmente Fire TV.
+ * Hook para evitar que el Fire TV active el fondo ambiental.
  *
- * Combina varias técnicas porque el Silk Browser del Fire TV ignora Wake Lock API:
- * 1. Wake Lock API (navegadores modernos)
- * 2. Video silencioso en loop (NoSleep.js)
- * 3. Auto-reload de la página cada 4 minutos (antes del screensaver de 5min del Fire OS)
- * 4. Eventos sintéticos de actividad (mousemove, keypress) cada 20 segundos
- * 5. Modificación del DOM cada segundo (mantiene el rendering activo)
- *
- * Uso: agregar `useKeepAwake();` al inicio de cualquier página que deba quedarse encendida.
+ * Técnica probada: reproducir un video MP4 REAL HOSTEADO (no base64) con audio track.
+ * El Fire TV NO activa el fondo ambiental mientras detecta video activo en el navegador.
  */
 import { useEffect, useRef } from "react";
 
-// MP4 mínimo silencioso embebido (1 frame, ~1KB)
-const SILENT_MP4 =
-  "data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAGF21kYXTeBAAAbGliZmFhYyAxLjI4AABCAJMgBDIARwAAArEGBf//rdxF6b3m2Ui3lizYINkj7v3JMYfBcwsTfaT6/wj8gNXEbmJj4Hnq2IvSXFLqkP2C0+xS3RqPtKB1FAVYcyStSUgvlYKKyWl5WYuD9ndaBmWEPGEyHGBZbgAAA1gZYiCgABFAAB+AAAfwAACgkA39//u9xz/eXwj4y//+78z70nIw/vUuUyiNMYkS//H/v+5N7/EmsAAAAAAAACAAACAAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAACAAAAAAAAAA";
+const KEEP_AWAKE_VIDEO_URL =
+  "https://wtyxkekfcupzfjxmdyvv.supabase.co/storage/v1/object/public/display-media/keep-awake.mp4";
 
-const RELOAD_AFTER_MS = 2 * 60 * 1000; // 2 minutos (mas agresivo para Fire TV)
-const ACTIVITY_INTERVAL_MS = 20_000; // simular actividad cada 20s
-const DOM_TICK_MS = 1000; // tick visual cada 1s
+const RELOAD_AFTER_MS = 4 * 60 * 1000;
+const HEARTBEAT_MS = 10_000;
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
@@ -39,102 +31,54 @@ export function useKeepAwake() {
           const lock = await nav.wakeLock.request("screen");
           wakeLockRef.current = lock;
         }
-      } catch {
-        // fallback to video / activity
-      }
-    };
-
-    // ─── 0. Intentar entrar a fullscreen (algunos Fire TVs solo respetan keep-awake en fullscreen) ───
-    const tryFullscreen = () => {
-      try {
-        const docEl = document.documentElement as HTMLElement & {
-          webkitRequestFullscreen?: () => Promise<void>;
-        };
-        if (docEl.requestFullscreen) {
-          docEl.requestFullscreen().catch(() => {});
-        } else if (docEl.webkitRequestFullscreen) {
-          docEl.webkitRequestFullscreen();
-        }
       } catch {}
     };
-    // Solo intentar fullscreen al primer click (requerimiento de navegadores)
-    const fsHandler = () => { tryFullscreen(); document.removeEventListener("click", fsHandler); };
-    document.addEventListener("click", fsHandler);
 
-    // ─── 1. Video silencioso oculto ───
+    // Video MP4 real con audio track — visible (no display:none) para que el sistema lo cuente como reproducción
     const v = document.createElement("video");
-    v.setAttribute("playsinline", "");
-    v.setAttribute("muted", "");
+    v.setAttribute("playsinline", "true");
+    v.setAttribute("webkit-playsinline", "true");
     v.muted = true;
     v.loop = true;
     v.autoplay = true;
-    v.src = SILENT_MP4;
+    v.preload = "auto";
+    v.src = KEEP_AWAKE_VIDEO_URL;
+    v.crossOrigin = "anonymous";
+    // Visible pero imperceptible — NO usar display:none ni visibility:hidden (el OS no lo contaría)
     v.style.position = "fixed";
-    v.style.bottom = "0";
-    v.style.right = "0";
-    v.style.width = "1px";
-    v.style.height = "1px";
+    v.style.bottom = "2px";
+    v.style.right = "2px";
+    v.style.width = "2px";
+    v.style.height = "2px";
     v.style.opacity = "0.01";
     v.style.pointerEvents = "none";
-    v.style.zIndex = "-1";
+    v.style.zIndex = "2147483647";
     document.body.appendChild(v);
     videoRef.current = v;
 
     const playVideo = () => {
-      v.play().catch(() => {});
+      v.play().catch(() => {
+        // Si autoplay bloqueado, esperar primer click del usuario
+        const onceClick = () => {
+          v.play().catch(() => {});
+          document.removeEventListener("click", onceClick);
+          document.removeEventListener("keydown", onceClick);
+        };
+        document.addEventListener("click", onceClick, { once: true });
+        document.addEventListener("keydown", onceClick, { once: true });
+      });
     };
     playVideo();
     requestWakeLock();
 
-    // ─── 2. Tick del DOM (mantiene render activo) ───
-    // Crea un elemento invisible que cambia cada segundo
-    const tickEl = document.createElement("div");
-    tickEl.id = "__keepawake_tick";
-    tickEl.style.position = "fixed";
-    tickEl.style.bottom = "0";
-    tickEl.style.left = "0";
-    tickEl.style.width = "1px";
-    tickEl.style.height = "1px";
-    tickEl.style.opacity = "0.01";
-    tickEl.style.pointerEvents = "none";
-    tickEl.style.zIndex = "-1";
-    document.body.appendChild(tickEl);
-
-    let tickCounter = 0;
-    const domTick = setInterval(() => {
+    const heartbeat = setInterval(() => {
       if (!active) return;
-      tickCounter++;
-      tickEl.textContent = String(tickCounter);
-      // Forzar repaint con transform mínimo
-      tickEl.style.transform = `translate(${tickCounter % 2}px, 0)`;
-    }, DOM_TICK_MS);
-
-    // ─── 3. Eventos sintéticos de actividad (engaña al detector de idle) ───
-    const fireActivity = () => {
-      try {
-        // Mousemove sintético
-        const evt = new MouseEvent("mousemove", {
-          bubbles: true,
-          cancelable: true,
-          clientX: Math.random() * 10,
-          clientY: Math.random() * 10,
-        });
-        document.dispatchEvent(evt);
-        // Pequeño scroll y volver
-        const y = window.scrollY;
-        window.scrollTo(0, y + 1);
-        window.scrollTo(0, y);
-      } catch {}
-    };
-
-    const activityTimer = setInterval(() => {
-      if (!active) return;
-      fireActivity();
-      if (v.paused) playVideo();
+      if (v.paused || v.ended || v.readyState < 2) {
+        playVideo();
+      }
       if (!wakeLockRef.current) requestWakeLock();
-    }, ACTIVITY_INTERVAL_MS);
+    }, HEARTBEAT_MS);
 
-    // ─── 4. Re-activar al volver a primer plano ───
     const onVisibilityChange = () => {
       if (!active) return;
       if (document.visibilityState === "visible") {
@@ -144,27 +88,22 @@ export function useKeepAwake() {
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
 
-    // ─── 5. Auto-reload cada 4 minutos (lo más efectivo en Fire TV) ───
+    // Auto-reload cada 4 minutos como respaldo final
     const reloadTimer = setTimeout(() => {
       if (active) {
-        try {
-          window.location.reload();
-        } catch {}
+        try { window.location.reload(); } catch {}
       }
     }, RELOAD_AFTER_MS);
 
     return () => {
       active = false;
-      clearInterval(domTick);
-      clearInterval(activityTimer);
+      clearInterval(heartbeat);
       clearTimeout(reloadTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
-      document.removeEventListener("click", fsHandler);
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.remove();
       }
-      if (tickEl.parentNode) tickEl.parentNode.removeChild(tickEl);
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch(() => {});
         wakeLockRef.current = null;
