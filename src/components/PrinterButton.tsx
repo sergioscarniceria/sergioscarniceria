@@ -63,7 +63,8 @@ export default function PrinterButton() {
       style={{
         position: "fixed",
         bottom: 20,
-        right: 20,
+        left: 20,
+
         zIndex: 900,
         display: "flex",
         alignItems: "center",
