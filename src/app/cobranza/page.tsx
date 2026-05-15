@@ -711,6 +711,17 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         cashier_name: cashierName || null,
       };
 
+      // Distribuir descuento manual proporcionalmente entre tickets del lote
+      if (descuento > 0) {
+        const tTotalForDisc = ticketTotal(ticket);
+        const propForDisc = subtotal > 0 ? tTotalForDisc / subtotal : 1 / allTickets.length;
+        const ticketManualDiscount = moneyRound(propForDisc * descuento);
+        if (ticketManualDiscount > 0) {
+          const existingDiscount = Number(ticket.discount_amount || 0);
+          orderUpdate.discount_amount = moneyRound(existingDiscount + ticketManualDiscount);
+        }
+      }
+
       // Descuento solo en nota del ticket principal
       if (descuento > 0 && ticket.id === selectedTicket.id) {
         const discountNote = discountMode === "percent"
@@ -877,6 +888,17 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         paid_at: paidAt,
         cashier_name: cashierName || null,
       };
+
+      // Distribuir descuento manual proporcionalmente entre tickets del lote
+      if (descuento > 0) {
+        const tTotalForDisc = ticketTotal(ticket);
+        const propForDisc = subtotal > 0 ? tTotalForDisc / subtotal : 1 / allTickets.length;
+        const ticketManualDiscount = moneyRound(propForDisc * descuento);
+        if (ticketManualDiscount > 0) {
+          const existingDiscount = Number(ticket.discount_amount || 0);
+          orderUpdate.discount_amount = moneyRound(existingDiscount + ticketManualDiscount);
+        }
+      }
 
       if (ticket.id === selectedTicket.id) {
         const noteParts = [ticket.notes || "", descuento > 0 ? (discountMode === "percent" ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}` : `Descuento -$${Math.ceil(descuento)}`) : "", mixedDetail, groupNote].filter(Boolean);

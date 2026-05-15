@@ -117,6 +117,7 @@ type CashExpense = {
   category: string;
   notes?: string | null;
   created_at?: string | null;
+  payment_method?: string | null;
 };
 
 type Tab = "resumen" | "apertura" | "gastos" | "reconteo" | "cierre" | "historial" | "reportes";
@@ -366,6 +367,7 @@ export default function CajaPage() {
   const [expAmount, setExpAmount] = useState("");
   const [expCategory, setExpCategory] = useState("varios");
   const [expNotes, setExpNotes] = useState("");
+  const [expPaymentMethod, setExpPaymentMethod] = useState<"efectivo" | "tarjeta" | "transferencia">("efectivo");
 
   // Desglose modal
   const [desgloseMovement, setDesgloseMovement] = useState<Movement | null>(null);
@@ -692,9 +694,13 @@ export default function CajaPage() {
       ? expenses.filter((e) => e.created_at && e.created_at > todayClosure.created_at!)
       : expenses;
     const totalGastos = activeExpenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+    // Solo gastos en efectivo afectan el cajón físico (los de tarjeta/transferencia no salen de caja)
+    const totalGastosEfectivo = activeExpenses
+      .filter((e) => (e.payment_method || "efectivo") === "efectivo")
+      .reduce((a, e) => a + Number(e.amount || 0), 0);
     // Si ya hay un corte previo, el fondo inicial del siguiente periodo es el contado del corte anterior
     const fondoInicial = todayClosure?.counted_cash != null ? Number(todayClosure.counted_cash) : (todayOpening?.initial_amount || 0);
-    const efectivoEsperado = fondoInicial + totalEfectivoIngreso - totalGastos;
+    const efectivoEsperado = fondoInicial + totalEfectivoIngreso - totalGastosEfectivo;
 
     const ticketCount = ventas.length;
     const ticketPromedio = ticketCount > 0 ? totalVentas / ticketCount : 0;
@@ -704,7 +710,7 @@ export default function CajaPage() {
       cxcEfectivo, cxcTarjeta, cxcTransferencia,
       totalVentas, totalCxc,
       totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalGeneral,
-      totalGastos, fondoInicial, efectivoEsperado,
+      totalGastos, totalGastosEfectivo, fondoInicial, efectivoEsperado,
       ticketCount, ticketPromedio,
       totalMovements: active.length,
       cancelledCount: movements.filter((m) => m.is_cancelled).length,
@@ -914,6 +920,7 @@ export default function CajaPage() {
       amount: Number(amt.toFixed(2)),
       category: expCategory,
       notes: expNotes.trim() || null,
+      payment_method: expPaymentMethod,
     }]);
 
     if (error) { alert("Error al guardar gasto"); console.log(error); setSaving(false); return; }
@@ -922,6 +929,7 @@ export default function CajaPage() {
     setExpAmount("");
     setExpCategory("varios");
     setExpNotes("");
+    setExpPaymentMethod("efectivo");
     alert("Gasto registrado");
     await loadExpenses();
     setSaving(false);
@@ -2183,6 +2191,8 @@ export default function CajaPage() {
             expenses={expenses}
             totalGastos={stats.totalGastos}
             saving={saving}
+            expPaymentMethod={expPaymentMethod}
+            setExpPaymentMethod={setExpPaymentMethod}
             expConcept={expConcept}
             setExpConcept={setExpConcept}
             expAmount={expAmount}
@@ -2963,6 +2973,7 @@ export default function CajaPage() {
 // ─── Gastos Tab (extracted for clarity) ──────────────────────
 function GastosTab({
   expenses, totalGastos, saving,
+  expPaymentMethod, setExpPaymentMethod,
   expConcept, setExpConcept, expAmount, setExpAmount,
   expCategory, setExpCategory, expNotes, setExpNotes,
   saveExpense, deleteExpense,
@@ -2970,6 +2981,8 @@ function GastosTab({
   expenses: CashExpense[];
   totalGastos: number;
   saving: boolean;
+  expPaymentMethod: "efectivo" | "tarjeta" | "transferencia";
+  setExpPaymentMethod: (v: "efectivo" | "tarjeta" | "transferencia") => void;
   expConcept: string;
   setExpConcept: (v: string) => void;
   expAmount: string;
@@ -3049,6 +3062,34 @@ function GastosTab({
           <div style={fieldLabel}>Notas (opcional)</div>
           <input value={expNotes} onChange={(e) => setExpNotes(e.target.value)} style={inputSt} placeholder="Referencia, recibo, factura..." />
         </div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={fieldLabel}>Forma de pago</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {(["efectivo","tarjeta","transferencia"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setExpPaymentMethod(m)}
+                style={{
+                  flex: 1,
+                  minWidth: 100,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: expPaymentMethod === m ? "none" : `1px solid ${C.border}`,
+                  background: expPaymentMethod === m ? C.primary : "rgba(255,255,255,0.75)",
+                  color: expPaymentMethod === m ? "white" : C.text,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontSize: 13,
+                }}
+              >
+                {m === "efectivo" ? "Efectivo" : m === "tarjeta" ? "Tarjeta" : "Transferencia"}
+              </button>
+            ))}
+          </div>
+          <div style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>
+            Solo los gastos en efectivo se restan del efectivo esperado de caja.
+          </div>
+        </div>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button onClick={saveExpense} disabled={saving} style={btnPri}>
             {saving ? "Guardando..." : "Registrar gasto"}
@@ -3090,6 +3131,9 @@ function GastosTab({
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                       <span style={{ display: "inline-block", padding: "4px 10px", borderRadius: 999, background: "rgba(180,35,24,0.10)", color: C.danger, fontSize: 12, fontWeight: 700 }}>
                         {EXPENSE_CATS.find((c) => c.value === e.category)?.label || e.category}
+                      </span>
+                      <span style={{ display: "inline-block", padding: "4px 10px", borderRadius: 999, background: (e.payment_method || "efectivo") === "efectivo" ? "rgba(31,122,77,0.12)" : "rgba(53,92,125,0.12)", color: (e.payment_method || "efectivo") === "efectivo" ? "#1f7a4d" : "#355c7d", fontSize: 12, fontWeight: 700 }}>
+                        {(e.payment_method || "efectivo") === "efectivo" ? "Efectivo" : (e.payment_method === "tarjeta" ? "Tarjeta" : "Transferencia")}
                       </span>
                       <span style={{ color: C.muted, fontSize: 13 }}>{fmtDateTime(e.created_at)}</span>
                     </div>
