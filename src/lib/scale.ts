@@ -14,6 +14,14 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// URL del relay local (PowerShell que mantiene COM7 abierto y expone HTTP)
+// Solo se usa si /salud responde OK. Si no, fallback automático a WebSerial.
+const RELAY_URL = "http://localhost:8765";
+const RELAY_DETECT_TIMEOUT_MS = 500;
+const RELAY_POLL_INTERVAL_MS = 250;
+const RELAY_FETCH_TIMEOUT_MS = 800;
+const RELAY_STALE_THRESHOLD_MS = 2000;
+
 declare global {
   interface Navigator {
     serial?: any;
@@ -37,6 +45,15 @@ class TorreyScale {
 
   status: ScaleStatus = "disconnected";
   error: string = "";
+
+  // Relay HTTP local (PC con 2 monitores) — null = no inicializado, true = activo, false = WebSerial directo
+  private _useRelay: boolean | null = null;
+  private _relayInterval: any = null;
+  private _relayLastFetchTs: number = 0;
+
+  get usingRelay(): boolean {
+    return this._useRelay === true;
+  }
 
   get isConnected(): boolean {
     return this.status === "ready" || this.status === "reading";
@@ -83,6 +100,20 @@ class TorreyScale {
 
     try {
       this.status = "connecting";
+
+      // ─── Detección automática de relay HTTP local ───
+      // Si hay un relay vivo en localhost:8765, lo usamos (modo 2 monitores).
+      // Si no, caemos al flujo WebSerial original (PC de 1 monitor).
+      const relayOk = await this._detectRelay();
+      if (relayOk) {
+        this._useRelay = true;
+        this.status = "ready";
+        this.error = "";
+        this._startRelayPolling();
+        console.log("Báscula vía relay HTTP en", RELAY_URL);
+        return true;
+      }
+      this._useRelay = false;
 
       // Intentar reconectar a puerto previamente autorizado
       const ports = await navigator.serial!.getPorts();
@@ -143,6 +174,13 @@ class TorreyScale {
 
   async disconnect(): Promise<void> {
     this.readLoop = false;
+
+    // Limpiar polling del relay (si estaba activo)
+    if (this._relayInterval) {
+      clearInterval(this._relayInterval);
+      this._relayInterval = null;
+    }
+    this._useRelay = null;
 
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
@@ -288,6 +326,75 @@ class TorreyScale {
    */
   getRawBuffer(): string {
     return this._rawBuffer;
+  }
+
+  // ─── Modo Relay HTTP (PC con 2 monitores) ───
+
+  private async _detectRelay(): Promise<boolean> {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), RELAY_DETECT_TIMEOUT_MS);
+      const resp = await fetch(`${RELAY_URL}/salud`, {
+        method: "GET",
+        signal: ctrl.signal,
+        mode: "cors",
+      });
+      clearTimeout(t);
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      return data && data.ok === true;
+    } catch {
+      return false;
+    }
+  }
+
+  private _startRelayPolling(): void {
+    this.status = "reading";
+    if (this._relayInterval) clearInterval(this._relayInterval);
+    this._relayInterval = setInterval(() => {
+      this._fetchRelayWeight();
+    }, RELAY_POLL_INTERVAL_MS);
+    // Primer fetch inmediato
+    this._fetchRelayWeight();
+  }
+
+  private async _fetchRelayWeight(): Promise<void> {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), RELAY_FETCH_TIMEOUT_MS);
+      const resp = await fetch(`${RELAY_URL}/peso`, {
+        method: "GET",
+        signal: ctrl.signal,
+        mode: "cors",
+      });
+      clearTimeout(t);
+      this._relayLastFetchTs = Date.now();
+
+      const data = await resp.json();
+      if (!data || data.ok === false) {
+        // Báscula desconectada del relay → marcar inestable pero conservar último peso conocido
+        if (this._lastStable) {
+          this._lastStable = false;
+          this.notifyListeners(this._lastWeight, "kg", false);
+        }
+        return;
+      }
+
+      const kg = Number(data.kg || 0);
+      const staleMs = Number(data.stale_ms || 0);
+      const stable = staleMs <= RELAY_STALE_THRESHOLD_MS;
+
+      if (kg !== this._lastWeight || stable !== this._lastStable) {
+        this.notifyListeners(kg, "kg", stable);
+      }
+    } catch {
+      // Error de red. NO hacer fallback a WebSerial (re-introduciría conflicto).
+      // Solo marcar inestable.
+      if (this._lastStable) {
+        this._lastStable = false;
+        this.notifyListeners(this._lastWeight, "kg", false);
+      }
+    }
   }
 }
 
