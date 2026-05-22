@@ -589,21 +589,31 @@ export default function AdminDashboardPage() {
 
     const currentSales = salesThisMonth;
     const currentOwnerExp = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
-    const currentOpExp = opExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    // Excluir préstamos: dinero prestado a terceros no es gasto del negocio (será devuelto)
+    const currentOpExp = opExpenses
+      .filter((e) => e.category !== "prestamos")
+      .reduce((s, e) => s + Number(e.amount), 0);
+    const currentPrestamos = opExpenses
+      .filter((e) => e.category === "prestamos")
+      .reduce((s, e) => s + Number(e.amount), 0);
     const currentExpenses = currentOwnerExp + currentOpExp;
     const currentUtility = currentSales - currentExpenses;
     const currentMargin = currentSales > 0 ? (currentUtility / currentSales) * 100 : 0;
 
     const prevMSales = calcOrdersTotal(prevMonthOrders);
     const prevMOwnerExp = prevMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
-    const prevMOpExp = prevMonthOpExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevMOpExp = prevMonthOpExpenses
+      .filter((e) => e.category !== "prestamos")
+      .reduce((s, e) => s + Number(e.amount), 0);
     const prevMExpenses = prevMOwnerExp + prevMOpExp;
     const prevMUtility = prevMSales - prevMExpenses;
     const prevMMargin = prevMSales > 0 ? (prevMUtility / prevMSales) * 100 : 0;
 
     const prevYSales = calcOrdersTotal(prevYearOrders);
     const prevYOwnerExp = prevYearExpenses.reduce((s, e) => s + Number(e.amount), 0);
-    const prevYOpExp = prevYearOpExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const prevYOpExp = prevYearOpExpenses
+      .filter((e) => e.category !== "prestamos")
+      .reduce((s, e) => s + Number(e.amount), 0);
     const prevYExpenses = prevYOwnerExp + prevYOpExp;
     const prevYUtility = prevYSales - prevYExpenses;
     const prevYMargin = prevYSales > 0 ? (prevYUtility / prevYSales) * 100 : 0;
@@ -612,6 +622,7 @@ export default function AdminDashboardPage() {
     const totalCxC = cxcNotes.reduce((s, n) => s + Number(n.balance_due || 0), 0);
     const cxcCount = cxcNotes.length;
     const cxcVencidas = cxcNotes.filter((n) => n.due_date && new Date(n.due_date) < new Date()).length;
+    // (variable currentPrestamos disponible para mostrar en panel separado)
 
     // Desglose por categoría gastos actuales
     const byCategory: Record<string, number> = {};
@@ -1232,21 +1243,21 @@ export default function AdminDashboardPage() {
           </div>
 
           <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Pedidos hoy</div>
+            <div style={smallLabelStyle}>Tickets hoy</div>
             <div style={heroValueStyle}>{ordersToday}</div>
-            <div style={heroMetaStyle}>${fmt(salesToday)}</div>
+            <div style={heroMetaStyle}>{ordersToday === 1 ? "1 persona" : `${ordersToday} personas`} · ${fmt(salesToday)}</div>
           </div>
 
           <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Pedidos este mes</div>
+            <div style={smallLabelStyle}>Tickets este mes</div>
             <div style={heroValueStyle}>{ordersThisMonth}</div>
-            <div style={heroMetaStyle}>${fmt(salesThisMonth)}</div>
+            <div style={heroMetaStyle}>{ordersThisMonth} personas · ${fmt(salesThisMonth)}</div>
           </div>
 
           <div style={heroCardStyle}>
-            <div style={smallLabelStyle}>Pedidos este año</div>
+            <div style={smallLabelStyle}>Tickets este año</div>
             <div style={heroValueStyle}>{ordersThisYear}</div>
-            <div style={heroMetaStyle}>${fmt(salesThisYear)}</div>
+            <div style={heroMetaStyle}>{ordersThisYear} personas · ${fmt(salesThisYear)}</div>
           </div>
 
           <div style={heroCardStyle}>

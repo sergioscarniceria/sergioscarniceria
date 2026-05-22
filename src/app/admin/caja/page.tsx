@@ -292,6 +292,7 @@ function methodName(m?: string | null) {
 }
 
 const EXPENSE_CATS = [
+  { value: "prestamos", label: "Préstamo (NO es gasto)", desc: "Dinero prestado que será devuelto. Sale del cajón pero no afecta utilidad" },
   { value: "materia_prima", label: "Materia prima", desc: "Carne, pollo, especias, etc." },
   { value: "sueldos", label: "Sueldos / Nómina", desc: "Pago a empleados" },
   { value: "proveedor", label: "Pago a proveedor", desc: "Abono o liquidación a proveedores" },
@@ -693,8 +694,15 @@ export default function CajaPage() {
     const activeExpenses = todayClosure?.created_at
       ? expenses.filter((e) => e.created_at && e.created_at > todayClosure.created_at!)
       : expenses;
-    const totalGastos = activeExpenses.reduce((a, e) => a + Number(e.amount || 0), 0);
-    // Solo gastos en efectivo afectan el cajón físico (los de tarjeta/transferencia no salen de caja)
+    // Préstamos: dinero que sale del cajón pero NO es gasto real (será devuelto)
+    const totalPrestamos = activeExpenses
+      .filter((e) => e.category === "prestamos")
+      .reduce((a, e) => a + Number(e.amount || 0), 0);
+    // Gastos reales del negocio (excluyendo préstamos) - afectan utilidad/contabilidad
+    const totalGastos = activeExpenses
+      .filter((e) => e.category !== "prestamos")
+      .reduce((a, e) => a + Number(e.amount || 0), 0);
+    // Solo lo que sale del cajón EN EFECTIVO afecta el cajón físico (INCLUYE préstamos)
     const totalGastosEfectivo = activeExpenses
       .filter((e) => (e.payment_method || "efectivo") === "efectivo")
       .reduce((a, e) => a + Number(e.amount || 0), 0);
@@ -710,7 +718,7 @@ export default function CajaPage() {
       cxcEfectivo, cxcTarjeta, cxcTransferencia,
       totalVentas, totalCxc,
       totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalGeneral,
-      totalGastos, totalGastosEfectivo, fondoInicial, efectivoEsperado,
+      totalGastos, totalGastosEfectivo, totalPrestamos, fondoInicial, efectivoEsperado,
       ticketCount, ticketPromedio,
       totalMovements: active.length,
       cancelledCount: movements.filter((m) => m.is_cancelled).length,
@@ -2190,6 +2198,7 @@ export default function CajaPage() {
           <GastosTab
             expenses={expenses}
             totalGastos={stats.totalGastos}
+            totalPrestamos={stats.totalPrestamos}
             saving={saving}
             expPaymentMethod={expPaymentMethod}
             setExpPaymentMethod={setExpPaymentMethod}
@@ -2972,7 +2981,7 @@ export default function CajaPage() {
 
 // ─── Gastos Tab (extracted for clarity) ──────────────────────
 function GastosTab({
-  expenses, totalGastos, saving,
+  expenses, totalGastos, totalPrestamos, saving,
   expPaymentMethod, setExpPaymentMethod,
   expConcept, setExpConcept, expAmount, setExpAmount,
   expCategory, setExpCategory, expNotes, setExpNotes,
@@ -2980,6 +2989,7 @@ function GastosTab({
 }: {
   expenses: CashExpense[];
   totalGastos: number;
+  totalPrestamos: number;
   saving: boolean;
   expPaymentMethod: "efectivo" | "tarjeta" | "transferencia";
   setExpPaymentMethod: (v: "efectivo" | "tarjeta" | "transferencia") => void;
@@ -3098,6 +3108,34 @@ function GastosTab({
       </Panel>
 
       <div style={{ height: 18 }} />
+
+      {/* Panel Préstamos otorgados - aparece solo si hay préstamos */}
+      {totalPrestamos > 0 && (
+        <>
+          <Panel title="🤝 Préstamos otorgados" subtitle={`Salió del cajón pero NO es gasto del negocio — total a recuperar: $${money(totalPrestamos)}`} >
+            <div style={{ background: "rgba(53, 92, 125, 0.08)", border: `1px solid rgba(53, 92, 125, 0.25)`, borderRadius: 14, padding: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div>
+                  <div style={{ color: C.muted, fontSize: 13, marginBottom: 4 }}>Total prestado en este periodo</div>
+                  <div style={{ fontSize: 28, fontWeight: 900, color: "#355c7d" }}>${money(totalPrestamos)}</div>
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, textAlign: "right", maxWidth: 280 }}>
+                  Sale del cajón pero NO cuenta como gasto del negocio.<br/>No afecta utilidad, solo el efectivo del día.
+                </div>
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid rgba(53, 92, 125, 0.20)`, display: "grid", gap: 6 }}>
+                {expenses.filter((e) => e.category === "prestamos").map((e) => (
+                  <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", background: "rgba(255,255,255,0.6)", borderRadius: 8 }}>
+                    <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{e.concept}</span>
+                    <span style={{ fontSize: 14, fontWeight: 900, color: "#355c7d" }}>{`$${money(e.amount)}`}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+          <div style={{ height: 18 }} />
+        </>
+      )}
 
       {/* Summary by category */}
       {grouped.length > 0 && (
