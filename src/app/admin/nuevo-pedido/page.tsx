@@ -221,7 +221,9 @@ export default function NuevoPedidoPage() {
       return;
     }
 
-    const price = getPrice(product);
+    // FIX doble descuento: guardar precio BASE en el cart, el descuento mayoreo
+    // se aplica al subtotal del ticket (no al precio individual)
+    const price = Number(product.price || 0);
 
     if (mode === "piece") {
       const quantityText = prompt(`¿Cuántas piezas de ${product.name}?`);

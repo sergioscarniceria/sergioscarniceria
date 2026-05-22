@@ -997,7 +997,8 @@ export default function ClientePage() {
 
   function addProduct(product: Product, mode: "kg" | "half" | "money" | "custom" | "pieza") {
     const piece = isPieceProduct(product);
-    const price = getPrice(product);
+    // FIX doble descuento: guardar precio BASE en el cart
+    const price = Number(product.price || 0);
 
     if (piece || mode === "pieza") {
       // Producto por pieza: siempre cantidad entera
@@ -1189,7 +1190,7 @@ export default function ClientePage() {
           : Number((ing.kgPerPerson * servings).toFixed(3));
         newItems.push({
           name: match.name,
-          price: piece ? Number(match.fixed_piece_price) : getPrice(match),
+          price: piece ? Number(match.fixed_piece_price) : Number(match.price || 0),
           kilos: qty,
           sale_type: piece ? "pieza" : "kg",
         });
@@ -2177,7 +2178,7 @@ export default function ClientePage() {
                         <div style={suggestionListStyle}>
                           {suggestions.map((p) => {
                             const piece = isPieceProduct(p);
-                            const price = piece ? Number(p.fixed_piece_price) : getPrice(p);
+                            const price = piece ? Number(p.fixed_piece_price) : Number(p.price || 0);
                             return (
                               <div key={p.id} style={suggestionCardStyle}>
                                 <div style={{ fontSize: 22, textAlign: "center", marginBottom: 6 }}>{getCategoryEmoji(p.category)}</div>
