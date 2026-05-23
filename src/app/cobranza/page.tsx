@@ -789,7 +789,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
             if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
               const prevStock = prod.stock || 0;
               const qty = Number(item.quantity || 0);
-              const newStock = Math.max(0, prevStock - qty);
+              const newStock = prevStock - qty; // Permite negativo si se vende mas de lo registrado (se ajusta al registrar entradas)
               await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
               await supabase.from("inventory_movements").insert({
                 item_type: "complemento",
@@ -947,7 +947,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
             if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
               const prevStock = prod.stock || 0;
               const qty = Number(item.quantity || 0);
-              const newStock = Math.max(0, prevStock - qty);
+              const newStock = prevStock - qty; // Permite negativo si se vende mas de lo registrado (se ajusta al registrar entradas)
               await supabase.from("products").update({ stock: newStock }).eq("id", prod.id);
               await supabase.from("inventory_movements").insert({ item_type: "complemento", item_id: prod.id, movement_type: "salida", quantity: qty, previous_stock: prevStock, new_stock: newStock, notes: `Venta ticket ${ticket.id.slice(0, 6)}`, created_by: cashierName || "cajera" });
             }

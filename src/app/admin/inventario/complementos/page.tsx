@@ -303,10 +303,11 @@ export default function InventarioComplementosPage() {
             {filtered.map((p) => {
               const isLow = (p.min_stock || 0) > 0 && (p.stock || 0) <= (p.min_stock || 0);
               const isZero = (p.stock || 0) === 0;
+              const isNegative = (p.stock || 0) < 0;
               return (
                 <div key={p.id} style={{
                   background: C.cardStrong, border: `1px solid ${C.border}`, borderRadius: 18, padding: 16, boxShadow: C.shadow,
-                  borderLeft: `4px solid ${isZero ? C.danger : isLow ? C.warning : C.success}`,
+                  borderLeft: `4px solid ${isNegative || isZero ? C.danger : isLow ? C.warning : C.success}`,
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                     <div style={{ flex: 1 }}>
@@ -331,7 +332,7 @@ export default function InventarioComplementosPage() {
                     {/* Stock display */}
                     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                       <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 28, fontWeight: 800, color: isZero ? C.danger : isLow ? C.warning : C.text }}>
+                        <div style={{ fontSize: 28, fontWeight: 800, color: isNegative || isZero ? C.danger : isLow ? C.warning : C.text }}>
                           {p.stock || 0}
                         </div>
                         <div style={{ fontSize: 11, color: C.muted }}>piezas</div>
