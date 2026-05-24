@@ -32,7 +32,7 @@ const C = {
 const HEARTBEAT_TIMEOUT = 30000;
 const CAROUSEL_INTERVAL = 7000;
 const DONE_TIMEOUT = 12000;
-const MEDIA_REFRESH = 300000; // 5 min
+const MEDIA_REFRESH = 600000; // 10 min
 
 // ─── Frases graciosas para "ticket listo" ───
 const FRASES_TICKET = [

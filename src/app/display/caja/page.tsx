@@ -28,7 +28,7 @@ const C = {
 const HEARTBEAT_TIMEOUT = 30000;
 const CAROUSEL_INTERVAL = 7000;
 const DONE_TIMEOUT = 8000;
-const MEDIA_REFRESH = 300000;
+const MEDIA_REFRESH = 600000;
 
 export default function DisplayCajaPage() {
   useKeepAwake();

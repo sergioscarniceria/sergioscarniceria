@@ -27,7 +27,7 @@ const BANNER_DURATION = 5000;
 const PRODUCT_SLIDE_DURATION = 6000;
 const TRANSITION_MS = 700;
 const PRODUCTS_PER_SLIDE = 3;
-const RELOAD_INTERVAL = 5 * 60 * 1000;
+const RELOAD_INTERVAL = 10 * 60 * 1000;
 
 /* ─── Colors ─── */
 const C = {
