@@ -19,6 +19,7 @@ type MediaItem = {
   id: string;
   file_url: string;
   media_type: string;
+  duration_seconds?: number;
 };
 
 /* ─── Constants ─── */
@@ -76,7 +77,7 @@ export default function DisplayPromo() {
       const sb = getSupabaseClient();
       const { data } = await sb
         .from("display_media")
-        .select("id, file_url, media_type")
+        .select("id, file_url, media_type, duration_seconds")
         .eq("is_active", true)
         .or("target.eq.ambos,target.eq.tv")
         .order("sort_order", { ascending: true })
@@ -147,7 +148,9 @@ export default function DisplayPromo() {
         setSlideIndex((prev) => (prev + 1) % totalSlides);
         setTransitioning(false);
       }, TRANSITION_MS);
-    }, currentSlide?.type === "banner" ? BANNER_DURATION : PRODUCT_SLIDE_DURATION);
+    }, currentSlide?.type === "banner"
+      ? (Number((currentSlide.item as { duration_seconds?: number }).duration_seconds) * 1000 || BANNER_DURATION)
+      : PRODUCT_SLIDE_DURATION);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

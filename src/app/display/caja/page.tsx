@@ -46,7 +46,7 @@ export default function DisplayCajaPage() {
 
   const heartbeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const carouselTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const carouselTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [lastAddedIdx, setLastAddedIdx] = useState(-1);
   const prevItemCount = useRef(0);
@@ -57,7 +57,7 @@ export default function DisplayCajaPage() {
     try {
       const { data } = await supabase
         .from("display_media")
-        .select("id, file_url, media_type")
+        .select("id, file_url, media_type, duration_seconds")
         .eq("is_active", true)
         .or("target.eq.caja,target.eq.ambos")
         .order("sort_order", { ascending: true })
@@ -77,7 +77,7 @@ export default function DisplayCajaPage() {
   // ─── Carousel ───
   useEffect(() => {
     if (mode !== "idle" || media.length === 0) {
-      if (carouselTimer.current) clearInterval(carouselTimer.current);
+      if (carouselTimer.current) clearTimeout(carouselTimer.current);
       return;
     }
 
@@ -92,8 +92,9 @@ export default function DisplayCajaPage() {
       }, 600);
     };
 
-    carouselTimer.current = setInterval(advance, CAROUSEL_INTERVAL);
-    return () => { if (carouselTimer.current) clearInterval(carouselTimer.current); };
+    const slideDuration = Number((currentMedia as { duration_seconds?: number })?.duration_seconds) * 1000 || CAROUSEL_INTERVAL;
+    carouselTimer.current = setTimeout(advance, slideDuration);
+    return () => { if (carouselTimer.current) clearTimeout(carouselTimer.current); };
   }, [mode, media, currentSlide]);
 
   // ─── Listen BroadcastChannel ───

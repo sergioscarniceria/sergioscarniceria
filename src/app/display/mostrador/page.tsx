@@ -72,7 +72,7 @@ export default function DisplayMostradorPage() {
   // Timers
   const heartbeatTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const carouselTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const carouselTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animation tracking
   const [lastAddedIdx, setLastAddedIdx] = useState(-1);
@@ -84,7 +84,7 @@ export default function DisplayMostradorPage() {
     try {
       const { data } = await supabase
         .from("display_media")
-        .select("id, file_url, media_type")
+        .select("id, file_url, media_type, duration_seconds")
         .eq("is_active", true)
         .or("target.eq.mostrador,target.eq.ambos")
         .order("sort_order", { ascending: true })
@@ -104,7 +104,7 @@ export default function DisplayMostradorPage() {
   // ─── Carousel logic ───
   useEffect(() => {
     if (mode !== "idle" || media.length === 0) {
-      if (carouselTimer.current) clearInterval(carouselTimer.current);
+      if (carouselTimer.current) clearTimeout(carouselTimer.current);
       return;
     }
 
@@ -119,7 +119,8 @@ export default function DisplayMostradorPage() {
     const currentMedia = media[currentSlide % media.length];
     if (currentMedia?.media_type === "video") return;
 
-    carouselTimer.current = setInterval(advance, CAROUSEL_INTERVAL);
+    const slideDuration = Number((currentMedia as { duration_seconds?: number })?.duration_seconds) * 1000 || CAROUSEL_INTERVAL;
+    carouselTimer.current = setTimeout(advance, slideDuration);
     return () => {
       if (carouselTimer.current) clearInterval(carouselTimer.current);
     };

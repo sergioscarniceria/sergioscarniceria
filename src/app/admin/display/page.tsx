@@ -12,6 +12,7 @@ type MediaItem = {
   target: "mostrador" | "caja" | "ambos";
   sort_order: number;
   is_active: boolean;
+  duration_seconds: number;
   created_at: string;
 };
 
@@ -119,6 +120,12 @@ export default function AdminDisplayPage() {
 
   async function toggleActive(item: MediaItem) {
     await supabase.from("display_media").update({ is_active: !item.is_active }).eq("id", item.id);
+    await loadMedia();
+  }
+
+  async function changeDuration(item: MediaItem, newDuration: number) {
+    const d = Math.max(1, Math.min(60, Math.floor(newDuration)));
+    await supabase.from("display_media").update({ duration_seconds: d }).eq("id", item.id);
     await loadMedia();
   }
 
@@ -371,6 +378,22 @@ export default function AdminDisplayPage() {
                       <option value="mostrador">Mostrador</option>
                       <option value="caja">Caja</option>
                     </select>
+
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "white", fontSize: 12 }} title="Segundos que aparece esta imagen (default 5)">
+                      <span style={{ color: COLORS.muted, fontWeight: 600 }}>⏱</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        defaultValue={item.duration_seconds ?? 5}
+                        onBlur={(e) => {
+                          const v = Number(e.target.value);
+                          if (v !== item.duration_seconds) changeDuration(item, v);
+                        }}
+                        style={{ width: 38, border: "none", outline: "none", fontSize: 12, fontWeight: 700, textAlign: "right", background: "transparent", color: COLORS.text }}
+                      />
+                      <span style={{ color: COLORS.muted, fontSize: 11 }}>s</span>
+                    </div>
 
                     <button onClick={() => moveOrder(item, "up")} title="Subir"
                       style={{ padding: "6px 10px", borderRadius: 8, border: `1px solid ${COLORS.border}`, background: "white", cursor: "pointer", fontSize: 12 }}>
