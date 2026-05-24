@@ -641,6 +641,27 @@ export default function AdminDashboardPage() {
 
     const totalDebt = supplierDebt.reduce((s, d) => s + d.debt, 0);
 
+    // ─── PUNTO DE EQUILIBRIO ───
+    // Costos VARIABLES: dependen del volumen de ventas (materia prima, insumos)
+    // Costos FIJOS: existen aunque no haya ventas (sueldos, renta, servicios)
+    const VARIABLE_CATS = new Set(["materia_prima", "proveedor", "insumos"]);
+    const currentOpVariable = opExpenses
+      .filter((e) => e.category !== "prestamos" && VARIABLE_CATS.has(e.category))
+      .reduce((s, e) => s + Number(e.amount), 0);
+    const currentOpFijo = opExpenses
+      .filter((e) => e.category !== "prestamos" && !VARIABLE_CATS.has(e.category))
+      .reduce((s, e) => s + Number(e.amount), 0);
+    // Los gastos del dueño (owner_expenses) son típicamente fijos (renta, sueldo socio, etc.)
+    const currentFixedTotal = currentOpFijo + currentOwnerExp;
+    // Margen de contribución = (Ventas - Costos Variables) / Ventas
+    const contributionMargin = currentSales > 0 ? (currentSales - currentOpVariable) / currentSales : 0;
+    // Punto de equilibrio en pesos: Costos Fijos / Margen de contribución
+    const breakEvenSales = contributionMargin > 0 ? currentFixedTotal / contributionMargin : 0;
+    // % alcanzado del PE en lo que va del mes
+    const breakEvenPct = breakEvenSales > 0 ? (currentSales / breakEvenSales) * 100 : 0;
+    // Falta para alcanzar PE (si aplica)
+    const breakEvenGap = Math.max(0, breakEvenSales - currentSales);
+
     // Desglose gastos operativos por concepto
     const opByConceptMap: Record<string, number> = {};
     opExpenses.forEach((e) => {
@@ -659,6 +680,15 @@ export default function AdminDashboardPage() {
       debt: { total: totalDebt, count: supplierDebt.length },
       categories,
       opCategories,
+      breakEven: {
+        variableCost: currentOpVariable,
+        fixedCost: currentFixedTotal,
+        contributionMargin: contributionMargin * 100,
+        targetSales: breakEvenSales,
+        currentSales,
+        pctAchieved: breakEvenPct,
+        gap: breakEvenGap,
+      },
     };
   }, [salesThisMonth, ownerExpenses, opExpenses, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
 
@@ -1220,6 +1250,63 @@ export default function AdminDashboardPage() {
           </div>
         </div>
         )}
+
+        {/* ═══ Panel Punto de Equilibrio ═══ */}
+        <div style={{ ...panelStyle, marginTop: 20 }}>
+          <h2 style={panelTitleStyle}>🎯 Punto de equilibrio del mes</h2>
+          <p style={{ fontSize: 13, color: COLORS.muted, margin: "4px 0 16px" }}>
+            Cuánto necesitas vender en {utilityStats.current.label} para cubrir todos los costos (no perder, no ganar)
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 16 }}>
+            <div style={{ background: "rgba(180,35,24,0.08)", borderRadius: 14, padding: 14, border: `1px solid rgba(180,35,24,0.18)` }}>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6 }}>Necesitas vender</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: COLORS.danger }}>${fmt(utilityStats.breakEven.targetSales)}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>en el mes para no perder</div>
+            </div>
+            <div style={{ background: "rgba(31,122,77,0.08)", borderRadius: 14, padding: 14, border: `1px solid rgba(31,122,77,0.18)` }}>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6 }}>Ya vendiste</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: COLORS.success }}>${fmt(utilityStats.breakEven.currentSales)}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>en lo que va del mes</div>
+            </div>
+            <div style={{ background: utilityStats.breakEven.gap > 0 ? "rgba(166,106,16,0.08)" : "rgba(31,122,77,0.12)", borderRadius: 14, padding: 14, border: `1px solid ${utilityStats.breakEven.gap > 0 ? "rgba(166,106,16,0.25)" : "rgba(31,122,77,0.25)"}` }}>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6 }}>{utilityStats.breakEven.gap > 0 ? "Te falta vender" : "Ya pasaste el PE"}</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: utilityStats.breakEven.gap > 0 ? COLORS.warning : COLORS.success }}>${fmt(utilityStats.breakEven.gap)}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>{utilityStats.breakEven.gap > 0 ? "para llegar al equilibrio" : "todo lo demás es ganancia"}</div>
+            </div>
+            <div style={{ background: "rgba(53,92,125,0.08)", borderRadius: 14, padding: 14, border: `1px solid rgba(53,92,125,0.18)` }}>
+              <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6 }}>Progreso</div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: utilityStats.breakEven.pctAchieved >= 100 ? COLORS.success : COLORS.info }}>{utilityStats.breakEven.pctAchieved.toFixed(0)}%</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>del punto de equilibrio</div>
+            </div>
+          </div>
+
+          {/* Barra de progreso */}
+          <div style={{ height: 12, background: "rgba(0,0,0,0.06)", borderRadius: 6, overflow: "hidden", marginBottom: 12 }}>
+            <div style={{
+              width: `${Math.min(100, utilityStats.breakEven.pctAchieved)}%`,
+              height: "100%",
+              background: utilityStats.breakEven.pctAchieved >= 100 ? COLORS.success : COLORS.warning,
+              transition: "width 0.3s ease",
+            }} />
+          </div>
+
+          {/* Desglose del cálculo */}
+          <details style={{ background: COLORS.bgSoft, borderRadius: 12, padding: 12, border: `1px solid ${COLORS.border}` }}>
+            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: COLORS.text }}>Ver cómo se calcula</summary>
+            <div style={{ marginTop: 12, fontSize: 13, color: COLORS.text, lineHeight: 1.7 }}>
+              <div><b>Costos fijos del mes</b> (renta, sueldos, servicios, mantenimiento...): <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.fixedCost)}</b></div>
+              <div><b>Costos variables del mes</b> (materia prima, proveedor, insumos): <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.variableCost)}</b></div>
+              <div><b>Margen de contribución</b> (% de cada peso vendido que queda libre): <b>{utilityStats.breakEven.contributionMargin.toFixed(1)}%</b></div>
+              <div style={{ marginTop: 8, padding: 10, background: "rgba(255,255,255,0.6)", borderRadius: 8, fontFamily: "monospace", fontSize: 12 }}>
+                <div>Punto de equilibrio = Costos Fijos ÷ Margen de contribución</div>
+                <div>${fmt(utilityStats.breakEven.targetSales)} = ${fmt(utilityStats.breakEven.fixedCost)} ÷ {(utilityStats.breakEven.contributionMargin / 100).toFixed(3)}</div>
+              </div>
+              <div style={{ marginTop: 8, color: COLORS.muted, fontSize: 12 }}>
+                <b>Clasificación:</b> Materia prima, proveedor e insumos cuentan como variables. Sueldos, servicios, renta, etc. como fijos.
+              </div>
+            </div>
+          </details>
+        </div>
 
         <div style={statsGridStyle}>
           <div style={heroCardStyle}>
