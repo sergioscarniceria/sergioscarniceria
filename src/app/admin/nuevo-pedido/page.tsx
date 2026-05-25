@@ -418,8 +418,30 @@ export default function NuevoPedidoPage() {
       return;
     }
 
-    const discountAmt = calcDiscountAmount();
+    // Re-fetch is_excluded_from_discount con datos FRESCOS de BD
+    // (evita bug cuando un producto se marca excluido despues de cargar la pagina)
+    let discountAmt = 0;
     const discountPct = isMayoreo ? customerDiscount : 0;
+    if (isMayoreo && customerDiscount > 0) {
+      const productNames = Array.from(new Set(cart.map((i) => i.name).filter(Boolean)));
+      const { data: freshProducts } = await supabase
+        .from("products")
+        .select("name, is_excluded_from_discount")
+        .in("name", productNames);
+      const excludedMap = new Map<string, boolean>(
+        (freshProducts || []).map((p: { name: string; is_excluded_from_discount: boolean | null }) => [p.name, !!p.is_excluded_from_discount])
+      );
+      discountAmt = cart.reduce((acc, item) => {
+        if (excludedMap.get(item.name)) return acc;
+        let lineTotal = 0;
+        if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
+          lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
+        } else {
+          lineTotal = Number(item.price || 0) * Number(item.kilos || 0);
+        }
+        return acc + lineTotal * (customerDiscount / 100);
+      }, 0);
+    }
 
     const { data: order, error: orderError } = await supabase
       .from("orders")
