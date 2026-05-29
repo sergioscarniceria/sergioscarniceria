@@ -106,7 +106,7 @@ export default function PagoProveedorPage() {
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "12px 14px", borderRadius: 12,
-    border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box",
+    border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box", color: COLORS.text, background: "white", fontWeight: 600,
   };
   const labelStyle: React.CSSProperties = {
     fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 4, display: "block",
@@ -118,6 +118,7 @@ export default function PagoProveedorPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg, padding: 16, fontFamily: "Arial, sans-serif" }}>
+      <style>{`input::placeholder, textarea::placeholder { color: #999 !important; opacity: 1; } input, textarea { color: #3b1c16; }`}</style>
       <div style={{ maxWidth: 480, margin: "0 auto" }}>
         <a href={`/admin/proveedores/${supplierId}`} style={{ color: COLORS.primary, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
           ← {supplierName}
