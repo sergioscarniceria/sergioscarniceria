@@ -158,6 +158,7 @@ export default function CompraAnimalPage() {
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "12px 14px", borderRadius: 12,
     border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box",
+    color: COLORS.text, background: "white", fontWeight: 600,
   };
 
   const labelStyle: React.CSSProperties = {
@@ -175,6 +176,7 @@ export default function CompraAnimalPage() {
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg, padding: 16, fontFamily: "Arial, sans-serif" }}>
+      <style>{`input::placeholder, textarea::placeholder, select { color: #999 !important; opacity: 1; } input, textarea, select { color: #3b1c16 !important; }`}</style>
       <div style={{ maxWidth: 520, margin: "0 auto" }}>
         <a href={`/admin/proveedores/${supplierId}`} style={{ color: COLORS.primary, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
           ← {supplierName}
@@ -185,6 +187,25 @@ export default function CompraAnimalPage() {
         <p style={{ fontSize: 13, color: COLORS.muted, margin: "0 0 18px" }}>
           Proveedor: {supplierName}
         </p>
+
+        {/* Resumen total sticky arriba — se actualiza en vivo */}
+        <div style={{
+          position: "sticky", top: 0, zIndex: 10,
+          background: "linear-gradient(135deg, #7b2218 0%, #5a190f 100%)",
+          color: "white", borderRadius: 16, padding: "14px 18px", marginBottom: 14,
+          boxShadow: "0 6px 18px rgba(123, 34, 24, 0.25)",
+          display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 11, opacity: 0.85, textTransform: "uppercase", letterSpacing: 0.5 }}>Total a pagar (vivo)</div>
+            <div style={{ fontSize: 28, fontWeight: 900, lineHeight: 1.1 }}>${money(totalCost)}</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "auto auto", gap: "4px 14px", fontSize: 12 }}>
+            <span style={{ opacity: 0.85 }}>Animal:</span><span style={{ fontWeight: 700 }}>${money(totalLive)}</span>
+            <span style={{ opacity: 0.85 }}>Matanza:</span><span style={{ fontWeight: 700 }}>${money(sc)}</span>
+            <span style={{ opacity: 0.85 }}>Flete:</span><span style={{ fontWeight: 700 }}>${money(fc)}</span>
+          </div>
+        </div>
 
         <div style={{ background: COLORS.cardStrong, borderRadius: 18, padding: 22, border: `1px solid ${COLORS.border}` }}>
           {/* Row: fecha + tipo */}
