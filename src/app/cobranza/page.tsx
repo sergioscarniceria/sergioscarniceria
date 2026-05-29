@@ -1399,6 +1399,52 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       dueDate: dueDate,
       creditDays: Number(customer.credit_days || 7),
     };
+    // ─── Descontar inventario de complementos/piezas (igual que en cobro normal) ───
+    // Respeta inventory_link_product_id para inventario unificado (cabezas, etc.)
+    for (const ticket of allTickets) {
+      if (ticket.order_items) {
+        for (const item of ticket.order_items) {
+          if (item.sale_type === "pieza" && item.quantity) {
+            const { data: prod } = await supabase
+              .from("products")
+              .select("id, name, stock, category, fixed_piece_price, inventory_link_product_id")
+              .eq("name", item.product)
+              .single();
+            if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
+              let invTargetId = prod.id;
+              let invPrevStock = prod.stock || 0;
+              if (prod.inventory_link_product_id) {
+                const { data: master } = await supabase
+                  .from("products")
+                  .select("id, stock")
+                  .eq("id", prod.inventory_link_product_id)
+                  .single();
+                if (master) {
+                  invTargetId = master.id;
+                  invPrevStock = master.stock || 0;
+                }
+              }
+              const qty = Number(item.quantity || 0);
+              const newStock = invPrevStock - qty;
+              await supabase.from("products").update({ stock: newStock }).eq("id", invTargetId);
+              await supabase.from("inventory_movements").insert({
+                item_type: "complemento",
+                item_id: invTargetId,
+                movement_type: "salida",
+                quantity: qty,
+                previous_stock: invPrevStock,
+                new_stock: newStock,
+                notes: prod.id === invTargetId
+                  ? `Venta a credito ticket ${ticket.id.slice(0, 6)}`
+                  : `Venta a credito ticket ${ticket.id.slice(0, 6)} (vendido como ${prod.name})`,
+                created_by: "credito",
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Mostrar modal de impresión de crédito con pagaré
     setCreditPrintTicket(creditTicket);
     setShowCreditPrint(true);
