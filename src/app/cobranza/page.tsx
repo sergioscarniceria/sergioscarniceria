@@ -3877,13 +3877,14 @@ if (cashError) {
                   <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
                   {(creditPrintTicket.items || []).map((item, i) => {
-                    const kg = Number(item.prepared_kilos || item.kilos || 0);
-                    const lineTotal = kg * Number(item.price || 0);
+                    const isPieza = item.sale_type === "pieza" && item.is_fixed_price_piece;
+                    const qty = isPieza ? Number(item.quantity || 0) : Number(item.prepared_kilos || item.kilos || 0);
+                    const lineTotal = qty * Number(item.price || 0);
                     return (
                       <div key={i} style={{ marginBottom: 6, color: "#000" }}>
                         <div style={{ fontWeight: 800 }}>{item.product}</div>
                         <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span>{kg} kg x ${money(item.price)}</span>
+                          <span>{qty} {isPieza ? "pza" : "kg"} x ${money(item.price)}</span>
                           <span style={{ fontWeight: 700 }}>${money(lineTotal)}</span>
                         </div>
                       </div>
