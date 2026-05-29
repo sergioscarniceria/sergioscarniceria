@@ -184,12 +184,13 @@ export default function ProveedorDetallePage() {
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {/* + Compra disponible para todos los proveedores */}
-          <Link href={`/admin/proveedores/${supplierId}/compra`}
-            style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
-            + Compra
-          </Link>
-          {isInterno && (
+          {/* Routing inteligente: animal -> /compra (form animal) | otro -> /cargo (form simple) */}
+          {isAnimal ? (
+            <Link href={`/admin/proveedores/${supplierId}/compra`}
+              style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
+              + Compra
+            </Link>
+          ) : (
             <Link href={`/admin/proveedores/${supplierId}/cargo`}
               style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
               + Cargo
