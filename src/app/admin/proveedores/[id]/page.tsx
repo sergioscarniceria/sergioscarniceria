@@ -184,12 +184,11 @@ export default function ProveedorDetallePage() {
 
         {/* Action buttons */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          {isAnimal && (
-            <Link href={`/admin/proveedores/${supplierId}/compra`}
-              style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
-              + Compra
-            </Link>
-          )}
+          {/* + Compra disponible para todos los proveedores */}
+          <Link href={`/admin/proveedores/${supplierId}/compra`}
+            style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
+            + Compra
+          </Link>
           {isInterno && (
             <Link href={`/admin/proveedores/${supplierId}/cargo`}
               style={{ flex: 1, textAlign: "center", padding: "12px 10px", borderRadius: 12, background: COLORS.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 13, minWidth: 120 }}>
@@ -204,7 +203,7 @@ export default function ProveedorDetallePage() {
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
-          {(["movimientos", ...(isAnimal ? ["compras"] : []), "pagos"] as const).map((t) => (
+          {(["movimientos", "compras", "pagos"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t as typeof tab)}
@@ -251,7 +250,7 @@ export default function ProveedorDetallePage() {
           </div>
         )}
 
-        {tab === "compras" && isAnimal && (
+        {tab === "compras" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {purchases.length === 0 ? (
               <div style={{ textAlign: "center", padding: 32, color: COLORS.muted }}>Sin compras registradas</div>
