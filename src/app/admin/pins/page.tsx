@@ -109,6 +109,8 @@ export default function AdminPinsPage() {
   const [loadingEmpleados, setLoadingEmpleados] = useState(true);
   const [editEmpleado, setEditEmpleado] = useState<Empleado | null>(null);
   const [showNewEmpleado, setShowNewEmpleado] = useState(false);
+  const [searchEmp, setSearchEmp] = useState("");
+  const [showInactivos, setShowInactivos] = useState(false);
   const [savingEmpleado, setSavingEmpleado] = useState(false);
   const [empleadoMsg, setEmpleadoMsg] = useState("");
 
@@ -120,11 +122,17 @@ export default function AdminPinsPage() {
 
   async function fetchEmpleados() {
     setLoadingEmpleados(true);
-    const { data, error } = await supabase
-      .from("empleados")
-      .select("*")
-      .order("nombre", { ascending: true });
-    if (!error && data) setEmpleados(data as Empleado[]);
+    try {
+      const res = await fetch("/api/admin/empleados", {
+        headers: { "x-admin-secret": getAdminSecret() },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmpleados(data as Empleado[]);
+      }
+    } catch (err) {
+      console.error(err);
+    }
     setLoadingEmpleados(false);
   }
 
@@ -176,50 +184,19 @@ export default function AdminPinsPage() {
         documentos: emp.documentos || [],
       };
 
-      let empleadoId = emp.id;
-      if (isNew) {
-        const { data, error } = await supabase
-          .from("empleados")
-          .insert([payload])
-          .select("id")
-          .single();
-        if (error) throw error;
-        empleadoId = data.id;
-      } else {
-        const { error } = await supabase
-          .from("empleados")
-          .update(payload)
-          .eq("id", emp.id);
-        if (error) throw error;
-      }
-
-      // ─── Sincronización con employee_codes (Opción B sin riesgo) ───
-      if (emp.pin) {
-        const roleMap: Record<string, string> = {
-          caja: "cajera",
-          carniceria: "carnicero",
-          administracion: "admin",
-          mostrador: "mostrador",
-        };
-        const codeRole = roleMap[emp.rol] || emp.rol;
-
-        const { data: existing } = await supabase
-          .from("employee_codes")
-          .select("id")
-          .eq("code", emp.pin)
-          .maybeSingle();
-
-        if (existing) {
-          await supabase
-            .from("employee_codes")
-            .update({ name: emp.nombre.trim(), role: codeRole, is_active: emp.activo })
-            .eq("id", existing.id);
-        } else {
-          await supabase
-            .from("employee_codes")
-            .insert([{ name: emp.nombre.trim(), role: codeRole, code: emp.pin, is_active: emp.activo }]);
-        }
-      }
+      const url = "/api/admin/empleados";
+      const method = isNew ? "POST" : "PUT";
+      const body = isNew ? payload : { id: emp.id, ...payload };
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": getAdminSecret(),
+        },
+        body: JSON.stringify(body),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Error del servidor");
 
       setEmpleadoMsg(isNew ? "Empleado creado correctamente" : "Cambios guardados");
       setEditEmpleado(null);
@@ -233,34 +210,73 @@ export default function AdminPinsPage() {
     }
   }
 
-  async function deactivateEmpleado(emp: Empleado) {
-    if (!confirm(`¿Desactivar a ${emp.nombre}? Podrá ser reactivado después.`)) return;
+  function exportarFichaEmpleado(emp: Empleado) {
+    const dias = DIAS_SEMANA.filter((d) => emp.horario_json && emp.horario_json[d.key]);
+    const horariosHtml = dias.map((d) => {
+      const h = emp.horario_json?.[d.key];
+      return `<tr><td>${d.label}</td><td>${h?.entrada || "—"}</td><td>${h?.salida || "—"}</td></tr>`;
+    }).join("");
+    const descansosTxt = (emp.dias_descanso_json || []).join(", ") || "Ninguno";
+    const docsHtml = (emp.documentos || []).map((d) => `<li>${TIPOS_DOCUMENTO.find((t) => t.value === d.tipo)?.label || d.tipo}: <a href="${d.url}">${d.nombre}</a></li>`).join("") || "<li>Sin documentos</li>";
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ficha de ${emp.nombre}</title>
+      <style>
+        @page { size: letter; margin: 16mm; }
+        body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #3b1c16; font-size: 12px; line-height: 1.5; }
+        h1 { font-size: 22px; color: #7b2218; margin: 0 0 4px; }
+        h2 { font-size: 14px; color: #7b2218; border-bottom: 2px solid #7b2218; padding-bottom: 4px; margin: 18px 0 8px; }
+        .meta { color: #7a5a52; font-size: 11px; margin-bottom: 18px; }
+        .row { display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin: 4px 0; }
+        .row b { color: #7b2218; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        td, th { padding: 4px 6px; border: 1px solid #ddd; text-align: left; }
+        th { background: #f7f1e8; }
+      </style></head><body>
+      <h1>Ficha de empleado</h1>
+      <div class="meta">${emp.nombre} — ${emp.rol.toUpperCase()} · Generado ${new Date().toLocaleString("es-MX")}</div>
+
+      <h2>Datos personales</h2>
+      <div class="row"><b>Nombre:</b><span>${emp.nombre}</span></div>
+      <div class="row"><b>Rol:</b><span>${emp.rol}</span></div>
+      <div class="row"><b>PIN:</b><span>${emp.pin || "—"}</span></div>
+      <div class="row"><b>Teléfono:</b><span>${emp.telefono || "—"}</span></div>
+      <div class="row"><b>Email:</b><span>${emp.email || "—"}</span></div>
+      <div class="row"><b>Domicilio:</b><span>${emp.domicilio || "—"}</span></div>
+      <div class="row"><b>Nacimiento:</b><span>${emp.fecha_nacimiento || "—"}</span></div>
+      <div class="row"><b>Ingreso:</b><span>${emp.fecha_ingreso || "—"}</span></div>
+      <div class="row"><b>Contacto emergencia:</b><span>${emp.contacto_emergencia || "—"}</span></div>
+      <div class="row"><b>Notas:</b><span>${emp.notas || "—"}</span></div>
+
+      <h2>Horarios</h2>
+      <table><thead><tr><th>Día</th><th>Entrada</th><th>Salida</th></tr></thead><tbody>${horariosHtml || "<tr><td colspan='3'>Sin horarios</td></tr>"}</tbody></table>
+      <div class="row" style="margin-top:8px"><b>Días de descanso:</b><span>${descansosTxt}</span></div>
+
+      <h2>Documentos</h2>
+      <ul>${docsHtml}</ul>
+      </body></html>`;
+    const win = window.open("", "_blank");
+    if (!win) { alert("Habilita ventanas emergentes para exportar"); return; }
+    win.document.write(html);
+    win.document.close();
+    win.addEventListener("afterprint", () => win.close());
+    setTimeout(() => win.print(), 300);
+  }
+
+  async function toggleEmpleadoActivo(emp: Empleado, activo: boolean) {
+    if (!activo && !confirm(`¿Desactivar a ${emp.nombre}? Podrá ser reactivado después.`)) return;
     setSavingEmpleado(true);
     try {
-      await supabase.from("empleados").update({ activo: false }).eq("id", emp.id);
-      // También desactivar su código si existe
-      if (emp.pin) {
-        await supabase.from("employee_codes").update({ is_active: false }).eq("code", emp.pin);
-      }
-      setEmpleadoMsg(`${emp.nombre} desactivado`);
+      const res = await fetch("/api/admin/empleados", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-secret": getAdminSecret() },
+        body: JSON.stringify({ id: emp.id, activo }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Error");
+      setEmpleadoMsg(`${emp.nombre} ${activo ? "reactivado" : "desactivado"}`);
       await fetchEmpleados();
       await fetchEmployeeCodes();
     } catch (err: any) {
       setEmpleadoMsg("Error: " + (err.message || "desconocido"));
-    } finally {
-      setSavingEmpleado(false);
-    }
-  }
-
-  async function reactivateEmpleado(emp: Empleado) {
-    setSavingEmpleado(true);
-    try {
-      await supabase.from("empleados").update({ activo: true }).eq("id", emp.id);
-      if (emp.pin) {
-        await supabase.from("employee_codes").update({ is_active: true }).eq("code", emp.pin);
-      }
-      await fetchEmpleados();
-      await fetchEmployeeCodes();
     } finally {
       setSavingEmpleado(false);
     }
@@ -802,11 +818,78 @@ export default function AdminPinsPage() {
             </div>
           )}
 
+          {/* Buscador y filtros */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <input
+              value={searchEmp}
+              onChange={(e) => setSearchEmp(e.target.value)}
+              placeholder="🔍 Buscar empleado por nombre, rol o teléfono…"
+              style={{ flex: 1, minWidth: 200, padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }}
+            />
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#3b1c16", padding: "0 8px" }}>
+              <input type="checkbox" checked={showInactivos} onChange={(e) => setShowInactivos(e.target.checked)} />
+              Mostrar inactivos
+            </label>
+          </div>
+
+          {/* Panel de recordatorios (cumpleaños + aniversarios próximos) */}
+          {(() => {
+            const hoy = new Date();
+            const en30dias = new Date(hoy);
+            en30dias.setDate(hoy.getDate() + 30);
+            const recordatorios: { nombre: string; tipo: string; fecha: string; dias: number }[] = [];
+            empleados.filter((e) => e.activo).forEach((e) => {
+              const checkDate = (rawDate: string | null | undefined, tipo: string) => {
+                if (!rawDate) return;
+                const d = new Date(rawDate + "T00:00:00");
+                if (isNaN(d.getTime())) return;
+                const proxima = new Date(hoy.getFullYear(), d.getMonth(), d.getDate());
+                if (proxima < hoy) proxima.setFullYear(hoy.getFullYear() + 1);
+                const diff = Math.ceil((proxima.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+                if (diff <= 30) {
+                  const fechaStr = proxima.toLocaleDateString("es-MX", { day: "numeric", month: "long" });
+                  recordatorios.push({ nombre: e.nombre, tipo, fecha: fechaStr, dias: diff });
+                }
+              };
+              checkDate(e.fecha_nacimiento, "🎂 Cumpleaños");
+              if (e.fecha_ingreso) {
+                const ing = new Date(e.fecha_ingreso + "T00:00:00");
+                const proxima = new Date(hoy.getFullYear(), ing.getMonth(), ing.getDate());
+                if (proxima < hoy) proxima.setFullYear(hoy.getFullYear() + 1);
+                const anios = proxima.getFullYear() - ing.getFullYear();
+                if (anios > 0) checkDate(e.fecha_ingreso, `🎉 ${anios} año${anios > 1 ? "s" : ""} en la empresa`);
+              }
+            });
+            recordatorios.sort((a, b) => a.dias - b.dias);
+            if (recordatorios.length === 0) return null;
+            return (
+              <div style={{ background: "linear-gradient(135deg, #fff4e6 0%, #ffe9cc 100%)", borderRadius: 12, padding: 14, marginBottom: 14, border: "1px solid #d9a96b" }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "#7a3a0e", marginBottom: 8 }}>📅 Próximos 30 días</div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  {recordatorios.map((r, i) => (
+                    <div key={i} style={{ fontSize: 12, color: "#5a2e0a" }}>
+                      <b>{r.tipo}</b> · {r.nombre} — {r.fecha} {r.dias === 0 ? "(HOY)" : r.dias === 1 ? "(mañana)" : `(en ${r.dias} días)`}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {loadingEmpleados ? (
             <div style={{ textAlign: "center", padding: 20, color: "#7a5a52" }}>Cargando empleados…</div>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
-              {empleados.map((emp) => {
+              {empleados.filter((emp) => {
+                if (!showInactivos && !emp.activo) return false;
+                const q = searchEmp.toLowerCase().trim();
+                if (!q) return true;
+                return (
+                  emp.nombre.toLowerCase().includes(q) ||
+                  emp.rol.toLowerCase().includes(q) ||
+                  (emp.telefono || "").toLowerCase().includes(q)
+                );
+              }).map((emp) => {
                 const dias = DIAS_SEMANA.filter((d) => emp.horario_json && emp.horario_json[d.key]).map((d) => d.label.substring(0, 3)).join(", ");
                 const descansos = (emp.dias_descanso_json || []).map((d) => d.charAt(0).toUpperCase() + d.slice(1, 3)).join(", ");
                 return (
@@ -832,12 +915,19 @@ export default function AdminPinsPage() {
                         >
                           Editar
                         </button>
+                        <button
+                          onClick={() => exportarFichaEmpleado(emp)}
+                          style={{ padding: "6px 12px", background: "rgba(53,92,125,0.10)", color: "#355c7d", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                          title="Exportar ficha a PDF"
+                        >
+                          📄 PDF
+                        </button>
                         {emp.activo ? (
-                          <button onClick={() => deactivateEmpleado(emp)} style={{ padding: "6px 12px", background: "rgba(180,35,24,0.10)", color: "#b42318", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                          <button onClick={() => toggleEmpleadoActivo(emp, false)} style={{ padding: "6px 12px", background: "rgba(180,35,24,0.10)", color: "#b42318", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                             Desactivar
                           </button>
                         ) : (
-                          <button onClick={() => reactivateEmpleado(emp)} style={{ padding: "6px 12px", background: "rgba(31,122,77,0.10)", color: "#1f7a4d", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
+                          <button onClick={() => toggleEmpleadoActivo(emp, true)} style={{ padding: "6px 12px", background: "rgba(31,122,77,0.10)", color: "#1f7a4d", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>
                             Reactivar
                           </button>
                         )}
