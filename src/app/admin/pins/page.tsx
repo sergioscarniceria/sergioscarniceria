@@ -31,6 +31,14 @@ type Horario = {
   domingo?: DayHours;
 };
 
+type Documento = {
+  id: string;
+  tipo: string; // ine, comprobante, curp, rfc, otro
+  nombre: string;
+  url: string;
+  uploaded_at: string;
+};
+
 type Empleado = {
   id: string;
   nombre: string;
@@ -39,7 +47,24 @@ type Empleado = {
   horario_json: Horario | null;
   dias_descanso_json: string[] | null;
   activo: boolean;
+  domicilio?: string | null;
+  telefono?: string | null;
+  email?: string | null;
+  fecha_ingreso?: string | null;
+  fecha_nacimiento?: string | null;
+  contacto_emergencia?: string | null;
+  notas?: string | null;
+  documentos?: Documento[] | null;
 };
+
+const TIPOS_DOCUMENTO = [
+  { value: "ine", label: "INE / Identificación" },
+  { value: "comprobante", label: "Comprobante de domicilio" },
+  { value: "curp", label: "CURP" },
+  { value: "rfc", label: "RFC / Constancia fiscal" },
+  { value: "contrato", label: "Contrato" },
+  { value: "otro", label: "Otro" },
+];
 
 const DIAS_SEMANA: { key: keyof Horario; label: string }[] = [
   { key: "lunes", label: "Lunes" },
@@ -97,7 +122,7 @@ export default function AdminPinsPage() {
     setLoadingEmpleados(true);
     const { data, error } = await supabase
       .from("empleados")
-      .select("id, nombre, pin, rol, horario_json, dias_descanso_json, activo")
+      .select("*")
       .order("nombre", { ascending: true });
     if (!error && data) setEmpleados(data as Empleado[]);
     setLoadingEmpleados(false);
@@ -141,6 +166,14 @@ export default function AdminPinsPage() {
         horario_json: emp.horario_json || {},
         dias_descanso_json: emp.dias_descanso_json || [],
         activo: emp.activo,
+        domicilio: emp.domicilio?.trim() || null,
+        telefono: emp.telefono?.trim() || null,
+        email: emp.email?.trim() || null,
+        fecha_ingreso: emp.fecha_ingreso || null,
+        fecha_nacimiento: emp.fecha_nacimiento || null,
+        contacto_emergencia: emp.contacto_emergencia?.trim() || null,
+        notas: emp.notas?.trim() || null,
+        documentos: emp.documentos || [],
       };
 
       let empleadoId = emp.id;
@@ -841,6 +874,10 @@ function EmpleadoModal({ empleado, isNew, saving, onClose, onSave }: {
   onSave: (emp: Empleado) => void;
 }) {
   const [form, setForm] = useState<Empleado>(empleado);
+  const [tab, setTab] = useState<"datos" | "horarios" | "documentos">("datos");
+  const [uploading, setUploading] = useState(false);
+  const [docTipo, setDocTipo] = useState("ine");
+  const supabase = getSupabaseClient();
 
   const toggleDescanso = (dia: string) => {
     const desc = form.dias_descanso_json || [];
@@ -864,70 +901,224 @@ function EmpleadoModal({ empleado, isNew, saving, onClose, onSave }: {
     setForm({ ...form, horario_json: h });
   };
 
+  async function uploadDocumento(file: File) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert("El archivo no debe pesar más de 10 MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const empId = form.id || "nuevo-" + Date.now();
+      const ext = file.name.split(".").pop() || "bin";
+      const fileName = `${empId}/${Date.now()}-${docTipo}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("empleados-documentos")
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage
+        .from("empleados-documentos")
+        .getPublicUrl(fileName);
+      const doc: Documento = {
+        id: crypto.randomUUID(),
+        tipo: docTipo,
+        nombre: file.name,
+        url: urlData.publicUrl,
+        uploaded_at: new Date().toISOString(),
+      };
+      setForm({ ...form, documentos: [...(form.documentos || []), doc] });
+    } catch (err: any) {
+      alert("Error al subir: " + (err.message || "desconocido"));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeDocumento(doc: Documento) {
+    if (!confirm(`¿Eliminar "${doc.nombre}"?`)) return;
+    try {
+      const pathFromUrl = doc.url.split("/empleados-documentos/")[1];
+      if (pathFromUrl) {
+        await supabase.storage.from("empleados-documentos").remove([pathFromUrl]);
+      }
+      setForm({ ...form, documentos: (form.documentos || []).filter((d) => d.id !== doc.id) });
+    } catch (err: any) {
+      alert("Error: " + (err.message || "desconocido"));
+    }
+  }
+
+  const tabBtn = (id: typeof tab, label: string) => (
+    <button onClick={() => setTab(id)} style={{
+      padding: "8px 14px", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer",
+      border: tab === id ? "none" : "1px solid #ddd",
+      background: tab === id ? "#7b2218" : "white",
+      color: tab === id ? "white" : "#3b1c16",
+    }}>{label}</button>
+  );
+
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 18, padding: 22, maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 18, padding: 22, maxWidth: 640, width: "100%", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
         <h2 style={{ margin: "0 0 16px", fontSize: 20, color: "#3b1c16" }}>{isNew ? "Nuevo empleado" : `Editar ${form.nombre}`}</h2>
 
-        <div style={{ display: "grid", gap: 12, marginBottom: 16 }}>
-          <div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Nombre</label>
-            <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="Ej. Manuel" />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Rol</label>
-              <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }}>
-                <option value="caja">Caja</option>
-                <option value="carniceria">Carnicería</option>
-                <option value="administracion">Administración</option>
-                <option value="mostrador">Mostrador</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>PIN (4 dígitos)</label>
-              <input value={form.pin || ""} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="1234" />
-            </div>
-          </div>
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+          {tabBtn("datos", "📋 Datos personales")}
+          {tabBtn("horarios", "🕐 Horarios")}
+          {tabBtn("documentos", `📎 Documentos${form.documentos && form.documentos.length > 0 ? ` (${form.documentos.length})` : ""}`)}
         </div>
 
-        <h3 style={{ fontSize: 14, color: "#3b1c16", margin: "16px 0 8px" }}>🕐 Horarios por día</h3>
-        <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
-          {DIAS_SEMANA.map((d) => {
-            const h = form.horario_json?.[d.key];
-            const trabaja = !!h;
-            return (
-              <div key={d.key} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr auto", gap: 8, alignItems: "center", padding: "6px 0" }}>
-                <label style={{ fontSize: 13, fontWeight: 600, color: "#3b1c16" }}>
-                  <input type="checkbox" checked={trabaja} onChange={(e) => e.target.checked ? updateHorario(d.key, "entrada", "07:00") : removeHorario(d.key)} style={{ marginRight: 6 }} />
-                  {d.label}
-                </label>
-                {trabaja ? (
-                  <>
-                    <input type="time" value={h?.entrada || "07:00"} onChange={(e) => updateHorario(d.key, "entrada", e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
-                    <input type="time" value={h?.salida || "15:30"} onChange={(e) => updateHorario(d.key, "salida", e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }} />
-                  </>
-                ) : (
-                  <span style={{ gridColumn: "2 / span 2", color: "#7a5a52", fontSize: 12, fontStyle: "italic" }}>No trabaja este día</span>
-                )}
+        {/* ─── TAB DATOS ─── */}
+        {tab === "datos" && (
+          <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Nombre completo *</label>
+              <input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="Ej. Manuel Pérez García" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Rol</label>
+                <select value={form.rol} onChange={(e) => setForm({ ...form, rol: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }}>
+                  <option value="caja">Caja</option>
+                  <option value="carniceria">Carnicería</option>
+                  <option value="administracion">Administración</option>
+                  <option value="mostrador">Mostrador</option>
+                </select>
               </div>
-            );
-          })}
-        </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>PIN (4 dígitos)</label>
+                <input value={form.pin || ""} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, "").slice(0, 4) })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="1234" />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Teléfono</label>
+                <input value={form.telefono || ""} onChange={(e) => setForm({ ...form, telefono: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="442 123 4567" />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Email</label>
+                <input type="email" value={form.email || ""} onChange={(e) => setForm({ ...form, email: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="correo@ejemplo.com" />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Domicilio</label>
+              <textarea value={form.domicilio || ""} onChange={(e) => setForm({ ...form, domicilio: e.target.value })} rows={2} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16", resize: "vertical", fontFamily: "inherit" }} placeholder="Calle, número, colonia, ciudad" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Fecha de nacimiento</label>
+                <input type="date" value={form.fecha_nacimiento || ""} onChange={(e) => setForm({ ...form, fecha_nacimiento: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Fecha de ingreso</label>
+                <input type="date" value={form.fecha_ingreso || ""} onChange={(e) => setForm({ ...form, fecha_ingreso: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Contacto de emergencia</label>
+              <input value={form.contacto_emergencia || ""} onChange={(e) => setForm({ ...form, contacto_emergencia: e.target.value })} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16" }} placeholder="Nombre y teléfono de familiar" />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 700, color: "#3b1c16", display: "block", marginBottom: 4 }}>Notas</label>
+              <textarea value={form.notas || ""} onChange={(e) => setForm({ ...form, notas: e.target.value })} rows={2} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", fontSize: 14, color: "#3b1c16", resize: "vertical", fontFamily: "inherit" }} placeholder="Observaciones, alergias, talla de uniforme, etc." />
+            </div>
+          </div>
+        )}
 
-        <h3 style={{ fontSize: 14, color: "#3b1c16", margin: "16px 0 8px" }}>🛏 Días de descanso oficiales</h3>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-          {DIAS_SEMANA.map((d) => {
-            const isDescanso = (form.dias_descanso_json || []).includes(d.key);
-            return (
-              <button key={d.key} onClick={() => toggleDescanso(d.key as string)} style={{ padding: "6px 12px", borderRadius: 20, border: isDescanso ? "none" : "1px solid #ddd", background: isDescanso ? "#7b2218" : "white", color: isDescanso ? "white" : "#3b1c16", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                {d.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* ─── TAB HORARIOS ─── */}
+        {tab === "horarios" && (
+          <>
+            <h3 style={{ fontSize: 14, color: "#3b1c16", margin: "0 0 8px" }}>🕐 Horarios por día</h3>
+            <div style={{ display: "grid", gap: 6, marginBottom: 16 }}>
+              {DIAS_SEMANA.map((d) => {
+                const h = form.horario_json?.[d.key];
+                const trabaja = !!h;
+                return (
+                  <div key={d.key} style={{ display: "grid", gridTemplateColumns: "100px 1fr 1fr", gap: 8, alignItems: "center", padding: "6px 0" }}>
+                    <label style={{ fontSize: 13, fontWeight: 600, color: "#3b1c16" }}>
+                      <input type="checkbox" checked={trabaja} onChange={(e) => e.target.checked ? updateHorario(d.key, "entrada", "07:00") : removeHorario(d.key)} style={{ marginRight: 6 }} />
+                      {d.label}
+                    </label>
+                    {trabaja ? (
+                      <>
+                        <input type="time" value={h?.entrada || "07:00"} onChange={(e) => updateHorario(d.key, "entrada", e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, color: "#3b1c16" }} />
+                        <input type="time" value={h?.salida || "15:30"} onChange={(e) => updateHorario(d.key, "salida", e.target.value)} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, color: "#3b1c16" }} />
+                      </>
+                    ) : (
+                      <span style={{ gridColumn: "2 / span 2", color: "#7a5a52", fontSize: 12, fontStyle: "italic" }}>No trabaja este día</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20 }}>
+            <h3 style={{ fontSize: 14, color: "#3b1c16", margin: "16px 0 8px" }}>🛏 Días de descanso oficiales</h3>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {DIAS_SEMANA.map((d) => {
+                const isDescanso = (form.dias_descanso_json || []).includes(d.key);
+                return (
+                  <button key={d.key} onClick={() => toggleDescanso(d.key as string)} style={{ padding: "6px 12px", borderRadius: 20, border: isDescanso ? "none" : "1px solid #ddd", background: isDescanso ? "#7b2218" : "white", color: isDescanso ? "white" : "#3b1c16", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ─── TAB DOCUMENTOS ─── */}
+        {tab === "documentos" && (
+          <div>
+            <p style={{ fontSize: 12, color: "#7a5a52", margin: "0 0 12px" }}>
+              Sube fotos o PDFs de INE, comprobante de domicilio, CURP, etc. Máximo 10 MB por archivo.
+            </p>
+
+            <div style={{ background: "rgba(123,34,24,0.05)", borderRadius: 10, padding: 12, marginBottom: 16, border: "1px dashed rgba(123,34,24,0.20)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <select value={docTipo} onChange={(e) => setDocTipo(e.target.value)} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, color: "#3b1c16" }}>
+                  {TIPOS_DOCUMENTO.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                </select>
+                <label style={{ padding: "8px 14px", background: "#7b2218", color: "white", borderRadius: 8, cursor: uploading ? "wait" : "pointer", fontSize: 13, fontWeight: 700 }}>
+                  {uploading ? "Subiendo..." : "+ Subir archivo"}
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => { if (e.target.files?.[0]) uploadDocumento(e.target.files[0]); e.target.value = ""; }}
+                    disabled={uploading}
+                    style={{ display: "none" }}
+                  />
+                </label>
+              </div>
+              <div style={{ fontSize: 11, color: "#7a5a52" }}>Acepta JPG, PNG, WebP, PDF</div>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              {(!form.documentos || form.documentos.length === 0) ? (
+                <div style={{ textAlign: "center", padding: 20, color: "#7a5a52", background: "rgba(0,0,0,0.02)", borderRadius: 10, fontSize: 13 }}>
+                  No hay documentos. Sube el primero con el botón de arriba.
+                </div>
+              ) : (
+                form.documentos.map((doc) => (
+                  <div key={doc.id} style={{ background: "white", border: "1px solid #ddd", borderRadius: 10, padding: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#7b2218" }}>
+                        {TIPOS_DOCUMENTO.find((t) => t.value === doc.tipo)?.label || doc.tipo}
+                      </div>
+                      <div style={{ fontSize: 13, color: "#3b1c16", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.nombre}</div>
+                      <div style={{ fontSize: 10, color: "#7a5a52" }}>{new Date(doc.uploaded_at).toLocaleDateString("es-MX")}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 10px", background: "rgba(31,122,77,0.10)", color: "#1f7a4d", borderRadius: 8, textDecoration: "none", fontSize: 12, fontWeight: 700 }}>Ver</a>
+                      <button onClick={() => removeDocumento(doc)} style={{ padding: "6px 10px", background: "rgba(180,35,24,0.10)", color: "#b42318", border: "none", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Eliminar</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
           <button onClick={onClose} disabled={saving} style={{ padding: "10px 18px", background: "#f3f3f3", color: "#3b1c16", border: "none", borderRadius: 10, cursor: "pointer", fontWeight: 600 }}>Cancelar</button>
           <button onClick={() => onSave(form)} disabled={saving} style={{ padding: "10px 18px", background: "#7b2218", color: "white", border: "none", borderRadius: 10, cursor: saving ? "wait" : "pointer", fontWeight: 700 }}>
             {saving ? "Guardando…" : (isNew ? "Crear empleado" : "Guardar cambios")}
