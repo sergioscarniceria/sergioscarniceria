@@ -376,6 +376,7 @@ export default function CajaPage() {
   const [desgloseItems, setDesgloseItems] = useState<OrderItem[]>([]);
   const [desgloseLoading, setDesgloseLoading] = useState(false);
   const [desgloseEditInfo, setDesgloseEditInfo] = useState<{ edited_at: string; edited_by: string; original_items: OrderItem[] } | null>(null);
+  const [desgloseCxcInfo, setDesgloseCxcInfo] = useState<{ customer_name: string; applied_notes: { noteNumber: string; applied: number; newBalance: number }[]; notes_text?: string | null } | null>(null);
   const [editedOrderIds, setEditedOrderIds] = useState<Set<string>>(new Set());
 
   // Cancel modal
@@ -517,6 +518,25 @@ export default function CajaPage() {
     setDesgloseLoading(true);
     setDesgloseItems([]);
     setDesgloseEditInfo(null);
+    setDesgloseCxcInfo(null);
+
+    // Si es cobro CxC, traer info del pago + notas aplicadas
+    if (m.type === "cxc_pago") {
+      const { data: payData } = await supabase
+        .from("cxc_payments")
+        .select("customer_name, applied_notes, notes")
+        .eq("id", m.reference_id)
+        .maybeSingle();
+      if (payData) {
+        setDesgloseCxcInfo({
+          customer_name: payData.customer_name || "Sin nombre",
+          applied_notes: (payData.applied_notes as { noteNumber: string; applied: number; newBalance: number }[]) || [],
+          notes_text: payData.notes,
+        });
+      }
+      setDesgloseLoading(false);
+      return;
+    }
 
     const { data } = await supabase
       .from("order_items")
@@ -2727,6 +2747,40 @@ export default function CajaPage() {
 
             {desgloseLoading ? (
               <div style={{ padding: 16, textAlign: "center", color: C.muted }}>Cargando...</div>
+            ) : desgloseCxcInfo ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ padding: 12, borderRadius: 12, background: "rgba(31,122,77,0.06)", border: "1px solid rgba(31,122,77,0.18)" }}>
+                  <div style={{ fontSize: 12, color: C.muted, marginBottom: 4 }}>Pagado por</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: C.success }}>👤 {desgloseCxcInfo.customer_name}</div>
+                </div>
+                {desgloseCxcInfo.applied_notes.length === 0 ? (
+                  <div style={{ padding: 14, borderRadius: 12, background: C.bgSoft, border: `1px dashed ${C.border}`, color: C.muted, fontSize: 13 }}>
+                    No hay desglose de notas aplicadas (este pago se hizo antes de que el sistema empezara a guardar el detalle).
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontWeight: 700, color: C.text, fontSize: 13, marginTop: 4 }}>Notas a las que se aplicó este pago:</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {desgloseCxcInfo.applied_notes.map((n, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, background: "white", border: `1px solid ${C.border}` }}>
+                          <div>
+                            <div style={{ fontWeight: 700, color: C.text, fontSize: 13 }}>{n.noteNumber}</div>
+                            <div style={{ color: C.muted, fontSize: 11, marginTop: 2 }}>
+                              Saldo después: ${money(n.newBalance)}
+                            </div>
+                          </div>
+                          <div style={{ fontWeight: 800, color: C.success }}>${money(n.applied)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                {desgloseCxcInfo.notes_text && (
+                  <div style={{ padding: 10, borderRadius: 10, background: C.bgSoft, border: `1px solid ${C.border}`, fontSize: 12, color: C.muted, marginTop: 6 }}>
+                    <b>Notas:</b> {desgloseCxcInfo.notes_text}
+                  </div>
+                )}
+              </div>
             ) : desgloseItems.length === 0 ? (
               <div style={{ padding: 16, borderRadius: 14, background: C.bgSoft, border: `1px dashed ${C.border}`, color: C.muted }}>No se encontraron artículos para este ticket</div>
             ) : (
