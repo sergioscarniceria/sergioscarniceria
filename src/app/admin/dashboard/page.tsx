@@ -94,6 +94,8 @@ export default function AdminDashboardPage() {
   const [showUtilities, setShowUtilities] = useState(false);
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
+  const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string }[]>([]);
+  const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null }[]>([]);
   const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
@@ -217,6 +219,22 @@ export default function AdminDashboardPage() {
       .gte("expense_date", cmFirst)
       .lte("expense_date", cmLastStr);
     setOpExpenses((opData as any[]) || []);
+
+    // Compras a proveedores del rango (animales + cargos) — afectan utilidad pero NO el cajón
+    const [{ data: livestockMes }, { data: suppExpMes }] = await Promise.all([
+      supabase
+        .from("livestock_purchases")
+        .select("date, total_cost, total_live")
+        .gte("date", cmFirst)
+        .lte("date", cmLastStr),
+      supabase
+        .from("supplier_expenses")
+        .select("date, amount, concept")
+        .gte("date", cmFirst)
+        .lte("date", cmLastStr),
+    ]);
+    setLivestockPurchasesMes((livestockMes as any[]) || []);
+    setSupplierExpensesMes((suppExpMes as any[]) || []);
 
     // Mes anterior
     const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
@@ -642,7 +660,7 @@ export default function AdminDashboardPage() {
     const totalDebt = supplierDebt.reduce((s, d) => s + d.debt, 0);
 
     // ─── PUNTO DE EQUILIBRIO ───
-    // Costos VARIABLES: dependen del volumen de ventas (materia prima, insumos)
+    // Costos VARIABLES: dependen del volumen de ventas (materia prima, insumos, animales)
     // Costos FIJOS: existen aunque no haya ventas (sueldos, renta, servicios)
     const VARIABLE_CATS = new Set(["materia_prima", "proveedor", "insumos"]);
     const currentOpVariable = opExpenses
@@ -651,10 +669,21 @@ export default function AdminDashboardPage() {
     const currentOpFijo = opExpenses
       .filter((e) => e.category !== "prestamos" && !VARIABLE_CATS.has(e.category))
       .reduce((s, e) => s + Number(e.amount), 0);
+    // Compras a proveedores del mes (animales + cargos) — costos VARIABLES adicionales.
+    // NO entran al flujo de caja diario (esos se pagan acumulados).
+    const currentLivestockVar = livestockPurchasesMes.reduce(
+      (s, p) => s + Number(p.total_cost || p.total_live || 0),
+      0
+    );
+    const currentSupplierVar = supplierExpensesMes.reduce(
+      (s, e) => s + Number(e.amount || 0),
+      0
+    );
+    const currentVariableTotal = currentOpVariable + currentLivestockVar + currentSupplierVar;
     // Los gastos del dueño (owner_expenses) son típicamente fijos (renta, sueldo socio, etc.)
     const currentFixedTotal = currentOpFijo + currentOwnerExp;
     // Margen de contribución = (Ventas - Costos Variables) / Ventas
-    const contributionMargin = currentSales > 0 ? (currentSales - currentOpVariable) / currentSales : 0;
+    const contributionMargin = currentSales > 0 ? (currentSales - currentVariableTotal) / currentSales : 0;
     // Punto de equilibrio en pesos: Costos Fijos / Margen de contribución
     const breakEvenSales = contributionMargin > 0 ? currentFixedTotal / contributionMargin : 0;
     // % alcanzado del PE en lo que va del mes
@@ -681,7 +710,12 @@ export default function AdminDashboardPage() {
       categories,
       opCategories,
       breakEven: {
-        variableCost: currentOpVariable,
+        variableCost: currentVariableTotal,
+        variableBreakdown: {
+          gastos: currentOpVariable,
+          animales: currentLivestockVar,
+          proveedores: currentSupplierVar,
+        },
         fixedCost: currentFixedTotal,
         contributionMargin: contributionMargin * 100,
         targetSales: breakEvenSales,
@@ -690,7 +724,7 @@ export default function AdminDashboardPage() {
         gap: breakEvenGap,
       },
     };
-  }, [salesThisMonth, ownerExpenses, opExpenses, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
+  }, [salesThisMonth, ownerExpenses, opExpenses, livestockPurchasesMes, supplierExpensesMes, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -1295,14 +1329,19 @@ export default function AdminDashboardPage() {
             <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: COLORS.text }}>Ver cómo se calcula</summary>
             <div style={{ marginTop: 12, fontSize: 13, color: COLORS.text, lineHeight: 1.7 }}>
               <div><b>Costos fijos del mes</b> (renta, sueldos, servicios, mantenimiento...): <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.fixedCost)}</b></div>
-              <div><b>Costos variables del mes</b> (materia prima, proveedor, insumos): <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.variableCost)}</b></div>
+              <div><b>Costos variables del mes</b>: <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.variableCost)}</b></div>
+              <div style={{ paddingLeft: 16, fontSize: 12, color: COLORS.muted }}>
+                · Gastos (materia prima, insumos): ${fmt(utilityStats.breakEven.variableBreakdown.gastos)}<br/>
+                · Compras de animales (ganado): ${fmt(utilityStats.breakEven.variableBreakdown.animales)}<br/>
+                · Cargos a proveedores (compras CxP): ${fmt(utilityStats.breakEven.variableBreakdown.proveedores)}
+              </div>
               <div><b>Margen de contribución</b> (% de cada peso vendido que queda libre): <b>{utilityStats.breakEven.contributionMargin.toFixed(1)}%</b></div>
               <div style={{ marginTop: 8, padding: 10, background: "rgba(255,255,255,0.6)", borderRadius: 8, fontFamily: "monospace", fontSize: 12 }}>
                 <div>Punto de equilibrio = Costos Fijos ÷ Margen de contribución</div>
                 <div>${fmt(utilityStats.breakEven.targetSales)} = ${fmt(utilityStats.breakEven.fixedCost)} ÷ {(utilityStats.breakEven.contributionMargin / 100).toFixed(3)}</div>
               </div>
               <div style={{ marginTop: 8, color: COLORS.muted, fontSize: 12 }}>
-                <b>Clasificación:</b> Materia prima, proveedor e insumos cuentan como variables. Sueldos, servicios, renta, etc. como fijos.
+                <b>Clasificación:</b> Materia prima, insumos, compras de animales y cargos a proveedores cuentan como variables. Sueldos, servicios, renta, etc. como fijos. <b>Las compras a proveedores NO afectan tu flujo de caja diario</b> (se pagan con el acumulado del mes).
               </div>
             </div>
           </details>
