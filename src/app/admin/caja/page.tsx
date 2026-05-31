@@ -341,6 +341,7 @@ export default function CajaPage() {
 
   // Data
   const [movements, setMovements] = useState<Movement[]>([]);
+  const [movementCustomerMap, setMovementCustomerMap] = useState<Record<string, string>>({});
   const [todayClosure, setTodayClosure] = useState<CashClosure | null>(null);
   const [closureHistory, setClosureHistory] = useState<CashClosure[]>([]);
   const [todayOpening, setTodayOpening] = useState<CashOpening | null>(null);
@@ -412,7 +413,7 @@ export default function CajaPage() {
         .lte("created_at", end)
         .order("created_at", { ascending: false })
         .limit(500);
-      setMovements((data as Movement[]) || []);
+    setMovements((data as Movement[]) || []);
 
       // Cargar IDs de órdenes editadas en el mismo rango
       const { data: editedOrders } = await supabase
@@ -1089,6 +1090,25 @@ export default function CajaPage() {
     ]);
 
     const dayMovements = (movRes.data || []) as Movement[];
+
+    // ─── Mapa reference_id → customer_name para mostrar en cada movimiento ───
+    const refIdsForNames = Array.from(new Set(dayMovements.map((m) => m.reference_id).filter(Boolean)));
+    if (refIdsForNames.length > 0) {
+      const [{ data: ordersForNames }, { data: paymentsForNames }] = await Promise.all([
+        supabaseRef.from("orders").select("id, customer_name").in("id", refIdsForNames),
+        supabaseRef.from("cxc_payments").select("id, customer_name").in("id", refIdsForNames),
+      ]);
+      const customerMap: Record<string, string> = {};
+      for (const o of (ordersForNames || []) as { id: string; customer_name: string }[]) {
+        customerMap[o.id] = o.customer_name || "MOSTRADOR";
+      }
+      for (const p of (paymentsForNames || []) as { id: string; customer_name: string }[]) {
+        customerMap[p.id] = p.customer_name || "Sin nombre";
+      }
+      setMovementCustomerMap(customerMap);
+    } else {
+      setMovementCustomerMap({});
+    }
     const dayExpenses = (expRes.data || []) as CashExpense[];
     const creditOrders = creditRes.data || [];
     const dayCxcNotes = cxcNotesRes.data || [];
@@ -1993,6 +2013,11 @@ export default function CajaPage() {
                                 <span style={{ marginLeft: 8, display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(180,35,24,0.12)", color: C.danger }}>Editado</span>
                               )}
                             </div>
+                            {m.reference_id && movementCustomerMap[m.reference_id] && (
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.primary, marginTop: 2 }}>
+                                👤 {movementCustomerMap[m.reference_id]}
+                              </div>
+                            )}
                             <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
                               {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
                               {m.cashier_name && <span> — {m.cashier_name}</span>}
@@ -2026,6 +2051,11 @@ export default function CajaPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontWeight: 800, color: C.danger }}>CANCELADO — {typeName(m.type)}</div>
+                            {m.reference_id && movementCustomerMap[m.reference_id] && (
+                              <div style={{ fontSize: 13, fontWeight: 700, color: C.primary, marginTop: 2 }}>
+                                👤 {movementCustomerMap[m.reference_id]}
+                              </div>
+                            )}
                             <div style={{ color: C.muted, fontSize: 13, marginTop: 2 }}>
                               {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
                             </div>
