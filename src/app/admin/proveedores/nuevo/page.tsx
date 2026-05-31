@@ -66,6 +66,30 @@ function NuevoProveedorInner() {
     router.push(isEdit && editId ? `/admin/proveedores/${editId}` : "/admin/proveedores");
   }
 
+  async function handleDelete() {
+    if (!editId) return;
+    if (!confirm(`¿Eliminar al proveedor "${name}"?\n\nSolo se eliminará si NO tiene compras, cargos ni pagos registrados.`)) return;
+    setSaving(true);
+    const [{ count: nPurch }, { count: nExp }, { count: nPay }] = await Promise.all([
+      supabase.from("livestock_purchases").select("id", { count: "exact", head: true }).eq("supplier_id", editId),
+      supabase.from("supplier_expenses").select("id", { count: "exact", head: true }).eq("supplier_id", editId),
+      supabase.from("supplier_payments").select("id", { count: "exact", head: true }).eq("supplier_id", editId),
+    ]);
+    const total = (nPurch || 0) + (nExp || 0) + (nPay || 0);
+    if (total > 0) {
+      alert(`No se puede eliminar: el proveedor tiene ${total} movimiento(s) registrado(s). Si ya no trabajas con él, agrega "INACTIVO" en las notas.`);
+      setSaving(false);
+      return;
+    }
+    const { error } = await supabase.from("suppliers").delete().eq("id", editId);
+    if (error) {
+      alert("Error al eliminar: " + error.message);
+      setSaving(false);
+      return;
+    }
+    router.push("/admin/proveedores");
+  }
+
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "12px 14px", borderRadius: 12,
     border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box", color: COLORS.text, background: "white", fontWeight: 600,

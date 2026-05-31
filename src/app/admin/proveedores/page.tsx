@@ -80,28 +80,7 @@ export default function ProveedoresPage() {
     }
   }
 
-  async function deleteSupplier(s: Supplier) {
-    if (!confirm(`¿Eliminar al proveedor "${s.name}"?\n\nSolo se eliminará si NO tiene compras, cargos ni pagos registrados.`)) return;
-    // Verificar que no tenga movimientos antes de eliminar (seguridad)
-    const [{ count: nPurch }, { count: nExp }, { count: nPay }] = await Promise.all([
-      supabase.from("livestock_purchases").select("id", { count: "exact", head: true }).eq("supplier_id", s.id),
-      supabase.from("supplier_expenses").select("id", { count: "exact", head: true }).eq("supplier_id", s.id),
-      supabase.from("supplier_payments").select("id", { count: "exact", head: true }).eq("supplier_id", s.id),
-    ]);
-    const total = (nPurch || 0) + (nExp || 0) + (nPay || 0);
-    if (total > 0) {
-      alert(`No se puede eliminar: el proveedor tiene ${total} movimiento(s) registrado(s). Edita las notas si quieres ocultarlo.`);
-      return;
-    }
-    const { error } = await supabase.from("suppliers").delete().eq("id", s.id);
-    if (error) {
-      alert("Error al eliminar: " + error.message);
-      return;
-    }
-    await loadData();
-  }
-
-  const balances = useMemo(() => {
+const balances = useMemo(() => {
     const map: Record<string, { cargos: number; pagos: number }> = {};
     for (const s of suppliers) {
       map[s.id] = { cargos: 0, pagos: 0 };
@@ -222,13 +201,28 @@ export default function ProveedoresPage() {
                   style={{
                     background: "white", borderRadius: 16, padding: "16px 18px",
                     border: `1px solid ${COLORS.border}`, boxShadow: COLORS.shadow,
+                    position: "relative",
                   }}
                 >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); router.push(`/admin/proveedores/nuevo?edit=${s.id}`); }}
+                    title="Editar proveedor"
+                    style={{
+                      position: "absolute", top: 10, right: 10,
+                      width: 28, height: 28, padding: 0,
+                      background: "rgba(123,34,24,0.06)",
+                      color: COLORS.primary, border: "none", borderRadius: 6,
+                      cursor: "pointer", fontSize: 13, lineHeight: 1,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    ✏️
+                  </button>
                   <div
                     onClick={() => router.push(`/admin/proveedores/${s.id}`)}
                     style={{
                       display: "flex", justifyContent: "space-between", alignItems: "center",
-                      cursor: "pointer",
+                      cursor: "pointer", paddingRight: 40,
                     }}
                   >
                     <div>
@@ -252,28 +246,6 @@ export default function ProveedoresPage() {
                         {saldo > 0 ? "por pagar" : "al corriente"}
                       </div>
                     </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` }}>
-                    <button
-                      onClick={() => router.push(`/admin/proveedores/nuevo?edit=${s.id}`)}
-                      style={{
-                        flex: 1, padding: "6px 10px", background: "rgba(123,34,24,0.08)",
-                        color: COLORS.primary, border: "none", borderRadius: 8,
-                        cursor: "pointer", fontSize: 12, fontWeight: 700,
-                      }}
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button
-                      onClick={() => deleteSupplier(s)}
-                      style={{
-                        flex: 1, padding: "6px 10px", background: "rgba(180,35,24,0.08)",
-                        color: COLORS.danger, border: "none", borderRadius: 8,
-                        cursor: "pointer", fontSize: 12, fontWeight: 700,
-                      }}
-                    >
-                      🗑 Eliminar
-                    </button>
                   </div>
                 </div>
               );
