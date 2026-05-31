@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabase";
 
 const COLORS = {
@@ -9,25 +9,53 @@ const COLORS = {
   border: "rgba(92,27,17,0.10)", cardStrong: "rgba(255,255,255,0.92)",
 };
 
-export default function NuevoProveedorPage() {
+function NuevoProveedorInner() {
   const supabase = getSupabaseClient();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("edit");
+  const isEdit = !!editId;
+  const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<string>("puerco");
   const [phone, setPhone] = useState("");
   const [notes, setNotes] = useState("");
 
+  useEffect(() => {
+    if (!editId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("suppliers")
+        .select("name, type, phone, notes")
+        .eq("id", editId)
+        .maybeSingle();
+      if (data) {
+        setName(data.name || "");
+        setType(data.type || "puerco");
+        setPhone(data.phone || "");
+        setNotes(data.notes || "");
+      }
+      setLoading(false);
+    })();
+  }, [editId, supabase]);
+
   async function handleSave() {
     if (!name.trim()) { alert("El nombre es obligatorio"); return; }
     setSaving(true);
 
-    const { error } = await supabase.from("suppliers").insert([{
+    const payload = {
       name: name.trim(),
       type,
       phone: phone.trim() || null,
       notes: notes.trim() || null,
-    }]);
+    };
+    let error;
+    if (isEdit && editId) {
+      ({ error } = await supabase.from("suppliers").update(payload).eq("id", editId));
+    } else {
+      ({ error } = await supabase.from("suppliers").insert([payload]));
+    }
 
     if (error) {
       alert("Error: " + error.message);
@@ -35,17 +63,21 @@ export default function NuevoProveedorPage() {
       return;
     }
 
-    router.push("/admin/proveedores");
+    router.push(isEdit && editId ? `/admin/proveedores/${editId}` : "/admin/proveedores");
   }
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "12px 14px", borderRadius: 12,
-    border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box",
+    border: `1px solid ${COLORS.border}`, fontSize: 15, boxSizing: "border-box", color: COLORS.text, background: "white", fontWeight: 600,
   };
 
   const labelStyle: React.CSSProperties = {
     fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 4, display: "block",
   };
+
+  if (loading) {
+    return <div style={{ padding: 24, textAlign: "center", color: COLORS.muted, background: COLORS.bg, minHeight: "100vh" }}>Cargando…</div>;
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg, padding: 16, fontFamily: "Arial, sans-serif" }}>
@@ -118,5 +150,14 @@ export default function NuevoProveedorPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+export default function NuevoProveedorPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24, textAlign: "center" }}>Cargando…</div>}>
+      <NuevoProveedorInner />
+    </Suspense>
   );
 }
