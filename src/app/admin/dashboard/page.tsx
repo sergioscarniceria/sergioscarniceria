@@ -606,7 +606,18 @@ export default function AdminDashboardPage() {
         acc + (o.order_items || []).reduce((s: number, i: any) => s + itemSubtotal(i), 0), 0);
 
     const currentSales = salesThisMonth;
-    const currentOwnerExp = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    // Gastos externos = owner_expenses + compras a proveedores del mes (animales + cargos)
+    // Estos NO afectan flujo de caja diario pero SÍ son gastos reales del negocio
+    const currentOwnerExpRaw = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const currentLivestockExt = livestockPurchasesMes.reduce(
+      (s, p) => s + Number(p.total_cost || p.total_live || 0),
+      0
+    );
+    const currentSupplierExpExt = supplierExpensesMes.reduce(
+      (s, e) => s + Number(e.amount || 0),
+      0
+    );
+    const currentOwnerExp = currentOwnerExpRaw + currentLivestockExt + currentSupplierExpExt;
     // Excluir préstamos: dinero prestado a terceros no es gasto del negocio (será devuelto)
     const currentOpExp = opExpenses
       .filter((e) => e.category !== "prestamos")
@@ -701,6 +712,23 @@ export default function AdminDashboardPage() {
       .sort((a, b) => b[1] - a[1])
       .map(([concept, total]) => ({ category: concept, total }));
 
+    // Desglose gastos externos por concepto (owner + compras a proveedores)
+    const externalByConceptMap: Record<string, number> = {};
+    ownerExpenses.forEach((e) => {
+      const key = `${e.category || "Otro"} (dueño)`;
+      externalByConceptMap[key] = (externalByConceptMap[key] || 0) + Number(e.amount);
+    });
+    if (currentLivestockExt > 0) {
+      externalByConceptMap["Compras de animales"] = currentLivestockExt;
+    }
+    supplierExpensesMes.forEach((e) => {
+      const key = e.concept || "Cargo a proveedor";
+      externalByConceptMap[key] = (externalByConceptMap[key] || 0) + Number(e.amount || 0);
+    });
+    const externalCategories = Object.entries(externalByConceptMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([category, total]) => ({ category, total }));
+
     return {
       current: { sales: currentSales, expenses: currentExpenses, ownerExp: currentOwnerExp, opExp: currentOpExp, utility: currentUtility, margin: currentMargin, label: monthNames[cm.getMonth()] },
       prevMonth: { sales: prevMSales, expenses: prevMExpenses, utility: prevMUtility, margin: prevMMargin, label: monthNames[pm.getMonth()] },
@@ -709,6 +737,7 @@ export default function AdminDashboardPage() {
       debt: { total: totalDebt, count: supplierDebt.length },
       categories,
       opCategories,
+      externalCategories,
       breakEven: {
         variableCost: currentVariableTotal,
         variableBreakdown: {
@@ -1217,10 +1246,10 @@ export default function AdminDashboardPage() {
             </div>
             <div style={{ background: "rgba(255,255,255,0.6)", borderRadius: 16, padding: 14, border: `1px solid ${COLORS.border}` }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>Desglose gastos externos</div>
-              {utilityStats.categories.length === 0 ? (
+              {utilityStats.externalCategories.length === 0 ? (
                 <div style={{ fontSize: 13, color: COLORS.muted, padding: 10 }}>Sin gastos registrados este mes</div>
               ) : (
-                utilityStats.categories.map((cat, i) => {
+                utilityStats.externalCategories.map((cat, i) => {
                   const catLabels: Record<string, string> = {
                     compras_ganado: "Compras ganado", pagos_proveedores: "Pagos proveedores", renta: "Renta",
                     gas: "Gas", insumos: "Insumos", vehiculos: "Vehículos", publicidad: "Publicidad",
