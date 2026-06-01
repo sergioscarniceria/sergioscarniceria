@@ -96,6 +96,8 @@ export default function AdminDashboardPage() {
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string }[]>([]);
   const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null }[]>([]);
+  const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; method: string; supplier_id: string }[]>([]);
+  const [supplierNameMap, setSupplierNameMap] = useState<Record<string, string>>({});
   const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
@@ -235,6 +237,22 @@ export default function AdminDashboardPage() {
     ]);
     setLivestockPurchasesMes((livestockMes as any[]) || []);
     setSupplierExpensesMes((suppExpMes as any[]) || []);
+
+    // Pagos a proveedores hechos en el mes (lo que realmente sale del acumulado)
+    const { data: suppPayMes } = await supabase
+      .from("supplier_payments")
+      .select("date, amount, method, supplier_id")
+      .gte("date", cmFirst)
+      .lte("date", cmLastStr);
+    setSupplierPaymentsMes((suppPayMes as any[]) || []);
+
+    // Cargar nombres de proveedores para mostrar en el desglose
+    const { data: allSuppliers } = await supabase
+      .from("suppliers")
+      .select("id, name");
+    const sMap: Record<string, string> = {};
+    (allSuppliers || []).forEach((s: any) => { sMap[s.id] = s.name; });
+    setSupplierNameMap(sMap);
 
     // Mes anterior
     const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
@@ -606,18 +624,15 @@ export default function AdminDashboardPage() {
         acc + (o.order_items || []).reduce((s: number, i: any) => s + itemSubtotal(i), 0), 0);
 
     const currentSales = salesThisMonth;
-    // Gastos externos = owner_expenses + compras a proveedores del mes (animales + cargos)
-    // Estos NO afectan flujo de caja diario pero SÍ son gastos reales del negocio
+    // Gastos externos = owner_expenses + PAGOS a proveedores del mes (base efectivo)
+    // Solo cuenta lo que YA SE PAGÓ, no lo comprado a crédito.
+    // Las compras a proveedores SÍ se siguen contando en el PE (base devengado).
     const currentOwnerExpRaw = ownerExpenses.reduce((s, e) => s + Number(e.amount), 0);
-    const currentLivestockExt = livestockPurchasesMes.reduce(
-      (s, p) => s + Number(p.total_cost || p.total_live || 0),
+    const currentSupplierPayments = supplierPaymentsMes.reduce(
+      (s, p) => s + Number(p.amount || 0),
       0
     );
-    const currentSupplierExpExt = supplierExpensesMes.reduce(
-      (s, e) => s + Number(e.amount || 0),
-      0
-    );
-    const currentOwnerExp = currentOwnerExpRaw + currentLivestockExt + currentSupplierExpExt;
+    const currentOwnerExp = currentOwnerExpRaw + currentSupplierPayments;
     // Excluir préstamos: dinero prestado a terceros no es gasto del negocio (será devuelto)
     const currentOpExp = opExpenses
       .filter((e) => e.category !== "prestamos")
@@ -712,18 +727,20 @@ export default function AdminDashboardPage() {
       .sort((a, b) => b[1] - a[1])
       .map(([concept, total]) => ({ category: concept, total }));
 
-    // Desglose gastos externos por concepto (owner + compras a proveedores)
+    // Desglose gastos externos por concepto (owner + pagos hechos a proveedores)
     const externalByConceptMap: Record<string, number> = {};
     ownerExpenses.forEach((e) => {
       const key = `${e.category || "Otro"} (dueño)`;
       externalByConceptMap[key] = (externalByConceptMap[key] || 0) + Number(e.amount);
     });
-    if (currentLivestockExt > 0) {
-      externalByConceptMap["Compras de animales"] = currentLivestockExt;
-    }
-    supplierExpensesMes.forEach((e) => {
-      const key = e.concept || "Cargo a proveedor";
-      externalByConceptMap[key] = (externalByConceptMap[key] || 0) + Number(e.amount || 0);
+    // Agrupar pagos por proveedor
+    const paymentsBySupplier: Record<string, number> = {};
+    supplierPaymentsMes.forEach((p) => {
+      const supplier = supplierNameMap[p.supplier_id] || `Proveedor desconocido`;
+      paymentsBySupplier[supplier] = (paymentsBySupplier[supplier] || 0) + Number(p.amount || 0);
+    });
+    Object.entries(paymentsBySupplier).forEach(([supplier, total]) => {
+      externalByConceptMap[`Pago a ${supplier}`] = total;
     });
     const externalCategories = Object.entries(externalByConceptMap)
       .sort((a, b) => b[1] - a[1])
@@ -753,7 +770,7 @@ export default function AdminDashboardPage() {
         gap: breakEvenGap,
       },
     };
-  }, [salesThisMonth, ownerExpenses, opExpenses, livestockPurchasesMes, supplierExpensesMes, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
+  }, [salesThisMonth, ownerExpenses, opExpenses, livestockPurchasesMes, supplierExpensesMes, supplierPaymentsMes, supplierNameMap, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
