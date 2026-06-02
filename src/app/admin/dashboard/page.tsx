@@ -98,6 +98,7 @@ export default function AdminDashboardPage() {
   const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null }[]>([]);
   const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; method: string; supplier_id: string }[]>([]);
   const [supplierNameMap, setSupplierNameMap] = useState<Record<string, string>>({});
+  const [productsMap, setProductsMap] = useState<Record<string, string>>({}); // name -> category
   const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevYearOpExpenses, setPrevYearOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [prevMonthExpenses, setPrevMonthExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
@@ -254,6 +255,14 @@ export default function AdminDashboardPage() {
     const sMap: Record<string, string> = {};
     (allSuppliers || []).forEach((s: any) => { sMap[s.id] = s.name; });
     setSupplierNameMap(sMap);
+
+    // Cargar map nombre→categoria de productos para clasificar ventas por tipo de carne
+    const { data: prodList } = await supabase
+      .from("products")
+      .select("name, category");
+    const pMap: Record<string, string> = {};
+    (prodList || []).forEach((p: any) => { if (p.name) pMap[p.name] = p.category || ""; });
+    setProductsMap(pMap);
 
     // Mes anterior
     const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1);
@@ -821,7 +830,11 @@ export default function AdminDashboardPage() {
 
   const topCustomers = useMemo(() => {
     const totals: Record<string, number> = {};
+    // Solo contar pedidos YA VENDIDOS (terminado / entregado).
+    // Excluir nuevo/proceso/pendiente para no inflar ranking con cosas no cobradas.
+    const validStatuses = new Set(["terminado", "entregado"]);
     for (const order of orders) {
+      if (!validStatuses.has((order.status || "").toLowerCase())) continue;
       const name = order.customer_name || "Sin nombre";
       totals[name] = (totals[name] || 0) + orderTotal(order);
     }
@@ -875,56 +888,78 @@ export default function AdminDashboardPage() {
     return [...productStats].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
   }, [productStats]);
 
-  // ─── COMPARATIVA KILOS ENTRANTES VS SALIENTES (MERMA) ───
+  // ─── COMPARATIVA KG POR TIPO DE CARNE (RES/CERDO/POLLO) ───
+  // Helper: clasificar nombre de producto + categoria del catalogo a tipo de carne
+  function classifyMeatType(productName: string, productCategory: string): string | null {
+    const n = (productName || "").toLowerCase();
+    const c = (productCategory || "").toLowerCase();
+
+    // 1. Por categoria del producto (admin/productos)
+    if (c === "res") return "Res";
+    if (c === "cerdo") return "Cerdo";
+    if (c === "pollo") return "Pollo";
+
+    // 2. Por keywords explicitas
+    if (n.includes("cerdo") || n.includes("puerco")) return "Cerdo";
+    if (n.includes("pollo")) return "Pollo";
+
+    // 3. Productos de cerdo identificables
+    const cerdoNames = ["chuleta", "tocino", "chicharron", "chorizo argentino", "chorizo español", "chorizo ranchero", "chistorra", "longaniza", "peperoni", "boston but", "pork belly", "espinazo", "panza", "codillo", "buche", "cuero de cerdo", "manteca", "pierna de cerdo", "pata de cerdo", "lonja", "sesos de puerco"];
+    if (cerdoNames.some((k) => n.includes(k))) return "Cerdo";
+
+    // 4. Productos de res identificables (cortes y cortes premium)
+    const resNames = ["bistec", "arrachera", "molida", "costilla", "rib eye", "tomahawk", "picaña", "new york", "t-bone", "porterhouse", "filete", "medallon", "brisket", "tampiqueña", "discada", "diezmillo", "agua", "aguja", "barbacoa", "birria", "cabeza", "carrillera", "carne para barbacoa", "cecina", "centro de bola", "chambarete", "chamorro", "chuletón", "chuletón", "cowboy", "cuero de res", "falda de res", "flap meat", "hamburguesa", "higado de res", "hueso", "huesos", "lengua", "lomo", "maciza", "milanesa", "molleja", "menudos", "pastor", "pata", "pecho", "pellejos", "pescuezo", "riñones", "roast beef", "sirloin", "suadero", "tartara", "tripa", "tuétano", "tuetano", "medula", "médula", "res en pie", "canal de res", "cochinita", "chunks"];
+    if (resNames.some((k) => n.includes(k))) return "Res";
+
+    return null; // No clasificable (complementos, etc)
+  }
+
   const mermaStats = useMemo(() => {
-    // Entradas: compras de materia prima del mes (supplier_expenses con is_raw_material)
-    const entradasByCategory: Record<string, { kg: number; cost: number; count: number }> = {};
+    // Entradas por tipo de carne (Res, Cerdo, Pollo, Otro)
+    const entradasByType: Record<string, { kg: number; cost: number; count: number }> = {};
     supplierExpensesMes.forEach((e) => {
       if (!e.is_raw_material || !e.kg || !e.product_category) return;
-      const cat = e.product_category;
-      if (!entradasByCategory[cat]) entradasByCategory[cat] = { kg: 0, cost: 0, count: 0 };
-      entradasByCategory[cat].kg += Number(e.kg || 0);
-      entradasByCategory[cat].cost += Number(e.amount || 0);
-      entradasByCategory[cat].count += 1;
+      const tipo = e.product_category;
+      if (!entradasByType[tipo]) entradasByType[tipo] = { kg: 0, cost: 0, count: 0 };
+      entradasByType[tipo].kg += Number(e.kg || 0);
+      entradasByType[tipo].cost += Number(e.amount || 0);
+      entradasByType[tipo].count += 1;
     });
 
-    // Salidas: kg vendidos del mes por categoria del producto (ventas)
-    // productStats ya tiene por producto. Necesito mapear producto -> categoria
-    // Vamos a tomar product -> productCategoryMap (si existe en products), si no por keyword
-    const salidasByCategory: Record<string, { kg: number; revenue: number }> = {};
+    // Salidas por tipo de carne — solo kilos (no piezas)
+    const salidasByType: Record<string, { kg: number; revenue: number }> = {};
     productStats.forEach((p) => {
-      if (p.isPieza) return; // las piezas no entran al calculo de kg
-      // Heuristica: mapear por keywords en el nombre del producto
-      const name = p.product.toLowerCase();
-      let cat: string | null = null;
-      if (name.includes("bistec")) cat = "Bistec";
-      else if (name.includes("arrachera")) cat = "Arrachera";
-      else if (name.includes("molida") || name.includes("hamburguesa")) cat = "Molida";
-      else if (name.includes("costilla")) cat = "Costilla";
-      else if (name.includes("pierna") || name.includes("lomo") || name.includes("maciza")) cat = "Pierna / Lomo";
-      else if (name.includes("cerdo") || name.includes("puerco") || name.includes("chuleta") || name.includes("chorizo") || name.includes("tocino")) cat = "Cerdo";
-      else if (name.includes("pollo")) cat = "Pollo";
-      else if (name.includes("chistorra") || name.includes("longaniza") || name.includes("peperoni")) cat = "Embutidos";
-      else if (name.includes("rib eye") || name.includes("tomahawk") || name.includes("picaña") || name.includes("new york") || name.includes("t-bone") || name.includes("porterhouse") || name.includes("filete") || name.includes("medallon")) cat = "Premium";
-      else return;
-      if (!salidasByCategory[cat]) salidasByCategory[cat] = { kg: 0, revenue: 0 };
-      salidasByCategory[cat].kg += Number(p.kilos || 0);
-      salidasByCategory[cat].revenue += Number(p.revenue || 0);
+      if (p.isPieza) return;
+      const tipo = classifyMeatType(p.product, productsMap[p.product] || "");
+      if (!tipo) return;
+      if (!salidasByType[tipo]) salidasByType[tipo] = { kg: 0, revenue: 0 };
+      salidasByType[tipo].kg += Number(p.kilos || 0);
+      salidasByType[tipo].revenue += Number(p.revenue || 0);
     });
 
-    // Merge: todas las categorias que aparecen en entradas o salidas
-    const allCats = new Set<string>([
-      ...Object.keys(entradasByCategory),
-      ...Object.keys(salidasByCategory),
+    const allTypes = new Set<string>([
+      ...Object.keys(entradasByType),
+      ...Object.keys(salidasByType),
     ]);
 
-    const rows = Array.from(allCats).map((cat) => {
-      const ent = entradasByCategory[cat] || { kg: 0, cost: 0, count: 0 };
-      const sal = salidasByCategory[cat] || { kg: 0, revenue: 0 };
+    // Orden fijo: Res, Cerdo, Pollo, Otro
+    const order = ["Res", "Cerdo", "Pollo", "Otro"];
+    const sorted = Array.from(allTypes).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      if (ia === -1 && ib === -1) return a.localeCompare(b);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    });
+
+    const rows = sorted.map((tipo) => {
+      const ent = entradasByType[tipo] || { kg: 0, cost: 0, count: 0 };
+      const sal = salidasByType[tipo] || { kg: 0, revenue: 0 };
       const merma_kg = ent.kg - sal.kg;
       const merma_pct = ent.kg > 0 ? (merma_kg / ent.kg) * 100 : 0;
       return {
-        cat,
+        cat: tipo,
         entradas_kg: ent.kg,
         entradas_cost: ent.cost,
         entradas_count: ent.count,
@@ -935,16 +970,13 @@ export default function AdminDashboardPage() {
       };
     });
 
-    // Ordenar por kg de entrada DESC
-    rows.sort((a, b) => b.entradas_kg - a.entradas_kg);
-
     const totalEntradas = rows.reduce((s, r) => s + r.entradas_kg, 0);
     const totalSalidas = rows.reduce((s, r) => s + r.salidas_kg, 0);
     const totalCost = rows.reduce((s, r) => s + r.entradas_cost, 0);
     const totalRevenue = rows.reduce((s, r) => s + r.salidas_revenue, 0);
 
     return { rows, totalEntradas, totalSalidas, totalCost, totalRevenue };
-  }, [supplierExpensesMes, productStats]);
+  }, [supplierExpensesMes, productStats, productsMap]);
 
   // Detalle de ventas individuales para el producto expandido
   const expandedProductSales = useMemo(() => {
@@ -1810,15 +1842,15 @@ export default function AdminDashboardPage() {
           )}
         </Section>
 
-        <Section id="merma" title="Comparativa kg entrantes vs salientes (merma)" count={mermaStats.rows.length}>
+        <Section id="merma" title="Kilos de carne: entradas vs salidas" count={mermaStats.rows.length}>
           <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
-            Compara kilos de materia prima COMPRADOS este mes con kilos VENDIDOS por categoría.
-            Marca las compras como &quot;materia prima&quot; en /admin/proveedores → cargo para que aparezcan aquí.
+            Compara kilos de RES, CERDO y POLLO comprados este mes vs kilos vendidos.
+            Marca las compras como &quot;materia prima&quot; en /admin/proveedores → cargo y elige el tipo de carne.
           </p>
 
           {mermaStats.rows.length === 0 ? (
             <div style={emptyBoxStyle}>
-              Aún no hay compras marcadas como materia prima. Cuando registres un cargo a proveedor (Sergio Vega Marín, Arriola, etc), activa el toggle &quot;¿Es materia prima?&quot; y captura los kg + categoría.
+              Aún no hay compras de carne registradas. Cuando registres un cargo a proveedor (Sergio Vega Marín, Arriola, Feyo, etc), activa el toggle &quot;¿Es materia prima?&quot; y elige Res/Cerdo/Pollo + los kg.
             </div>
           ) : (
             <>
@@ -1864,7 +1896,7 @@ export default function AdminDashboardPage() {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: "rgba(123,34,24,0.06)" }}>
-                      <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Categoría</th>
+                      <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Tipo de carne</th>
                       <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Entradas (kg)</th>
                       <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Salidas (kg)</th>
                       <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Merma</th>

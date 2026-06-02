@@ -29,7 +29,7 @@ export default function CargoInternoPage() {
   const [notes, setNotes] = useState("");
   const [isRawMaterial, setIsRawMaterial] = useState(false);
   const [kg, setKg] = useState("");
-  const [productCategory, setProductCategory] = useState("Bistec");
+  const [productCategory, setProductCategory] = useState("Res");
 
   useEffect(() => {
     supabase.from("suppliers").select("name").eq("id", supplierId).single()
@@ -149,17 +149,15 @@ export default function CargoInternoPage() {
                     onChange={(e) => setProductCategory(e.target.value)}
                     style={inputStyle}
                   >
-                    <option value="Bistec">Bistec</option>
-                    <option value="Arrachera">Arrachera</option>
-                    <option value="Molida">Molida</option>
-                    <option value="Costilla">Costilla</option>
-                    <option value="Pierna / Lomo">Pierna / Lomo</option>
-                    <option value="Cerdo">Cerdo (general)</option>
+                    <option value="Res">Res (pulpa, costillar, falda, etc)</option>
+                    <option value="Cerdo">Cerdo (lomo, pierna, costilla, etc)</option>
                     <option value="Pollo">Pollo</option>
-                    <option value="Embutidos">Embutidos</option>
-                    <option value="Premium">Cortes Premium (rib eye, tomahawk, etc)</option>
                     <option value="Otro">Otro</option>
                   </select>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>
+                    Solo registra el tipo de carne — no el producto final.
+                    Después en el dashboard se compara contra kg vendidos.
+                  </div>
                 </div>
                 <div>
                   <label style={{ ...labelStyle, fontSize: 12 }}>Kilos comprados *</label>
