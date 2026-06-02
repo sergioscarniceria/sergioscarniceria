@@ -46,6 +46,7 @@ type Product = {
   price: number;
   is_active?: boolean;
   is_excluded_from_discount?: boolean;
+  category?: string | null;
 };
 
 type CartItem = {
@@ -127,6 +128,7 @@ export default function NuevoPedidoPage() {
   const [priceListSearch, setPriceListSearch] = useState("");
   const [priceListSelected, setPriceListSelected] = useState<Record<string, boolean>>({});
   const [priceListDiscount, setPriceListDiscount] = useState<string>("0");
+  const [priceListCashier, setPriceListCashier] = useState<string>("");
   const [exportingPriceList, setExportingPriceList] = useState(false);
 
   useEffect(() => {
@@ -582,6 +584,10 @@ export default function NuevoPedidoPage() {
       alert("Selecciona al menos un producto");
       return;
     }
+    if (!priceListCashier.trim()) {
+      alert("Escribe tu nombre (cajera) antes de generar la lista");
+      return;
+    }
     const discount = Math.max(0, Math.min(100, Number(priceListDiscount) || 0));
     setExportingPriceList(true);
     try {
@@ -604,6 +610,8 @@ export default function NuevoPedidoPage() {
       const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
       doc.setFontSize(9);
       doc.text(`Fecha: ${today}`, pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.text(`Atendido por: ${priceListCashier.trim()}`, pageW / 2, y, { align: "center" });
       y += 8;
 
       if (discount > 0) {
@@ -614,55 +622,108 @@ export default function NuevoPedidoPage() {
         y += 7;
       }
 
-      // Tabla
-      doc.setDrawColor(200, 200, 200);
-      doc.setFillColor(247, 241, 232);
-      doc.rect(15, y, pageW - 30, 8, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(59, 28, 22);
-      doc.text("Producto", 18, y + 5.5);
-      if (discount > 0) {
-        doc.text("Precio lista", pageW - 75, y + 5.5);
-        doc.text(`Precio c/${discount}%`, pageW - 35, y + 5.5);
-      } else {
-        doc.text("Precio", pageW - 35, y + 5.5);
-      }
-      y += 10;
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(50, 50, 50);
-
       const selectedProducts = products.filter((p) => selectedIds.includes(p.id));
-      // Orden alfabetico
-      selectedProducts.sort((a, b) => a.name.localeCompare(b.name));
 
+      // Agrupar por categoria
+      const byCategory: Record<string, Product[]> = {};
       for (const p of selectedProducts) {
-        if (y > 250) {
+        const cat = (p.category || "Sin categoria").trim() || "Sin categoria";
+        if (!byCategory[cat]) byCategory[cat] = [];
+        byCategory[cat].push(p);
+      }
+
+      // Orden preferido de categorias
+      const categoryOrder = ["Res", "Cerdo", "Carne para asar", "Embutidos", "Preparados", "Para caldo", "Comida", "Complementos"];
+      const sortedCategories = Object.keys(byCategory).sort((a, b) => {
+        const ia = categoryOrder.indexOf(a);
+        const ib = categoryOrder.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+
+      function drawTableHeader() {
+        doc.setDrawColor(200, 200, 200);
+        doc.setFillColor(247, 241, 232);
+        doc.rect(15, y, pageW - 30, 8, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(59, 28, 22);
+        doc.text("Producto", 18, y + 5.5);
+        if (discount > 0) {
+          doc.text("Precio lista", pageW - 75, y + 5.5);
+          doc.text(`Precio c/${discount}%`, pageW - 35, y + 5.5);
+        } else {
+          doc.text("Precio", pageW - 35, y + 5.5);
+        }
+        y += 10;
+      }
+
+      for (const cat of sortedCategories) {
+        const items = byCategory[cat];
+        items.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Salto de pagina si no cabe el titulo + 2 filas
+        if (y > 245) {
           doc.addPage();
           y = 20;
         }
-        const base = Number(p.price || 0);
-        const withDisc = Number((base * (1 - discount / 100)).toFixed(2));
-        doc.text(p.name, 18, y);
-        if (discount > 0) {
-          doc.text(`$${base.toFixed(2)}`, pageW - 75, y);
-          doc.setTextColor(31, 122, 77);
-          doc.setFont("helvetica", "bold");
-          doc.text(`$${withDisc.toFixed(2)}`, pageW - 35, y);
-          doc.setFont("helvetica", "normal");
-          doc.setTextColor(50, 50, 50);
-        } else {
-          doc.text(`$${base.toFixed(2)}`, pageW - 35, y);
+
+        // Titulo de categoria
+        doc.setFillColor(123, 34, 24);
+        doc.rect(15, y, pageW - 30, 8, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(255, 255, 255);
+        doc.text(cat.toUpperCase(), 18, y + 5.7);
+        doc.setFontSize(9);
+        doc.text(`${items.length} producto${items.length === 1 ? "" : "s"}`, pageW - 18, y + 5.7, { align: "right" });
+        y += 10;
+
+        // Encabezado de tabla
+        drawTableHeader();
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+
+        for (const p of items) {
+          if (y > 260) {
+            doc.addPage();
+            y = 20;
+            drawTableHeader();
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(10);
+            doc.setTextColor(50, 50, 50);
+          }
+          const base = Number(p.price || 0);
+          const withDisc = Number((base * (1 - discount / 100)).toFixed(2));
+          doc.text(p.name, 18, y);
+          if (discount > 0) {
+            doc.text(`$${base.toFixed(2)}`, pageW - 75, y);
+            doc.setTextColor(31, 122, 77);
+            doc.setFont("helvetica", "bold");
+            doc.text(`$${withDisc.toFixed(2)}`, pageW - 35, y);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(50, 50, 50);
+          } else {
+            doc.text(`$${base.toFixed(2)}`, pageW - 35, y);
+          }
+          y += 6;
+          doc.setDrawColor(235, 235, 235);
+          doc.line(15, y - 2, pageW - 15, y - 2);
         }
-        y += 6;
-        doc.setDrawColor(235, 235, 235);
-        doc.line(15, y - 2, pageW - 15, y - 2);
+
+        y += 4;
       }
 
       // Pie
-      y += 8;
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+      y += 4;
       doc.setFont("helvetica", "italic");
       doc.setFontSize(8);
       doc.setTextColor(120, 120, 120);
@@ -670,7 +731,8 @@ export default function NuevoPedidoPage() {
       y += 4;
       doc.text("Sergio's Carniceria - Gracias por su preferencia", pageW / 2, y, { align: "center" });
 
-      const fname = `lista-precios-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const cashierSafe = priceListCashier.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const fname = `lista-precios-${cashierSafe || "cajera"}-${new Date().toISOString().slice(0, 10)}.pdf`;
       doc.save(fname);
     } catch (e: any) {
       alert("Error al generar PDF: " + (e?.message || e));
@@ -1367,6 +1429,21 @@ export default function NuevoPedidoPage() {
               </button>
             </div>
 
+            <div style={{
+              padding: 10, background: "rgba(123,34,24,0.05)", borderRadius: 10,
+              border: `1px solid ${COLORS.border}`,
+            }}>
+              <label style={{ fontSize: 12, color: COLORS.muted, fontWeight: 700, display: "block", marginBottom: 4 }}>
+                Tu nombre (cajera) *
+              </label>
+              <input
+                placeholder="Ej. Yadira, Maritza, Brenda..."
+                value={priceListCashier}
+                onChange={(e) => setPriceListCashier(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0, fontWeight: 700 }}
+              />
+            </div>
+
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <input
                 placeholder="Buscar producto"
@@ -1448,8 +1525,15 @@ export default function NuevoPedidoPage() {
                         onChange={() => togglePriceListProduct(p.id)}
                         style={{ width: 18, height: 18, cursor: "pointer" }}
                       />
-                      <div style={{ flex: 1, color: COLORS.text, fontWeight: 600, fontSize: 14 }}>
-                        {p.name}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ color: COLORS.text, fontWeight: 600, fontSize: 14 }}>
+                          {p.name}
+                        </div>
+                        {p.category && (
+                          <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                            {p.category}
+                          </div>
+                        )}
                       </div>
                       <div style={{ textAlign: "right" }}>
                         {disc > 0 ? (
