@@ -4,6 +4,31 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 
+// jsPDF desde CDN (mismo enfoque que en /admin/caja)
+function loadJsPDF(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).jspdf) { resolve((window as any).jspdf.jsPDF); return; }
+    const cdns = [
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
+      "https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js",
+      "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
+    ];
+    let idx = 0;
+    function tryNext() {
+      if (idx >= cdns.length) { reject(new Error("No se pudo cargar jsPDF")); return; }
+      const sc = document.createElement("script");
+      sc.src = cdns[idx++];
+      sc.onload = () => {
+        if ((window as any).jspdf) resolve((window as any).jspdf.jsPDF);
+        else tryNext();
+      };
+      sc.onerror = () => tryNext();
+      document.head.appendChild(sc);
+    }
+    tryNext();
+  });
+}
+
 type Customer = {
   id: string;
   name: string;
@@ -96,6 +121,13 @@ export default function NuevoPedidoPage() {
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [newCustomerBusinessName, setNewCustomerBusinessName] = useState("");
   const [newCustomerAddress, setNewCustomerAddress] = useState("");
+
+  // Modal lista de precios
+  const [showPriceListModal, setShowPriceListModal] = useState(false);
+  const [priceListSearch, setPriceListSearch] = useState("");
+  const [priceListSelected, setPriceListSelected] = useState<Record<string, boolean>>({});
+  const [priceListDiscount, setPriceListDiscount] = useState<string>("0");
+  const [exportingPriceList, setExportingPriceList] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -529,6 +561,132 @@ export default function NuevoPedidoPage() {
     return customers.slice(0, 150);
   }, [customers, showCustomerCatalog]);
 
+  // ── Lista de precios ──
+  function togglePriceListProduct(id: string) {
+    setPriceListSelected((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  function selectAllPriceList(productList: Product[]) {
+    const allOn: Record<string, boolean> = {};
+    productList.forEach((p) => { allOn[p.id] = true; });
+    setPriceListSelected(allOn);
+  }
+
+  function clearPriceList() {
+    setPriceListSelected({});
+  }
+
+  async function exportPriceListPDF() {
+    const selectedIds = Object.entries(priceListSelected).filter(([, v]) => v).map(([k]) => k);
+    if (selectedIds.length === 0) {
+      alert("Selecciona al menos un producto");
+      return;
+    }
+    const discount = Math.max(0, Math.min(100, Number(priceListDiscount) || 0));
+    setExportingPriceList(true);
+    try {
+      const jsPDF = await loadJsPDF();
+      const doc = new jsPDF({ unit: "mm", format: "letter" });
+      const pageW = doc.internal.pageSize.getWidth();
+      let y = 18;
+
+      // Encabezado
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(123, 34, 24);
+      doc.text("Sergio's Carniceria", pageW / 2, y, { align: "center" });
+      y += 7;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(80, 80, 80);
+      doc.text("Lista de precios / Cotizacion", pageW / 2, y, { align: "center" });
+      y += 5;
+      const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+      doc.setFontSize(9);
+      doc.text(`Fecha: ${today}`, pageW / 2, y, { align: "center" });
+      y += 8;
+
+      if (discount > 0) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(31, 122, 77);
+        doc.text(`Descuento aplicado: ${discount}%`, pageW / 2, y, { align: "center" });
+        y += 7;
+      }
+
+      // Tabla
+      doc.setDrawColor(200, 200, 200);
+      doc.setFillColor(247, 241, 232);
+      doc.rect(15, y, pageW - 30, 8, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(59, 28, 22);
+      doc.text("Producto", 18, y + 5.5);
+      if (discount > 0) {
+        doc.text("Precio lista", pageW - 75, y + 5.5);
+        doc.text(`Precio c/${discount}%`, pageW - 35, y + 5.5);
+      } else {
+        doc.text("Precio", pageW - 35, y + 5.5);
+      }
+      y += 10;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(50, 50, 50);
+
+      const selectedProducts = products.filter((p) => selectedIds.includes(p.id));
+      // Orden alfabetico
+      selectedProducts.sort((a, b) => a.name.localeCompare(b.name));
+
+      for (const p of selectedProducts) {
+        if (y > 250) {
+          doc.addPage();
+          y = 20;
+        }
+        const base = Number(p.price || 0);
+        const withDisc = Number((base * (1 - discount / 100)).toFixed(2));
+        doc.text(p.name, 18, y);
+        if (discount > 0) {
+          doc.text(`$${base.toFixed(2)}`, pageW - 75, y);
+          doc.setTextColor(31, 122, 77);
+          doc.setFont("helvetica", "bold");
+          doc.text(`$${withDisc.toFixed(2)}`, pageW - 35, y);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(50, 50, 50);
+        } else {
+          doc.text(`$${base.toFixed(2)}`, pageW - 35, y);
+        }
+        y += 6;
+        doc.setDrawColor(235, 235, 235);
+        doc.line(15, y - 2, pageW - 15, y - 2);
+      }
+
+      // Pie
+      y += 8;
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text("Precios sujetos a cambio sin previo aviso. Vigencia: 7 dias.", pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.text("Sergio's Carniceria - Gracias por su preferencia", pageW / 2, y, { align: "center" });
+
+      const fname = `lista-precios-${new Date().toISOString().slice(0, 10)}.pdf`;
+      doc.save(fname);
+    } catch (e: any) {
+      alert("Error al generar PDF: " + (e?.message || e));
+    } finally {
+      setExportingPriceList(false);
+    }
+  }
+
+  const priceListFiltered = useMemo(() => {
+    const q = priceListSearch.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter((p) => p.name.toLowerCase().includes(q));
+  }, [products, priceListSearch]);
+
+  const priceListSelectedCount = Object.values(priceListSelected).filter(Boolean).length;
+
   const searchedProducts = useMemo(() => {
     const q = productSearch.toLowerCase().trim();
     if (!q) return [];
@@ -572,6 +730,18 @@ export default function NuevoPedidoPage() {
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
             <Link href="/repartidores" style={secondaryButtonStyle}>Repartidores</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
+            <button
+              onClick={() => setShowPriceListModal(true)}
+              style={{
+                ...secondaryButtonStyle,
+                background: COLORS.primary,
+                color: "white",
+                border: "none",
+                cursor: "pointer",
+              }}
+            >
+              📋 Lista de precios
+            </button>
           </div>
         </div>
 
@@ -1163,6 +1333,174 @@ export default function NuevoPedidoPage() {
           </div>
         </div>
       ) : null}
+
+      {showPriceListModal && (
+        <div
+          onClick={() => setShowPriceListModal(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 16, padding: 22,
+              width: "100%", maxWidth: 720, maxHeight: "90vh",
+              display: "flex", flexDirection: "column", gap: 14,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ margin: 0, color: COLORS.text }}>Lista de precios</h2>
+                <p style={{ margin: "4px 0 0 0", color: COLORS.muted, fontSize: 13 }}>
+                  Selecciona productos y aplica descuento informativo. NO modifica precios reales.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPriceListModal(false)}
+                style={{ background: "transparent", border: "none", fontSize: 24, cursor: "pointer", color: COLORS.muted }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                placeholder="Buscar producto"
+                value={priceListSearch}
+                onChange={(e) => setPriceListSearch(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0, flex: "1 1 220px" }}
+              />
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <label style={{ fontSize: 13, color: COLORS.text, fontWeight: 600 }}>Descuento %:</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={priceListDiscount}
+                  onChange={(e) => setPriceListDiscount(e.target.value)}
+                  style={{
+                    ...inputStyle, marginBottom: 0, width: 80, textAlign: "center",
+                    fontWeight: 700,
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => selectAllPriceList(priceListFiltered)}
+                style={{
+                  padding: "8px 12px", background: "rgba(123,34,24,0.08)",
+                  color: COLORS.primary, border: "none", borderRadius: 8,
+                  cursor: "pointer", fontSize: 13, fontWeight: 700,
+                }}
+              >
+                ✓ Seleccionar todos ({priceListFiltered.length})
+              </button>
+              <button
+                onClick={clearPriceList}
+                style={{
+                  padding: "8px 12px", background: "rgba(180,35,24,0.08)",
+                  color: COLORS.danger, border: "none", borderRadius: 8,
+                  cursor: "pointer", fontSize: 13, fontWeight: 700,
+                }}
+              >
+                ✕ Limpiar
+              </button>
+              <div style={{ marginLeft: "auto", fontSize: 13, color: COLORS.muted, alignSelf: "center" }}>
+                Seleccionados: <strong style={{ color: COLORS.text }}>{priceListSelectedCount}</strong>
+              </div>
+            </div>
+
+            <div style={{
+              flex: 1, overflowY: "auto", border: `1px solid ${COLORS.border}`,
+              borderRadius: 10, padding: 6, background: COLORS.bgSoft,
+              minHeight: 200, maxHeight: "45vh",
+            }}>
+              {priceListFiltered.length === 0 ? (
+                <div style={{ padding: 18, textAlign: "center", color: COLORS.muted }}>
+                  Sin productos
+                </div>
+              ) : (
+                priceListFiltered.map((p) => {
+                  const checked = !!priceListSelected[p.id];
+                  const disc = Math.max(0, Math.min(100, Number(priceListDiscount) || 0));
+                  const base = Number(p.price || 0);
+                  const withDisc = Number((base * (1 - disc / 100)).toFixed(2));
+                  return (
+                    <label
+                      key={p.id}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "8px 10px", borderRadius: 8,
+                        background: checked ? "rgba(123,34,24,0.06)" : "transparent",
+                        cursor: "pointer", marginBottom: 3,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => togglePriceListProduct(p.id)}
+                        style={{ width: 18, height: 18, cursor: "pointer" }}
+                      />
+                      <div style={{ flex: 1, color: COLORS.text, fontWeight: 600, fontSize: 14 }}>
+                        {p.name}
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        {disc > 0 ? (
+                          <>
+                            <div style={{ fontSize: 11, color: COLORS.muted, textDecoration: "line-through" }}>
+                              ${base.toFixed(2)}
+                            </div>
+                            <div style={{ fontSize: 14, fontWeight: 800, color: COLORS.success }}>
+                              ${withDisc.toFixed(2)}
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                            ${base.toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setShowPriceListModal(false)}
+                style={{
+                  padding: "10px 16px", background: "transparent",
+                  color: COLORS.muted, border: `1px solid ${COLORS.border}`,
+                  borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 600,
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={exportPriceListPDF}
+                disabled={exportingPriceList || priceListSelectedCount === 0}
+                style={{
+                  padding: "10px 18px", background: COLORS.primary,
+                  color: "white", border: "none", borderRadius: 8,
+                  cursor: exportingPriceList || priceListSelectedCount === 0 ? "not-allowed" : "pointer",
+                  fontSize: 14, fontWeight: 700,
+                  opacity: exportingPriceList || priceListSelectedCount === 0 ? 0.5 : 1,
+                }}
+              >
+                {exportingPriceList ? "Generando..." : "📄 Exportar PDF"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
