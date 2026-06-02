@@ -1132,20 +1132,24 @@ function EmpleadoModal({ empleado, isNew, saving, onClose, onSave }: {
     setUploading(true);
     try {
       const empId = form.id || "nuevo-" + Date.now();
-      const ext = file.name.split(".").pop() || "bin";
-      const fileName = `${empId}/${Date.now()}-${docTipo}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("empleados-documentos")
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage
-        .from("empleados-documentos")
-        .getPublicUrl(fileName);
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("emp_id", empId);
+      fd.append("tipo", docTipo);
+
+      const res = await fetch("/api/admin/empleados-docs", {
+        method: "POST",
+        headers: { "x-admin-secret": getAdminSecret() },
+        body: fd,
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Error al subir");
+
       const doc: Documento = {
         id: crypto.randomUUID(),
         tipo: docTipo,
         nombre: file.name,
-        url: urlData.publicUrl,
+        url: result.url,
         uploaded_at: new Date().toISOString(),
       };
       setForm({ ...form, documentos: [...(form.documentos || []), doc] });
@@ -1161,7 +1165,11 @@ function EmpleadoModal({ empleado, isNew, saving, onClose, onSave }: {
     try {
       const pathFromUrl = doc.url.split("/empleados-documentos/")[1];
       if (pathFromUrl) {
-        await supabase.storage.from("empleados-documentos").remove([pathFromUrl]);
+        await fetch("/api/admin/empleados-docs", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", "x-admin-secret": getAdminSecret() },
+          body: JSON.stringify({ path: pathFromUrl }),
+        });
       }
       setForm({ ...form, documentos: (form.documentos || []).filter((d) => d.id !== doc.id) });
     } catch (err: any) {
