@@ -29,6 +29,23 @@ function loadJsPDF(): Promise<any> {
   });
 }
 
+// Carga el logo (/logo-sm.png) como dataURL para usarlo en jsPDF
+async function loadLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch("/logo-sm.png");
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 type Customer = {
   id: string;
   name: string;
@@ -594,7 +611,22 @@ export default function NuevoPedidoPage() {
       const jsPDF = await loadJsPDF();
       const doc = new jsPDF({ unit: "mm", format: "letter" });
       const pageW = doc.internal.pageSize.getWidth();
-      let y = 18;
+      let y = 12;
+
+      // Logo (centrado arriba)
+      const logoDataUrl = await loadLogoDataUrl();
+      if (logoDataUrl) {
+        try {
+          const logoW = 30; // mm
+          const logoH = 22; // mm (proporcion del logo)
+          doc.addImage(logoDataUrl, "PNG", (pageW - logoW) / 2, y, logoW, logoH);
+          y += logoH + 4;
+        } catch {
+          y = 18;
+        }
+      } else {
+        y = 18;
+      }
 
       // Encabezado
       doc.setFont("helvetica", "bold");
