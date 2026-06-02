@@ -94,7 +94,7 @@ export default function AdminDashboardPage() {
   const [showUtilities, setShowUtilities] = useState(false);
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
-  const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string }[]>([]);
+  const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string; is_raw_material?: boolean; kg?: number | null; product_category?: string | null }[]>([]);
   const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null }[]>([]);
   const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; method: string; supplier_id: string }[]>([]);
   const [supplierNameMap, setSupplierNameMap] = useState<Record<string, string>>({});
@@ -232,7 +232,7 @@ export default function AdminDashboardPage() {
         .lte("date", cmLastStr),
       supabase
         .from("supplier_expenses")
-        .select("date, amount, concept")
+        .select("date, amount, concept, is_raw_material, kg, product_category")
         .gte("date", cmFirst)
         .lte("date", cmLastStr),
     ]);
@@ -874,6 +874,77 @@ export default function AdminDashboardPage() {
   const bottomProducts = useMemo(() => {
     return [...productStats].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
   }, [productStats]);
+
+  // ─── COMPARATIVA KILOS ENTRANTES VS SALIENTES (MERMA) ───
+  const mermaStats = useMemo(() => {
+    // Entradas: compras de materia prima del mes (supplier_expenses con is_raw_material)
+    const entradasByCategory: Record<string, { kg: number; cost: number; count: number }> = {};
+    supplierExpensesMes.forEach((e) => {
+      if (!e.is_raw_material || !e.kg || !e.product_category) return;
+      const cat = e.product_category;
+      if (!entradasByCategory[cat]) entradasByCategory[cat] = { kg: 0, cost: 0, count: 0 };
+      entradasByCategory[cat].kg += Number(e.kg || 0);
+      entradasByCategory[cat].cost += Number(e.amount || 0);
+      entradasByCategory[cat].count += 1;
+    });
+
+    // Salidas: kg vendidos del mes por categoria del producto (ventas)
+    // productStats ya tiene por producto. Necesito mapear producto -> categoria
+    // Vamos a tomar product -> productCategoryMap (si existe en products), si no por keyword
+    const salidasByCategory: Record<string, { kg: number; revenue: number }> = {};
+    productStats.forEach((p) => {
+      if (p.isPieza) return; // las piezas no entran al calculo de kg
+      // Heuristica: mapear por keywords en el nombre del producto
+      const name = p.product.toLowerCase();
+      let cat: string | null = null;
+      if (name.includes("bistec")) cat = "Bistec";
+      else if (name.includes("arrachera")) cat = "Arrachera";
+      else if (name.includes("molida") || name.includes("hamburguesa")) cat = "Molida";
+      else if (name.includes("costilla")) cat = "Costilla";
+      else if (name.includes("pierna") || name.includes("lomo") || name.includes("maciza")) cat = "Pierna / Lomo";
+      else if (name.includes("cerdo") || name.includes("puerco") || name.includes("chuleta") || name.includes("chorizo") || name.includes("tocino")) cat = "Cerdo";
+      else if (name.includes("pollo")) cat = "Pollo";
+      else if (name.includes("chistorra") || name.includes("longaniza") || name.includes("peperoni")) cat = "Embutidos";
+      else if (name.includes("rib eye") || name.includes("tomahawk") || name.includes("picaña") || name.includes("new york") || name.includes("t-bone") || name.includes("porterhouse") || name.includes("filete") || name.includes("medallon")) cat = "Premium";
+      else return;
+      if (!salidasByCategory[cat]) salidasByCategory[cat] = { kg: 0, revenue: 0 };
+      salidasByCategory[cat].kg += Number(p.kilos || 0);
+      salidasByCategory[cat].revenue += Number(p.revenue || 0);
+    });
+
+    // Merge: todas las categorias que aparecen en entradas o salidas
+    const allCats = new Set<string>([
+      ...Object.keys(entradasByCategory),
+      ...Object.keys(salidasByCategory),
+    ]);
+
+    const rows = Array.from(allCats).map((cat) => {
+      const ent = entradasByCategory[cat] || { kg: 0, cost: 0, count: 0 };
+      const sal = salidasByCategory[cat] || { kg: 0, revenue: 0 };
+      const merma_kg = ent.kg - sal.kg;
+      const merma_pct = ent.kg > 0 ? (merma_kg / ent.kg) * 100 : 0;
+      return {
+        cat,
+        entradas_kg: ent.kg,
+        entradas_cost: ent.cost,
+        entradas_count: ent.count,
+        salidas_kg: sal.kg,
+        salidas_revenue: sal.revenue,
+        merma_kg,
+        merma_pct,
+      };
+    });
+
+    // Ordenar por kg de entrada DESC
+    rows.sort((a, b) => b.entradas_kg - a.entradas_kg);
+
+    const totalEntradas = rows.reduce((s, r) => s + r.entradas_kg, 0);
+    const totalSalidas = rows.reduce((s, r) => s + r.salidas_kg, 0);
+    const totalCost = rows.reduce((s, r) => s + r.entradas_cost, 0);
+    const totalRevenue = rows.reduce((s, r) => s + r.salidas_revenue, 0);
+
+    return { rows, totalEntradas, totalSalidas, totalCost, totalRevenue };
+  }, [supplierExpensesMes, productStats]);
 
   // Detalle de ventas individuales para el producto expandido
   const expandedProductSales = useMemo(() => {
@@ -1736,6 +1807,111 @@ export default function AdminDashboardPage() {
                 </div>
               );
             })
+          )}
+        </Section>
+
+        <Section id="merma" title="Comparativa kg entrantes vs salientes (merma)" count={mermaStats.rows.length}>
+          <p style={{ color: COLORS.muted, fontSize: 13, marginBottom: 14 }}>
+            Compara kilos de materia prima COMPRADOS este mes con kilos VENDIDOS por categoría.
+            Marca las compras como &quot;materia prima&quot; en /admin/proveedores → cargo para que aparezcan aquí.
+          </p>
+
+          {mermaStats.rows.length === 0 ? (
+            <div style={emptyBoxStyle}>
+              Aún no hay compras marcadas como materia prima. Cuando registres un cargo a proveedor (Sergio Vega Marín, Arriola, etc), activa el toggle &quot;¿Es materia prima?&quot; y captura los kg + categoría.
+            </div>
+          ) : (
+            <>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                gap: 10, marginBottom: 14,
+              }}>
+                <div style={{ padding: 12, background: "rgba(123,34,24,0.05)", borderRadius: 10, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>KG ENTRADOS</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.primary }}>{fmt(mermaStats.totalEntradas)} kg</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Costo: ${fmt(mermaStats.totalCost)}</div>
+                </div>
+                <div style={{ padding: 12, background: "rgba(31,122,77,0.05)", borderRadius: 10, border: `1px solid ${COLORS.border}` }}>
+                  <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>KG VENDIDOS</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.success }}>{fmt(mermaStats.totalSalidas)} kg</div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>Ventas: ${fmt(mermaStats.totalRevenue)}</div>
+                </div>
+                {(() => {
+                  const diff = mermaStats.totalEntradas - mermaStats.totalSalidas;
+                  const pct = mermaStats.totalEntradas > 0 ? (diff / mermaStats.totalEntradas) * 100 : 0;
+                  const isHigh = pct > 10;
+                  return (
+                    <div style={{
+                      padding: 12,
+                      background: isHigh ? "rgba(180,35,24,0.08)" : "rgba(166,106,16,0.06)",
+                      borderRadius: 10,
+                      border: `1px solid ${isHigh ? "rgba(180,35,24,0.25)" : COLORS.border}`,
+                    }}>
+                      <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700 }}>MERMA TEÓRICA</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: isHigh ? COLORS.danger : COLORS.warning }}>
+                        {fmt(diff)} kg ({pct.toFixed(1)}%)
+                      </div>
+                      <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                        {isHigh ? "Merma alta — revisar" : "Merma dentro de rango normal"}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "rgba(123,34,24,0.06)" }}>
+                      <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Categoría</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Entradas (kg)</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Salidas (kg)</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>Merma</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>%</th>
+                      <th style={{ padding: "10px 12px", textAlign: "right", fontWeight: 700, color: COLORS.text, borderBottom: `1px solid ${COLORS.border}` }}>$ costo</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mermaStats.rows.map((r) => {
+                      const isHigh = r.merma_pct > 15;
+                      const isLow = r.merma_pct < -5; // sobra mas de lo comprado (positivo)
+                      return (
+                        <tr key={r.cat} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                          <td style={{ padding: "10px 12px", color: COLORS.text, fontWeight: 600 }}>{r.cat}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: COLORS.text }}>
+                            {fmt(r.entradas_kg)}
+                            {r.entradas_count > 0 && (
+                              <div style={{ fontSize: 10, color: COLORS.muted }}>
+                                {r.entradas_count} compra{r.entradas_count === 1 ? "" : "s"}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: COLORS.text }}>{fmt(r.salidas_kg)}</td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: isHigh ? COLORS.danger : (isLow ? COLORS.success : COLORS.text), fontWeight: 700 }}>
+                            {fmt(r.merma_kg)}
+                          </td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: isHigh ? COLORS.danger : (isLow ? COLORS.success : COLORS.muted), fontWeight: 700 }}>
+                            {r.merma_pct.toFixed(1)}%
+                          </td>
+                          <td style={{ padding: "10px 12px", textAlign: "right", color: COLORS.muted }}>
+                            ${fmt(r.entradas_cost)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{
+                marginTop: 14, padding: 12, background: "rgba(166,106,16,0.06)",
+                borderRadius: 10, fontSize: 12, color: COLORS.text,
+              }}>
+                <b style={{ color: COLORS.warning }}>⚠️ Lectura:</b>{" "}
+                Esta merma es teórica — solo compara compras vs ventas. Para tener merma REAL necesitas que al cierre del día tu carnicero pese lo que queda en mostrador y lo capture. Si entradas-salidas-físico no cuadra, hay fuga.
+              </div>
+            </>
           )}
         </Section>
 

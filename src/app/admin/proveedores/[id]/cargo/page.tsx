@@ -27,6 +27,9 @@ export default function CargoInternoPage() {
   const [concept, setConcept] = useState("");
   const [amount, setAmount] = useState("");
   const [notes, setNotes] = useState("");
+  const [isRawMaterial, setIsRawMaterial] = useState(false);
+  const [kg, setKg] = useState("");
+  const [productCategory, setProductCategory] = useState("Bistec");
 
   useEffect(() => {
     supabase.from("suppliers").select("name").eq("id", supplierId).single()
@@ -51,6 +54,7 @@ export default function CargoInternoPage() {
   async function handleSave() {
     if (!concept.trim()) { alert("El concepto es obligatorio"); return; }
     if (!amount || Number(amount) <= 0) { alert("El monto debe ser mayor a 0"); return; }
+    if (isRawMaterial && (!kg || Number(kg) <= 0)) { alert("Si es materia prima, ingresa los kilos comprados"); return; }
     setSaving(true);
 
     const folio = await generateFolio();
@@ -61,6 +65,9 @@ export default function CargoInternoPage() {
       concept: concept.trim(),
       amount: Number(amount),
       notes: notes.trim() || null,
+      is_raw_material: isRawMaterial,
+      kg: isRawMaterial && kg ? Number(kg) : null,
+      product_category: isRawMaterial ? productCategory : null,
     }]);
 
     if (error) {
@@ -108,6 +115,70 @@ export default function CargoInternoPage() {
           <div style={{ marginBottom: 14 }}>
             <label style={labelStyle}>Monto *</label>
             <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="$0.00" style={inputStyle} />
+          </div>
+
+          <div style={{
+            marginBottom: 14, padding: 12, borderRadius: 12,
+            background: isRawMaterial ? "rgba(31,122,77,0.06)" : "rgba(0,0,0,0.02)",
+            border: `1px solid ${isRawMaterial ? "rgba(31,122,77,0.25)" : COLORS.border}`,
+          }}>
+            <label style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={isRawMaterial}
+                onChange={(e) => setIsRawMaterial(e.target.checked)}
+                style={{ width: 20, height: 20, cursor: "pointer" }}
+              />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>
+                  ¿Es materia prima?
+                </div>
+                <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                  Marca esta opción si es carne / producto que SE VENDE.
+                  Cuenta para el cálculo de merma. (No marcar para gasolina, insumos, etc.)
+                </div>
+              </div>
+            </label>
+
+            {isRawMaterial && (
+              <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 12 }}>Categoría del producto *</label>
+                  <select
+                    value={productCategory}
+                    onChange={(e) => setProductCategory(e.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="Bistec">Bistec</option>
+                    <option value="Arrachera">Arrachera</option>
+                    <option value="Molida">Molida</option>
+                    <option value="Costilla">Costilla</option>
+                    <option value="Pierna / Lomo">Pierna / Lomo</option>
+                    <option value="Cerdo">Cerdo (general)</option>
+                    <option value="Pollo">Pollo</option>
+                    <option value="Embutidos">Embutidos</option>
+                    <option value="Premium">Cortes Premium (rib eye, tomahawk, etc)</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 12 }}>Kilos comprados *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={kg}
+                    onChange={(e) => setKg(e.target.value)}
+                    placeholder="Ej: 25.5"
+                    style={inputStyle}
+                  />
+                  {kg && Number(kg) > 0 && amount && Number(amount) > 0 && (
+                    <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 4 }}>
+                      Precio por kg: <b>${(Number(amount) / Number(kg)).toFixed(2)}</b>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: 20 }}>
