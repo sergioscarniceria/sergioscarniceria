@@ -109,6 +109,7 @@ export default function AdminDashboardPage() {
   const [roundingTotal, setRoundingTotal] = useState(0);
   const [roundingCount, setRoundingCount] = useState(0);
   const [productSearch, setProductSearch] = useState("");
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   const [cashMovements, setCashMovements] = useState<{ amount: number; type: string; is_cancelled: boolean; payment_method?: string }[]>([]);
 
   // Market prices
@@ -874,6 +875,45 @@ export default function AdminDashboardPage() {
     return [...productStats].sort((a, b) => a.revenue - b.revenue).slice(0, 20);
   }, [productStats]);
 
+  // Detalle de ventas individuales para el producto expandido
+  const expandedProductSales = useMemo(() => {
+    if (!expandedProduct) return [];
+    const rows: {
+      orderId: string;
+      created_at: string | null;
+      customer: string;
+      cashier: string;
+      butcher: string;
+      qty: string;
+      subtotal: number;
+    }[] = [];
+    for (const order of orders) {
+      for (const item of order.order_items || []) {
+        if (item.product !== expandedProduct) continue;
+        const esPieza = item.sale_type === "pieza" || !!item.is_fixed_price_piece;
+        const qtyText = esPieza
+          ? `${Number(item.quantity || 1)} pza${Number(item.quantity || 1) === 1 ? "" : "s"}`
+          : `${Number(item.kilos || 0).toFixed(3)} kg`;
+        rows.push({
+          orderId: order.id,
+          created_at: order.created_at || null,
+          customer: order.customer_name || "Mostrador",
+          cashier: order.captured_by || "—",
+          butcher: order.butcher_name || "—",
+          qty: qtyText,
+          subtotal: itemSubtotal(item),
+        });
+      }
+    }
+    // Ordenar por fecha descendente (más reciente primero)
+    rows.sort((a, b) => {
+      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return db - da;
+    });
+    return rows;
+  }, [expandedProduct, orders]);
+
   const salesByDay = useMemo(() => {
     const map: Record<string, { date: string; sales: number; orders: number }> = {};
 
@@ -1615,22 +1655,87 @@ export default function AdminDashboardPage() {
           {filteredProductStats.length === 0 ? (
             <div style={emptyBoxStyle}>{productSearch ? `Sin resultados para "${productSearch}"` : "No hay datos"}</div>
           ) : (
-            filteredProductStats.map((product, index) => (
-              <div key={product.product} style={productRowStyle}>
-                <div style={{ flex: 2, color: COLORS.text, minWidth: 0 }}>
-                  #{index + 1} <b>{product.product}</b>
+            filteredProductStats.map((product, index) => {
+              const isOpen = expandedProduct === product.product;
+              return (
+                <div key={product.product}>
+                  <div
+                    style={{ ...productRowStyle, cursor: "pointer" }}
+                    onClick={() => setExpandedProduct(isOpen ? null : product.product)}
+                  >
+                    <div style={{ flex: 2, color: COLORS.text, minWidth: 0 }}>
+                      <span style={{ marginRight: 6, color: COLORS.muted, fontSize: 11 }}>
+                        {isOpen ? "▼" : "▶"}
+                      </span>
+                      #{index + 1} <b>{product.product}</b>
+                    </div>
+                    <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
+                      {product.isPieza ? `${fmt(product.piezas)} pzas` : `${fmt(product.kilos)} kg`}
+                    </div>
+                    <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
+                      {product.times} veces
+                    </div>
+                    <div style={{ flex: 1, textAlign: "right", fontWeight: 700, color: COLORS.text }}>
+                      ${fmt(product.revenue)}
+                    </div>
+                  </div>
+                  {isOpen && (
+                    <div style={{
+                      margin: "0 0 10px 0", padding: 12,
+                      background: "rgba(123,34,24,0.04)", borderRadius: 10,
+                      border: `1px solid ${COLORS.border}`,
+                    }}>
+                      <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8, fontWeight: 600 }}>
+                        Detalle de ventas ({expandedProductSales.length}):
+                      </div>
+                      {expandedProductSales.length === 0 ? (
+                        <div style={{ color: COLORS.muted, fontSize: 13 }}>Sin movimientos en el rango</div>
+                      ) : (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {expandedProductSales.map((sale, idx) => (
+                            <div
+                              key={`${sale.orderId}-${idx}`}
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "minmax(120px,1.2fr) minmax(120px,1.4fr) minmax(90px,1fr) minmax(80px,0.8fr) minmax(80px,0.8fr)",
+                                gap: 10, padding: "8px 10px", background: "white",
+                                borderRadius: 8, fontSize: 12, alignItems: "center",
+                                border: `1px solid ${COLORS.border}`,
+                              }}
+                            >
+                              <div style={{ color: COLORS.text, fontWeight: 600 }}>
+                                {sale.created_at
+                                  ? new Date(sale.created_at).toLocaleString("es-MX", {
+                                      timeZone: "America/Mexico_City",
+                                      day: "2-digit", month: "short",
+                                      hour: "2-digit", minute: "2-digit",
+                                    })
+                                  : "—"}
+                              </div>
+                              <div style={{ color: COLORS.text }} title={sale.customer}>
+                                👤 {sale.customer}
+                              </div>
+                              <div style={{ color: COLORS.muted, fontSize: 11 }} title={`Cajera / Carnicero`}>
+                                💼 {sale.cashier}
+                                {sale.butcher !== "—" && (
+                                  <div style={{ fontSize: 10, marginTop: 2 }}>🔪 {sale.butcher}</div>
+                                )}
+                              </div>
+                              <div style={{ textAlign: "right", color: COLORS.muted }}>
+                                {sale.qty}
+                              </div>
+                              <div style={{ textAlign: "right", fontWeight: 700, color: COLORS.text }}>
+                                ${fmt(sale.subtotal)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
-                  {product.isPieza ? `${fmt(product.piezas)} pzas` : `${fmt(product.kilos)} kg`}
-                </div>
-                <div style={{ flex: 1, textAlign: "right", color: COLORS.muted }}>
-                  {product.times} veces
-                </div>
-                <div style={{ flex: 1, textAlign: "right", fontWeight: 700, color: COLORS.text }}>
-                  ${fmt(product.revenue)}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </Section>
 
