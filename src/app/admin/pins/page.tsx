@@ -4,6 +4,47 @@ import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getAdminSecret } from "@/lib/admin-secret";
 
+// jsPDF desde CDN
+function loadJsPDF(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    if ((window as any).jspdf) { resolve((window as any).jspdf.jsPDF); return; }
+    const cdns = [
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js",
+      "https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js",
+      "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js",
+    ];
+    let idx = 0;
+    function tryNext() {
+      if (idx >= cdns.length) { reject(new Error("No se pudo cargar jsPDF")); return; }
+      const sc = document.createElement("script");
+      sc.src = cdns[idx++];
+      sc.onload = () => {
+        if ((window as any).jspdf) resolve((window as any).jspdf.jsPDF);
+        else tryNext();
+      };
+      sc.onerror = () => tryNext();
+      document.head.appendChild(sc);
+    }
+    tryNext();
+  });
+}
+
+async function loadCarniceriaLogoDataUrl(): Promise<string | null> {
+  try {
+    const res = await fetch("/logo-sm.png");
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
 type PinEntry = {
   role: string;
   pin: string;
@@ -210,55 +251,146 @@ export default function AdminPinsPage() {
     }
   }
 
-  function exportarFichaEmpleado(emp: Empleado) {
-    const dias = DIAS_SEMANA.filter((d) => emp.horario_json && emp.horario_json[d.key]);
-    const horariosHtml = dias.map((d) => {
-      const h = emp.horario_json?.[d.key];
-      return `<tr><td>${d.label}</td><td>${h?.entrada || "—"}</td><td>${h?.salida || "—"}</td></tr>`;
-    }).join("");
-    const descansosTxt = (emp.dias_descanso_json || []).join(", ") || "Ninguno";
-    const docsHtml = (emp.documentos || []).map((d) => `<li>${TIPOS_DOCUMENTO.find((t) => t.value === d.tipo)?.label || d.tipo}: <a href="${d.url}">${d.nombre}</a></li>`).join("") || "<li>Sin documentos</li>";
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ficha de ${emp.nombre}</title>
-      <style>
-        @page { size: letter; margin: 16mm; }
-        body { font-family: -apple-system, Helvetica, Arial, sans-serif; color: #3b1c16; font-size: 12px; line-height: 1.5; }
-        h1 { font-size: 22px; color: #7b2218; margin: 0 0 4px; }
-        h2 { font-size: 14px; color: #7b2218; border-bottom: 2px solid #7b2218; padding-bottom: 4px; margin: 18px 0 8px; }
-        .meta { color: #7a5a52; font-size: 11px; margin-bottom: 18px; }
-        .row { display: grid; grid-template-columns: 140px 1fr; gap: 6px; margin: 4px 0; }
-        .row b { color: #7b2218; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
-        td, th { padding: 4px 6px; border: 1px solid #ddd; text-align: left; }
-        th { background: #f7f1e8; }
-      </style></head><body>
-      <h1>Ficha de empleado</h1>
-      <div class="meta">${emp.nombre} — ${emp.rol.toUpperCase()} · Generado ${new Date().toLocaleString("es-MX")}</div>
+  async function exportarFichaEmpleado(emp: Empleado) {
+    try {
+      const jsPDF = await loadJsPDF();
+      const doc = new jsPDF({ unit: "mm", format: "letter" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      let y = 14;
 
-      <h2>Datos personales</h2>
-      <div class="row"><b>Nombre:</b><span>${emp.nombre}</span></div>
-      <div class="row"><b>Rol:</b><span>${emp.rol}</span></div>
-      <div class="row"><b>PIN:</b><span>${emp.pin || "—"}</span></div>
-      <div class="row"><b>Teléfono:</b><span>${emp.telefono || "—"}</span></div>
-      <div class="row"><b>Email:</b><span>${emp.email || "—"}</span></div>
-      <div class="row"><b>Domicilio:</b><span>${emp.domicilio || "—"}</span></div>
-      <div class="row"><b>Nacimiento:</b><span>${emp.fecha_nacimiento || "—"}</span></div>
-      <div class="row"><b>Ingreso:</b><span>${emp.fecha_ingreso || "—"}</span></div>
-      <div class="row"><b>Contacto emergencia:</b><span>${emp.contacto_emergencia || "—"}</span></div>
-      <div class="row"><b>Notas:</b><span>${emp.notas || "—"}</span></div>
+      // Logo (top-left)
+      const logoDataUrl = await loadCarniceriaLogoDataUrl();
+      if (logoDataUrl) {
+        try {
+          doc.addImage(logoDataUrl, "PNG", 15, y, 22, 16);
+        } catch {
+          // ignore
+        }
+      }
 
-      <h2>Horarios</h2>
-      <table><thead><tr><th>Día</th><th>Entrada</th><th>Salida</th></tr></thead><tbody>${horariosHtml || "<tr><td colspan='3'>Sin horarios</td></tr>"}</tbody></table>
-      <div class="row" style="margin-top:8px"><b>Días de descanso:</b><span>${descansosTxt}</span></div>
+      // Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(123, 34, 24);
+      doc.text("Ficha de empleado", pageW - 15, y + 6, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      doc.text(`Generado ${new Date().toLocaleString("es-MX")}`, pageW - 15, y + 12, { align: "right" });
+      y += 22;
 
-      <h2>Documentos</h2>
-      <ul>${docsHtml}</ul>
-      </body></html>`;
-    const win = window.open("", "_blank");
-    if (!win) { alert("Habilita ventanas emergentes para exportar"); return; }
-    win.document.write(html);
-    win.document.close();
-    win.addEventListener("afterprint", () => win.close());
-    setTimeout(() => win.print(), 300);
+      // Subtítulo nombre + rol
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.setTextColor(59, 28, 22);
+      doc.text(`${emp.nombre} — ${(emp.rol || "").toUpperCase()}`, 15, y);
+      y += 8;
+
+      // Helper: seccion titulo
+      function sectionTitle(text: string) {
+        if (y > pageH - 30) { doc.addPage(); y = 18; }
+        doc.setFillColor(123, 34, 24);
+        doc.rect(15, y, pageW - 30, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.setTextColor(255, 255, 255);
+        doc.text(text, 18, y + 5);
+        y += 10;
+      }
+
+      // Helper: row label/value
+      function row(label: string, value: string) {
+        if (y > pageH - 20) { doc.addPage(); y = 18; }
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(123, 34, 24);
+        doc.text(label, 18, y);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(50, 50, 50);
+        const lines = doc.splitTextToSize(value || "—", pageW - 65);
+        doc.text(lines, 60, y);
+        y += 5 * Math.max(1, lines.length);
+        y += 1;
+      }
+
+      sectionTitle("Datos personales");
+      row("Nombre:", emp.nombre);
+      row("Rol:", emp.rol);
+      row("PIN:", emp.pin || "—");
+      row("Teléfono:", emp.telefono || "—");
+      row("Email:", emp.email || "—");
+      row("Domicilio:", emp.domicilio || "—");
+      row("Nacimiento:", emp.fecha_nacimiento || "—");
+      row("Ingreso:", emp.fecha_ingreso || "—");
+      row("Contacto emergencia:", emp.contacto_emergencia || "—");
+      row("Notas:", emp.notas || "—");
+
+      // Horarios
+      sectionTitle("Horarios");
+      const dias = DIAS_SEMANA.filter((d) => emp.horario_json && emp.horario_json[d.key]);
+      if (dias.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(10);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Sin horarios", 18, y);
+        y += 6;
+      } else {
+        // Tabla simple
+        doc.setFillColor(247, 241, 232);
+        doc.rect(15, y, pageW - 30, 7, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(10);
+        doc.setTextColor(59, 28, 22);
+        doc.text("Día", 18, y + 5);
+        doc.text("Entrada", pageW / 2 - 10, y + 5);
+        doc.text("Salida", pageW - 35, y + 5);
+        y += 9;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(50, 50, 50);
+        for (const d of dias) {
+          if (y > pageH - 20) { doc.addPage(); y = 18; }
+          const h = emp.horario_json?.[d.key];
+          doc.text(d.label, 18, y);
+          doc.text(h?.entrada || "—", pageW / 2 - 10, y);
+          doc.text(h?.salida || "—", pageW - 35, y);
+          y += 6;
+          doc.setDrawColor(230, 230, 230);
+          doc.line(15, y - 2, pageW - 15, y - 2);
+        }
+      }
+
+      // Descansos
+      const descansosTxt = (emp.dias_descanso_json || []).join(", ") || "Ninguno";
+      y += 3;
+      row("Días de descanso:", descansosTxt);
+
+      // Documentos
+      sectionTitle("Documentos");
+      const docs = emp.documentos || [];
+      if (docs.length === 0) {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(10);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Sin documentos", 18, y);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(50, 50, 50);
+        for (const d of docs) {
+          if (y > pageH - 20) { doc.addPage(); y = 18; }
+          const tipoLabel = TIPOS_DOCUMENTO.find((t) => t.value === d.tipo)?.label || d.tipo;
+          doc.text(`• ${tipoLabel}: ${d.nombre}`, 18, y);
+          y += 6;
+        }
+      }
+
+      const safe = (emp.nombre || "empleado").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      const fname = `ficha-${safe || "empleado"}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      doc.save(fname);
+    } catch (e: any) {
+      alert("Error al generar PDF: " + (e?.message || e));
+    }
   }
 
   async function toggleEmpleadoActivo(emp: Empleado, activo: boolean) {

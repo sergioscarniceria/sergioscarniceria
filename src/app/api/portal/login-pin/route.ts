@@ -39,9 +39,7 @@ export async function POST(request: Request) {
 
     // 2. Find the customer whose PIN matches
     const customer = customers.find((c) => c.client_pin === pin.trim());
-
     if (!customer) {
-      // Check if any has a PIN at all
       const anyHasPin = customers.some((c) => c.client_pin);
       if (!anyHasPin) {
         return NextResponse.json(
@@ -55,44 +53,69 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Find auth user for this customer
-    const authEmail = `${customer.id}@clientes.sergios.mx`;
-
-    // Check if auth user exists
+    // 3. Find existing customer_profile (links customer to an auth user)
     const { data: profileData } = await supabase
       .from("customer_profiles")
       .select("id")
       .eq("customer_id", customer.id)
       .maybeSingle();
 
-    if (!profileData) {
-      // No auth user exists — create one using the portal_password or PIN as password
-      const authPassword = customer.portal_password || pin.trim();
+    const syntheticEmail = `${customer.id}@clientes.sergios.mx`;
+    // El password de auth debe ser ≥6 chars. Usamos portal_password si existe,
+    // o derivamos uno estable de PIN + customer.id.
+    const derivedPassword = `pin-${pin.trim()}-${customer.id.slice(0, 8)}`;
+    const desiredPassword = customer.portal_password || derivedPassword;
+    let authEmail = syntheticEmail;
+    let authUserId: string | null = null;
 
+    if (profileData?.id) {
+      // Ya existe profile — buscar el auth user real (puede tener email original del cliente)
+      const { data: userRes, error: getUserErr } = await supabase.auth.admin.getUserById(profileData.id);
+      if (!getUserErr && userRes?.user?.email) {
+        authEmail = userRes.user.email;
+        authUserId = userRes.user.id;
+      } else {
+        authUserId = profileData.id;
+      }
+      // Forzar password = desiredPassword (portal_password o derivado) para que signInWithPassword funcione
+      try {
+        if (authUserId) {
+          await supabase.auth.admin.updateUserById(authUserId, {
+            password: desiredPassword,
+          });
+        }
+        // Si no tenía portal_password, guardar el derivado para que login con contraseña también funcione
+        if (!customer.portal_password) {
+          await supabase.from("customers").update({ portal_password: desiredPassword }).eq("id", customer.id);
+        }
+      } catch {
+        // ignore — intentamos login igual
+      }
+    } else {
+      // No hay profile — crear auth user + profile
       const { data: newUser, error: authError } = await supabase.auth.admin.createUser({
-        email: authEmail,
-        password: authPassword,
+        email: syntheticEmail,
+        password: desiredPassword,
         email_confirm: true,
       });
 
       if (authError || !newUser?.user) {
-        // Maybe user exists in auth but not in profiles — try to get by email
+        // Tal vez ya existe en auth pero sin profile — buscar por email sintético
         const { data: listData } = await supabase.auth.admin.listUsers();
-        const existingAuthUser = listData?.users?.find((u: any) => u.email === authEmail);
+        const existingAuthUser = listData?.users?.find((u: { email?: string | null }) => u.email === syntheticEmail);
 
         if (existingAuthUser) {
-          // Update password to match PIN flow
           await supabase.auth.admin.updateUserById(existingAuthUser.id, {
-            password: customer.portal_password || pin.trim(),
+            password: desiredPassword,
           });
-
-          // Create profile
           await supabase.from("customer_profiles").upsert([{
             id: existingAuthUser.id,
             customer_id: customer.id,
             phone: phone.trim(),
             role: "customer",
           }]);
+          authEmail = syntheticEmail;
+          authUserId = existingAuthUser.id;
         } else {
           return NextResponse.json(
             { error: "Error al preparar tu cuenta. Intenta con contraseña." },
@@ -100,21 +123,21 @@ export async function POST(request: Request) {
           );
         }
       } else {
-        // Create profile for new auth user
         await supabase.from("customer_profiles").upsert([{
           id: newUser.user.id,
           customer_id: customer.id,
           phone: phone.trim(),
           role: "customer",
         }]);
+        authEmail = syntheticEmail;
+        authUserId = newUser.user.id;
       }
     }
 
-    // 4. Return auth email + password so frontend can sign in
     return NextResponse.json({
       success: true,
       auth_email: authEmail,
-      auth_password: customer.portal_password || pin.trim(),
+      auth_password: desiredPassword,
     });
   } catch (err) {
     console.error("PIN login error:", err);
