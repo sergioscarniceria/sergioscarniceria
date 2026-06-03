@@ -300,11 +300,16 @@ export async function POST(req: NextRequest) {
 
     const horarioDia = empleado.horario_json?.[dia] || null;
 
-    if (descanso || !horarioDia) {
+    // Solo bloquear si esta marcado como dia de descanso explicito.
+    // Si no hay horario configurado, permitir registro (no se calculan retardos pero no bloquea).
+    if (descanso) {
       return NextResponse.json(
-        { error: "Hoy es día no laborable para este empleado" },
+        { error: "Hoy es tu día de descanso. No se registra entrada." },
         { status: 400 }
       );
+    }
+    if (!horarioDia) {
+      console.log(`[checador] Empleado ${empleado.nombre} sin horario configurado para ${dia} — se permite registro sin cálculo de retardos`);
     }
 
     const dayStart = `${fecha}T00:00:00.000Z`;
