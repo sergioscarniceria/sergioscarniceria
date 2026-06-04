@@ -92,6 +92,53 @@ export default function ProveedorDetallePage() {
     }
   }
 
+  const [avgFrom, setAvgFrom] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [avgTo, setAvgTo] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+
+  // Promedio ponderado de precio/kg canal en el rango seleccionado
+  const avgPrecioCanal = useMemo(() => {
+    const inRange = purchases.filter((p) =>
+      p.status === "completo" &&
+      p.canal_weight_kg &&
+      p.total_cost &&
+      p.date >= avgFrom &&
+      p.date <= avgTo
+    );
+    const sumKg = inRange.reduce((acc, p) => acc + Number(p.canal_weight_kg || 0), 0);
+    const sumCost = inRange.reduce((acc, p) => acc + Number(p.total_cost || 0), 0);
+    return {
+      avg: sumKg > 0 ? sumCost / sumKg : 0,
+      kg: sumKg,
+      cost: sumCost,
+      count: inRange.length,
+    };
+  }, [purchases, avgFrom, avgTo]);
+
+  function setRangeThisMonth() {
+    const d = new Date();
+    setAvgFrom(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+    setAvgTo(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  function setRangeLastMonth() {
+    const d = new Date();
+    const y = d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear();
+    const m = d.getMonth() === 0 ? 12 : d.getMonth();
+    const lastDay = new Date(y, m, 0).getDate();
+    setAvgFrom(`${y}-${String(m).padStart(2, "0")}-01`);
+    setAvgTo(`${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`);
+  }
+  function setRangeYear() {
+    const d = new Date();
+    setAvgFrom(`${d.getFullYear()}-01-01`);
+    setAvgTo(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+
   const totalCargos = useMemo(() => {
     const pc = purchases.reduce((acc, p) => acc + Number(p.total_cost || p.total_live || 0), 0);
     const ec = expenses.reduce((acc, e) => acc + Number(e.amount || 0), 0);
@@ -182,6 +229,59 @@ export default function ProveedorDetallePage() {
               <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.success }}>${money(totalPagos)}</div>
             </div>
           </div>
+
+          {/* Widget: promedio precio/kg canal con filtro de fechas (solo proveedores de animales) */}
+          {isAnimal && (
+            <div style={{
+              marginTop: 14, padding: "12px 14px",
+              background: "linear-gradient(135deg, rgba(123,34,24,0.06) 0%, rgba(123,34,24,0.02) 100%)",
+              borderRadius: 12, border: `1px solid ${COLORS.border}`,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3 }}>
+                    Promedio precio/kg canal
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: COLORS.primary, marginTop: 2 }}>
+                    ${avgPrecioCanal.avg > 0 ? avgPrecioCanal.avg.toFixed(2) : "—"}
+                    {avgPrecioCanal.avg > 0 && <span style={{ fontSize: 13, color: COLORS.muted, fontWeight: 600 }}> /kg</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: COLORS.muted, marginTop: 2 }}>
+                    {avgPrecioCanal.count} compra{avgPrecioCanal.count === 1 ? "" : "s"} · {avgPrecioCanal.kg.toFixed(1)} kg canal · ${money(avgPrecioCanal.cost)}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                <button onClick={setRangeThisMonth} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, background: "white", border: `1px solid ${COLORS.border}`, borderRadius: 8, cursor: "pointer", color: COLORS.text }}>
+                  Mes actual
+                </button>
+                <button onClick={setRangeLastMonth} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, background: "white", border: `1px solid ${COLORS.border}`, borderRadius: 8, cursor: "pointer", color: COLORS.text }}>
+                  Mes pasado
+                </button>
+                <button onClick={setRangeYear} style={{ padding: "4px 10px", fontSize: 11, fontWeight: 700, background: "white", border: `1px solid ${COLORS.border}`, borderRadius: 8, cursor: "pointer", color: COLORS.text }}>
+                  Año
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>De:</label>
+                <input
+                  type="date"
+                  value={avgFrom}
+                  onChange={(e) => setAvgFrom(e.target.value)}
+                  style={{ padding: "4px 8px", fontSize: 12, border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.text, background: "white" }}
+                />
+                <label style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>a:</label>
+                <input
+                  type="date"
+                  value={avgTo}
+                  onChange={(e) => setAvgTo(e.target.value)}
+                  style={{ padding: "4px 8px", fontSize: 12, border: `1px solid ${COLORS.border}`, borderRadius: 6, color: COLORS.text, background: "white" }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}
