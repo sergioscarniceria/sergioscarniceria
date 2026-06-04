@@ -113,7 +113,9 @@ export default function ProveedorDetallePage() {
         date: p.date, type: "compra", folio: p.folio,
         label: `Compra ${p.animal_type} (${p.animal_count} animal${p.animal_count > 1 ? "es" : ""})`,
         amount: Number(p.total_cost || p.total_live || 0),
-        detail: p.status === "completo" && p.yield_pct ? `Rend: ${Number(p.yield_pct).toFixed(1)}%` : undefined,
+        detail: p.status === "completo" && p.yield_pct
+          ? `Rend: ${Number(p.yield_pct).toFixed(1)}%${p.cost_per_kg_canal ? ` · $${Number(p.cost_per_kg_canal).toFixed(2)}/kg canal` : ""}`
+          : undefined,
         status: p.status,
       });
     }
@@ -297,13 +299,17 @@ export default function ProveedorDetallePage() {
                   </div>
                 )}
 
-                {/* Link to edit/complete purchase */}
-                {p.status !== "completo" && (
+                {/* Editar compra (siempre disponible) */}
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 10 }}>
                   <Link href={`/admin/proveedores/${supplierId}/compra?edit=${p.id}`}
-                    style={{ display: "inline-block", marginTop: 8, fontSize: 13, color: COLORS.primary, fontWeight: 600, textDecoration: "none" }}>
-                    Completar datos →
+                    style={{
+                      padding: "6px 14px", fontSize: 13, color: COLORS.primary,
+                      fontWeight: 700, textDecoration: "none",
+                      background: "rgba(123,34,24,0.08)", borderRadius: 8,
+                    }}>
+                    {p.status === "completo" ? "✏️ Editar" : "Completar datos →"}
                   </Link>
-                )}
+                </div>
               </div>
             ))}
           </div>

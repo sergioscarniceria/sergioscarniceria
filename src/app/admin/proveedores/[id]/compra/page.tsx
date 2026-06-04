@@ -182,7 +182,7 @@ export default function CompraAnimalPage() {
           ← {supplierName}
         </a>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, margin: "10px 0 6px" }}>
-          {editId ? "Completar compra" : "Nueva compra de animal"}
+          {editId ? "Editar compra" : "Nueva compra de animal"}
         </h1>
         <p style={{ fontSize: 13, color: COLORS.muted, margin: "0 0 18px" }}>
           Proveedor: {supplierName}
@@ -355,7 +355,7 @@ export default function CompraAnimalPage() {
               cursor: saving ? "default" : "pointer",
             }}
           >
-            {saving ? "Guardando..." : editId ? "Actualizar compra" : "Registrar compra"}
+            {saving ? "Guardando..." : editId ? "Guardar cambios" : "Registrar compra"}
           </button>
         </div>
       </div>
