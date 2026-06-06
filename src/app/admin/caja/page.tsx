@@ -46,6 +46,10 @@ type Movement = {
   cancel_reason?: string | null;
   cancelled_by?: string | null;
   cancelled_at?: string | null;
+  payment_method_original?: string | null;
+  payment_method_changed_at?: string | null;
+  payment_method_changed_by?: string | null;
+  payment_method_change_reason?: string | null;
 };
 
 type OrderItem = {
@@ -381,6 +385,14 @@ export default function CajaPage() {
 
   // Cancel modal
   const [cancelMovement, setCancelMovement] = useState<Movement | null>(null);
+  // Modal cambio metodo de pago
+  const [changeMethodMovement, setChangeMethodMovement] = useState<Movement | null>(null);
+  const [newPaymentMethod, setNewPaymentMethod] = useState<string>("efectivo");
+  const [changeMethodReason, setChangeMethodReason] = useState<string>("");
+  const [changeMethodBy, setChangeMethodBy] = useState<string>("");
+  const [changingMethod, setChangingMethod] = useState(false);
+  const [changeMethodError, setChangeMethodError] = useState<string>("");
+  const [showMethodChangePanel, setShowMethodChangePanel] = useState(false);
   const [cancelCode, setCancelCode] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [cancelSaving, setCancelSaving] = useState(false);
@@ -563,6 +575,47 @@ export default function CajaPage() {
     setDesgloseLoading(false);
   }
 
+  async function changeMethodSave() {
+    if (!changeMethodMovement) return;
+    if (!changeMethodBy.trim()) { setChangeMethodError("Pon tu nombre (quien hace el cambio)"); return; }
+    if (!changeMethodReason.trim()) { setChangeMethodError("Pon una razón del cambio"); return; }
+    if (newPaymentMethod === changeMethodMovement.payment_method) {
+      setChangeMethodError("El método nuevo es igual al actual");
+      return;
+    }
+    setChangingMethod(true);
+    setChangeMethodError("");
+
+    const original = changeMethodMovement.payment_method_original || changeMethodMovement.payment_method;
+    const { error } = await supabase.from("cash_movements").update({
+      payment_method: newPaymentMethod,
+      payment_method_original: original,
+      payment_method_changed_at: new Date().toISOString(),
+      payment_method_changed_by: changeMethodBy.trim(),
+      payment_method_change_reason: changeMethodReason.trim(),
+    }).eq("id", changeMethodMovement.id);
+
+    if (error) {
+      setChangeMethodError("Error: " + error.message);
+      setChangingMethod(false);
+      return;
+    }
+
+    // Si el movimiento tiene referencia a ticket, actualizar también payment_method del ticket
+    if (changeMethodMovement.reference_id) {
+      await supabase.from("orders").update({
+        payment_method: newPaymentMethod,
+      }).eq("id", changeMethodMovement.reference_id);
+    }
+
+    setChangingMethod(false);
+    setChangeMethodMovement(null);
+    setChangeMethodBy("");
+    setChangeMethodReason("");
+    setNewPaymentMethod("efectivo");
+    await loadMovements();
+  }
+
   async function cancelMovement_fn() {
     if (!cancelMovement) return;
     if (!cancelCode.trim()) {
@@ -627,6 +680,10 @@ export default function CajaPage() {
     setCancelSaving(false);
     await loadMovements();
   }
+
+  const methodChangedMovements = useMemo(() => {
+    return movements.filter((m) => m.payment_method_changed_at && m.payment_method_original);
+  }, [movements]);
 
   const cancelledMovements = useMemo(() => {
     return movements.filter((m) => m.is_cancelled);
@@ -2047,16 +2104,38 @@ export default function CajaPage() {
                             ${money(m.amount)}
                           </div>
                         </div>
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                           {m.reference_id && (
                             <button onClick={() => openDesglose(m)} style={desgloseBtnSt}>
                               Ver desglose
                             </button>
                           )}
+                          <button
+                            onClick={() => {
+                              setChangeMethodMovement(m);
+                              setNewPaymentMethod(m.payment_method === "efectivo" ? "tarjeta" : "efectivo");
+                              setChangeMethodReason("");
+                              setChangeMethodBy("");
+                              setChangeMethodError("");
+                            }}
+                            style={changeMethodBtnSt}
+                          >
+                            Cambiar método
+                          </button>
                           <button onClick={() => { setCancelMovement(m); setCancelCode(""); setCancelReason(""); setCancelError(""); }} style={cancelBtnSt}>
                             Cancelar
                           </button>
                         </div>
+                        {m.payment_method_changed_at && m.payment_method_original && (
+                          <div style={{
+                            marginTop: 8, padding: "6px 10px", background: "rgba(166,106,16,0.08)",
+                            borderRadius: 8, fontSize: 11, color: C.warning, fontWeight: 700,
+                          }}>
+                            ⚠ Método cambiado de <b>{methodName(m.payment_method_original)}</b> a <b>{methodName(m.payment_method)}</b>
+                            {m.payment_method_changed_by && <> por {m.payment_method_changed_by}</>}
+                            {m.payment_method_change_reason && <> — {m.payment_method_change_reason}</>}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -2103,6 +2182,64 @@ export default function CajaPage() {
                 )
               )}
             </Panel>
+
+            {/* Panel cambios de metodo de pago (colapsable) */}
+            {methodChangedMovements.length > 0 && (() => {
+              return (
+                <div style={{ marginTop: 18 }}>
+                  <button
+                    onClick={() => setShowMethodChangePanel(!showMethodChangePanel)}
+                    style={{
+                      width: "100%", padding: "14px 18px", borderRadius: 18,
+                      border: `1px solid rgba(166,106,16,0.25)`, background: "rgba(166,106,16,0.06)",
+                      cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontWeight: 800, color: C.warning, fontSize: 15 }}>
+                      Cambios de método del rango ({methodChangedMovements.length})
+                    </span>
+                    <span style={{ fontSize: 18, color: C.muted }}>{showMethodChangePanel ? "▲" : "▼"}</span>
+                  </button>
+                  {showMethodChangePanel && (
+                    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderTop: "none", borderRadius: "0 0 18px 18px", padding: 14 }}>
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {methodChangedMovements.map((m) => (
+                          <div key={m.id} style={{
+                            padding: 12, background: "rgba(166,106,16,0.04)",
+                            borderRadius: 10, border: `1px solid rgba(166,106,16,0.18)`,
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 800, color: C.text }}>
+                                  {typeName(m.type)} {m.reference_id && movementCustomerMap[m.reference_id] && <span style={{ color: C.primary }}>— {movementCustomerMap[m.reference_id]}</span>}
+                                </div>
+                                <div style={{ fontSize: 13, marginTop: 4 }}>
+                                  <span style={{ color: C.muted }}>De </span>
+                                  <span style={{ fontWeight: 700, color: C.text, textDecoration: "line-through" }}>{methodName(m.payment_method_original)}</span>
+                                  <span style={{ color: C.muted }}> → a </span>
+                                  <span style={{ fontWeight: 700, color: C.warning }}>{methodName(m.payment_method)}</span>
+                                </div>
+                                <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                                  Cambió: <b style={{ color: C.text }}>{m.payment_method_changed_by || "—"}</b> — {fmtDateTime(m.payment_method_changed_at)}
+                                </div>
+                                {m.payment_method_change_reason && (
+                                  <div style={{ fontSize: 12, color: C.text, marginTop: 4, fontStyle: "italic" }}>
+                                    &quot;{m.payment_method_change_reason}&quot;
+                                  </div>
+                                )}
+                              </div>
+                              <div style={{ ...amtBadge, background: C.warning }}>
+                                ${money(m.amount)}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Panel de cancelaciones detalladas (colapsable) */}
             {cancelledMovements.length > 0 && (() => {
@@ -2842,6 +2979,94 @@ export default function CajaPage() {
       )}
 
       {/* ═══ MODAL: CANCELAR ═══ */}
+      {/* Modal cambiar metodo de pago */}
+      {changeMethodMovement && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h2 style={{ margin: 0, color: C.warning, fontSize: 20 }}>Cambiar método de pago</h2>
+              <button onClick={() => setChangeMethodMovement(null)} style={closeBtn}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: 12, padding: 10, background: "rgba(0,0,0,0.03)", borderRadius: 10, fontSize: 13 }}>
+              <div><b>Movimiento:</b> {typeName(changeMethodMovement.type)} — ${money(changeMethodMovement.amount)}</div>
+              <div style={{ color: C.muted, marginTop: 2 }}>
+                Actual: <b style={{ color: C.text }}>{methodName(changeMethodMovement.payment_method)}</b>
+              </div>
+              {changeMethodMovement.reference_id && movementCustomerMap[changeMethodMovement.reference_id] && (
+                <div style={{ color: C.primary, marginTop: 2, fontWeight: 700 }}>
+                  👤 {movementCustomerMap[changeMethodMovement.reference_id]}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 6 }}>Nuevo método *</label>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {["efectivo", "tarjeta", "transferencia", "credito"].map((mtd) => (
+                  <button
+                    key={mtd}
+                    onClick={() => setNewPaymentMethod(mtd)}
+                    style={{
+                      flex: 1, minWidth: 100, padding: "10px 12px", borderRadius: 10,
+                      border: newPaymentMethod === mtd ? `2px solid ${C.warning}` : `1px solid ${C.border}`,
+                      background: newPaymentMethod === mtd ? "rgba(166,106,16,0.1)" : "white",
+                      color: C.text, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                    }}
+                  >
+                    {methodName(mtd)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Tu nombre (cajera/admin) *</label>
+              <input
+                value={changeMethodBy}
+                onChange={(e) => setChangeMethodBy(e.target.value)}
+                placeholder="Ej. Yadira, Sergio..."
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, fontWeight: 600, color: C.text, background: "white", boxSizing: "border-box" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Razón del cambio *</label>
+              <textarea
+                value={changeMethodReason}
+                onChange={(e) => setChangeMethodReason(e.target.value)}
+                placeholder="Ej. Cliente dijo que pagaría efectivo pero al final pagó con tarjeta"
+                rows={2}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, color: C.text, background: "white", boxSizing: "border-box", resize: "vertical" }}
+              />
+            </div>
+
+            {changeMethodError && (
+              <div style={{ marginBottom: 12, padding: 10, background: "rgba(180,35,24,0.08)", color: C.danger, borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                {changeMethodError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setChangeMethodMovement(null)} style={{ ...btnSec, flex: 1 }} disabled={changingMethod}>
+                Cancelar
+              </button>
+              <button
+                onClick={changeMethodSave}
+                disabled={changingMethod}
+                style={{
+                  flex: 1, padding: "12px 16px", borderRadius: 10, border: "none",
+                  background: C.warning, color: "white", fontWeight: 800, fontSize: 14,
+                  cursor: changingMethod ? "default" : "pointer",
+                }}
+              >
+                {changingMethod ? "Guardando..." : "Guardar cambio"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {cancelMovement && (
         <div style={modalOverlay}>
           <div style={modalCard}>
@@ -3361,6 +3586,7 @@ const btnSec: React.CSSProperties = { display: "inline-block", padding: "10px 16
 const btnPri: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, color: "white", fontWeight: 700, boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)", cursor: "pointer", fontSize: 15 };
 const tdSt: React.CSSProperties = { padding: "8px", borderBottom: `1px solid ${C.border}`, color: C.text };
 const tabBtnSt: React.CSSProperties = { padding: "10px 16px", borderRadius: 14, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 14 };
+const changeMethodBtnSt: React.CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(166,106,16,0.12)", color: C.warning, fontWeight: 700, fontSize: 12, cursor: "pointer" };
 const desgloseBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: "white", color: C.info, fontWeight: 700, fontSize: 13, cursor: "pointer" };
 const cancelBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: "none", background: "rgba(180,35,24,0.10)", color: C.danger, fontWeight: 700, fontSize: 13, cursor: "pointer" };
 const btnDanger: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${C.danger} 0%, #8b1a12 100%)`, color: "white", fontWeight: 700, cursor: "pointer", fontSize: 15, boxShadow: "0 8px 18px rgba(180,35,24,0.20)" };
