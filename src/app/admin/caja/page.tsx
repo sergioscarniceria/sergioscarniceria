@@ -389,7 +389,7 @@ export default function CajaPage() {
   const [changeMethodMovement, setChangeMethodMovement] = useState<Movement | null>(null);
   const [newPaymentMethod, setNewPaymentMethod] = useState<string>("efectivo");
   const [changeMethodReason, setChangeMethodReason] = useState<string>("");
-  const [changeMethodBy, setChangeMethodBy] = useState<string>("");
+  const [changeMethodCode, setChangeMethodCode] = useState<string>("");
   const [changingMethod, setChangingMethod] = useState(false);
   const [changeMethodError, setChangeMethodError] = useState<string>("");
   const [showMethodChangePanel, setShowMethodChangePanel] = useState(false);
@@ -577,7 +577,7 @@ export default function CajaPage() {
 
   async function changeMethodSave() {
     if (!changeMethodMovement) return;
-    if (!changeMethodBy.trim()) { setChangeMethodError("Pon tu nombre (quien hace el cambio)"); return; }
+    if (!changeMethodCode.trim()) { setChangeMethodError("Ingresa tu código de cajera"); return; }
     if (!changeMethodReason.trim()) { setChangeMethodError("Pon una razón del cambio"); return; }
     if (newPaymentMethod === changeMethodMovement.payment_method) {
       setChangeMethodError("El método nuevo es igual al actual");
@@ -586,12 +586,27 @@ export default function CajaPage() {
     setChangingMethod(true);
     setChangeMethodError("");
 
+    // Validar codigo de cajera
+    const { data: emp } = await supabase
+      .from("employee_codes")
+      .select("name, code")
+      .eq("code", changeMethodCode.trim())
+      .eq("role", "cajera")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!emp) {
+      setChangeMethodError("Código de cajera incorrecto");
+      setChangingMethod(false);
+      return;
+    }
+
     const original = changeMethodMovement.payment_method_original || changeMethodMovement.payment_method;
     const { error } = await supabase.from("cash_movements").update({
       payment_method: newPaymentMethod,
       payment_method_original: original,
       payment_method_changed_at: new Date().toISOString(),
-      payment_method_changed_by: changeMethodBy.trim(),
+      payment_method_changed_by: emp.name,
       payment_method_change_reason: changeMethodReason.trim(),
     }).eq("id", changeMethodMovement.id);
 
@@ -610,7 +625,7 @@ export default function CajaPage() {
 
     setChangingMethod(false);
     setChangeMethodMovement(null);
-    setChangeMethodBy("");
+    setChangeMethodCode("");
     setChangeMethodReason("");
     setNewPaymentMethod("efectivo");
     await loadMovements();
@@ -2115,7 +2130,7 @@ export default function CajaPage() {
                               setChangeMethodMovement(m);
                               setNewPaymentMethod(m.payment_method === "efectivo" ? "tarjeta" : "efectivo");
                               setChangeMethodReason("");
-                              setChangeMethodBy("");
+                              setChangeMethodCode("");
                               setChangeMethodError("");
                             }}
                             style={changeMethodBtnSt}
@@ -3021,13 +3036,19 @@ export default function CajaPage() {
             </div>
 
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Tu nombre (cajera/admin) *</label>
+              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Código de cajera *</label>
               <input
-                value={changeMethodBy}
-                onChange={(e) => setChangeMethodBy(e.target.value)}
-                placeholder="Ej. Yadira, Sergio..."
-                style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, fontWeight: 600, color: C.text, background: "white", boxSizing: "border-box" }}
+                type="password"
+                value={changeMethodCode}
+                onChange={(e) => setChangeMethodCode(e.target.value)}
+                placeholder="Tu código personal"
+                inputMode="numeric"
+                autoComplete="off"
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, fontWeight: 600, color: C.text, background: "white", boxSizing: "border-box", letterSpacing: 4, textAlign: "center" }}
               />
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>
+                Solo cajeras autorizadas pueden cambiar el método de pago. El cambio queda registrado a tu nombre.
+              </div>
             </div>
 
             <div style={{ marginBottom: 14 }}>
