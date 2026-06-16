@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import CustomerCard from "@/components/CustomerCard";
@@ -28,6 +29,10 @@ type OrderItem = {
   product: string;
   kilos: number;
   price: number;
+  sale_type?: "kg" | "pieza" | null;
+  quantity?: number | null;
+  is_fixed_price_piece?: boolean | null;
+  prepared_kilos?: number | null;
 };
 
 type Order = {
@@ -2469,8 +2474,8 @@ export default function ClientePage() {
                                 <span style={{ minWidth: 0 }}>{getCategoryEmoji(mp?.category)} {item.product}</span>
                                 <span style={{ flexShrink: 0, fontWeight: 700 }}>
                                   {isPiece
-                                    ? `${item.kilos} pza · $${Math.ceil(item.kilos * item.price)}`
-                                    : `${item.kilos} kg · $${Math.ceil(item.kilos * item.price)}`}
+                                    ? `${Number(item.quantity ?? item.kilos ?? 0)} pza · $${Math.ceil(itemSubtotal(item))}`
+                                    : `${item.kilos} kg · $${Math.ceil(itemSubtotal(item))}`}
                                 </span>
                               </div>
                               );
