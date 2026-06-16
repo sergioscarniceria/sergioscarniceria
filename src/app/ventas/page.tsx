@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 import { getSupabaseClient } from "@/lib/supabase";
 import { resilientQuery } from "@/lib/resilience";
 import { smartPrintTicket, type TicketData } from "@/lib/printer";
@@ -102,7 +103,7 @@ function getTicketTotal(ticket: Ticket) {
       return acc + Number(item.quantity || 0) * Number(item.price || 0);
     }
 
-    return acc + Number(item.kilos || 0) * Number(item.price || 0);
+    return acc + itemSubtotal(item);
   }, 0);
 }
 
@@ -268,10 +269,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
       quantity: i.quantity,
       is_fixed_price_piece: i.is_fixed_price_piece,
     }));
-    const cfdTotal = items.reduce((acc, i) => {
-      if (i.sale_type === "pieza" && i.is_fixed_price_piece) return acc + Number(i.quantity || 0) * Number(i.price || 0);
-      return acc + Number(i.kilos || 0) * Number(i.price || 0);
-    }, 0);
+    const cfdTotal = items.reduce((acc, i) => acc + itemSubtotal(i), 0);
     sendCfd("mostrador", { type: "venta_activa", items: cfdItems, total: cfdTotal });
   }, [items]);
 
@@ -719,7 +717,7 @@ if (pulledOrderId) {
         if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
           lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
         } else {
-          lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+          lineTotal = itemSubtotal(item);
         }
         return acc + lineTotal * (pct / 100);
       }, 0);
@@ -741,7 +739,7 @@ if (pulledOrderId) {
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
       } else {
-        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+        lineTotal = itemSubtotal(item);
       }
       return acc + lineTotal * (pulledDiscount / 100);
     }, 0);
@@ -809,7 +807,7 @@ if (pulledOrderId) {
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
       } else {
-        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+        lineTotal = itemSubtotal(item);
       }
       return acc + lineTotal * (appliedDiscount / 100);
     }, 0);
@@ -868,7 +866,7 @@ if (pulledOrderId) {
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         return acc + Number(item.quantity || 0) * Number(item.price || 0);
       }
-      return acc + Number(item.kilos || 0) * Number(item.price || 0);
+      return acc + itemSubtotal(item);
     }, 0);
 
     // Calcular descuento al momento de imprimir: leer del ticket recién guardado
@@ -967,7 +965,7 @@ await loadTickets();
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       return acc + Number(item.quantity || 0) * Number(item.price || 0);
     }
-    return acc + Number(item.kilos || 0) * Number(item.price || 0);
+    return acc + itemSubtotal(item);
   }, 0);
 }, [items]);
 
@@ -980,7 +978,7 @@ await loadTickets();
       if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
         lineTotal = Number(item.quantity || 0) * Number(item.price || 0);
       } else {
-        lineTotal = Number(item.kilos || 0) * Number(item.price || 0);
+        lineTotal = itemSubtotal(item);
       }
       return acc + lineTotal * (mayoreoDiscount / 100);
     }, 0);
@@ -1078,8 +1076,7 @@ const paidTickets = useMemo(() => {
             <div style={{ display: "grid", gap: 8 }}>
               {prodOrders.map((order) => {
                 const total = (order.order_items || []).reduce((a, oi) => {
-                  if (oi.sale_type === "pieza" && oi.is_fixed_price_piece) return a + Number(oi.quantity || oi.kilos || 0) * Number(oi.price || 0);
-                  return a + Number(oi.kilos || 0) * Number(oi.price || 0);
+                  return a + itemSubtotal(oi);
                 }, 0);
                 return (
                   <div key={order.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderRadius: 14, background: "rgba(255,255,255,0.9)", border: `1px solid ${COLORS.border}` }}>
@@ -1145,7 +1142,7 @@ const paidTickets = useMemo(() => {
               const saleItems = typeof sale.items === "string" ? JSON.parse(sale.items) : sale.items;
               const saleTotal = (saleItems as Item[]).reduce((acc: number, it: Item) => {
                 if (it.sale_type === "pieza" && it.is_fixed_price_piece) return acc + Number(it.quantity || 0) * Number(it.price || 0);
-                return acc + Number(it.kilos || 0) * Number(it.price || 0);
+                return acc + itemSubtotal(it);
               }, 0);
               return (
                 <div key={sale.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: `1px solid ${COLORS.border}` }}>

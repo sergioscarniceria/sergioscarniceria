@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -1259,8 +1260,7 @@ export default function CajaPage() {
       const items = (o.order_items || []);
       let t = 0;
       for (const it of items) {
-        if (it.sale_type === "pieza" && it.is_fixed_price_piece) t += Number(it.quantity || 0) * Number(it.price || 0);
-        else t += Number(it.prepared_kilos || it.kilos || 0) * Number(it.price || 0);
+        t += itemSubtotal(it);
       }
       clientMap[name] = (clientMap[name] || 0) + t;
     }
@@ -1273,8 +1273,7 @@ export default function CajaPage() {
       if (!carniceroMap[name]) carniceroMap[name] = { tickets: 0, total: 0 };
       carniceroMap[name].tickets++;
       for (const it of (o.order_items || [])) {
-        if (it.sale_type === "pieza" && it.is_fixed_price_piece) carniceroMap[name].total += Number(it.quantity || 0) * Number(it.price || 0);
-        else carniceroMap[name].total += Number(it.prepared_kilos || it.kilos || 0) * Number(it.price || 0);
+        carniceroMap[name].total += itemSubtotal(it);
       }
     }
     const carniceroList = Object.entries(carniceroMap).sort((a, b) => b[1].total - a[1].total);
@@ -1711,8 +1710,7 @@ export default function CajaPage() {
         const items = o.order_items || [];
         let t = 0;
         for (const it of items) {
-          if (it.sale_type === "pieza" && it.is_fixed_price_piece) t += Number(it.quantity || 0) * Number(it.price || 0);
-          else t += Number(it.kilos || 0) * Number(it.price || 0);
+          t += itemSubtotal(it);
         }
         totalManana += t;
         doc.text((o.customer_name || "Sin cliente").slice(0, 30), marginL + 2, y);
@@ -2982,7 +2980,7 @@ export default function CajaPage() {
                     <div style={{ marginTop: 8, fontWeight: 800, color: C.danger, fontSize: 14, textAlign: "right" }}>
                       Total original: ${Math.ceil(desgloseEditInfo.original_items.reduce((s, i) => {
                         if (i.sale_type === "pieza" && i.is_fixed_price_piece) return s + Number(i.quantity || 0) * Number(i.price || 0);
-                        return s + Number(i.prepared_kilos || i.kilos || 0) * Number(i.price || 0);
+                        return s + itemSubtotal(i);
                       }, 0))}
                     </div>
                   </>

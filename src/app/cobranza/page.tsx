@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { resilientQuery } from "@/lib/resilience";
@@ -471,7 +472,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       return Number(item.quantity || 0) * Number(item.price || 0);
     }
-    return Number(item.prepared_kilos || item.kilos || 0) * Number(item.price || 0);
+return itemSubtotal(item);
   }
 
   // Texto descriptivo de cantidad para una línea

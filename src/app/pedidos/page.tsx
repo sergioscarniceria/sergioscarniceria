@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 
 type OrderItem = {
   id: string;
@@ -200,17 +201,7 @@ const [changingId, setChangingId] = useState<string | null>(null);
   }, []);
 
   function total(order: Order) {
-  return (order.order_items || []).reduce((acc, i) => {
-    if (i.sale_type === "pieza" && i.is_fixed_price_piece) {
-      return acc + Number(i.quantity || 0) * Number(i.price || 0);
-    }
-
-    if (i.sale_type === "pieza") {
-      return acc + Number(i.prepared_kilos || 0) * Number(i.price || 0);
-    }
-
-    return acc + Number(i.kilos || 0) * Number(i.price || 0);
-  }, 0);
+  return (order.order_items || []).reduce((acc, i) => acc + itemSubtotal(i), 0);
 }
 
   function applyBaseFilters(list: Order[]) {

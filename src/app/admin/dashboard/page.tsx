@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { itemSubtotal as itemSubtotalLib } from "@/lib/itemSubtotal";
 import Link from "next/link";
 import { getSupabaseClient } from "@/lib/supabase";
 import { getAdminSecret } from "@/lib/admin-secret";
@@ -419,14 +420,8 @@ export default function AdminDashboardPage() {
     setMarketLoading(false);
   }
 
-  function itemSubtotal(item: { kilos?: number; price?: number; sale_type?: string | null; quantity?: number | null; is_fixed_price_piece?: boolean | null }) {
-    const price = Number(item.price || 0);
-    if (item.sale_type === "pieza" || item.is_fixed_price_piece) {
-      const qty = Number(item.quantity || item.kilos || 0);
-      return qty * price;
-    }
-    return Number(item.kilos || 0) * price;
-  }
+  // itemSubtotal viene de @/lib/itemSubtotal (canonico)
+  const itemSubtotal = itemSubtotalLib;
 
   function orderTotal(order: Order) {
     return (order.order_items || []).reduce((acc, item) => {
