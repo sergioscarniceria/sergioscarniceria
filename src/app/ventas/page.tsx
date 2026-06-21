@@ -166,6 +166,27 @@ const [selectedProduct, setSelectedProduct] = useState<string>("");
 const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 const [search, setSearch] = useState("");
 const [kilos, setKilos] = useState("");
+  const [showNumKeypad, setShowNumKeypad] = useState(false);
+  const [keypadValue, setKeypadValue] = useState("");
+
+  function keypadAppend(ch: string) {
+    setKeypadValue((prev: string) => {
+      if (ch === "." && prev.includes(".")) return prev;
+      if (prev === "0" && ch !== ".") return ch;
+      const next = prev + ch;
+      return next.length > 7 ? prev : next;
+    });
+  }
+  function keypadBackspace() {
+    setKeypadValue((prev: string) => prev.slice(0, -1));
+  }
+  function keypadClear() {
+    setKeypadValue("");
+  }
+  function keypadConfirm() {
+    setKilos(keypadValue);
+    setShowNumKeypad(false);
+  }
 const [lastSavedFolio, setLastSavedFolio] = useState("");
 
 const [customerMode, setCustomerMode] = useState<"general" | "existente">("general");
@@ -1432,14 +1453,24 @@ const paidTickets = useMemo(() => {
             </div>
           )}
 
-          {/* Input manual como respaldo colapsado */}
+          {/* Input manual como respaldo (abre teclado numerico touch al tocar) */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
-              placeholder="Manual (respaldo)"
+              placeholder="Tocar para abrir teclado"
               value={kilos}
               onChange={(e) => setKilos(e.target.value)}
-              style={{ ...inputStyle, flex: 1, fontSize: 14, padding: 10, opacity: 0.7 }}
-              inputMode="decimal"
+              onFocus={(e) => {
+                e.target.blur();
+                setKeypadValue(kilos);
+                setShowNumKeypad(true);
+              }}
+              onClick={() => {
+                setKeypadValue(kilos);
+                setShowNumKeypad(true);
+              }}
+              readOnly
+              style={{ ...inputStyle, flex: 1, fontSize: 14, padding: 10, opacity: 0.85, cursor: "pointer" }}
+              inputMode="none"
             />
             {kilos && Number(kilos) > 0 && (
               <button
@@ -1846,6 +1877,91 @@ const paidTickets = useMemo(() => {
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setShowHoldModal(false)} style={{ flex: 1, padding: "12px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
               <button onClick={holdCurrentSale} style={{ flex: 1, padding: "12px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${COLORS.warning} 0%, #8a5500 100%)`, color: "white", fontWeight: 800, cursor: "pointer" }}>Poner en espera</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Teclado numerico touch para input manual */}
+      {showNumKeypad && (
+        <div
+          onClick={() => setShowNumKeypad(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 9999, padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 24, padding: 22,
+              maxWidth: 380, width: "100%",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.4)",
+            }}
+          >
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 13, color: "#7a5a52", fontWeight: 700, textAlign: "center", marginBottom: 6 }}>
+                Captura manual (kg)
+              </div>
+              <div style={{
+                fontSize: 42, fontWeight: 800, color: "#3b1c16", textAlign: "center",
+                background: "#fbf8f3", borderRadius: 14, padding: "16px 12px",
+                border: "1px solid rgba(92,27,17,0.10)", minHeight: 70,
+                letterSpacing: 2,
+              }}>
+                {keypadValue || "0"}
+                <span style={{ fontSize: 18, color: "#7a5a52", marginLeft: 6 }}>kg</span>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {["7","8","9","4","5","6","1","2","3"].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => keypadAppend(d)}
+                  style={{ padding: "20px 0", fontSize: 26, fontWeight: 800, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "white", color: "#3b1c16", cursor: "pointer", userSelect: "none" }}
+                >
+                  {d}
+                </button>
+              ))}
+              <button
+                onClick={() => keypadAppend(".")}
+                style={{ padding: "20px 0", fontSize: 26, fontWeight: 800, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "white", color: "#3b1c16", cursor: "pointer", userSelect: "none" }}
+              >
+                .
+              </button>
+              <button
+                onClick={() => keypadAppend("0")}
+                style={{ padding: "20px 0", fontSize: 26, fontWeight: 800, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "white", color: "#3b1c16", cursor: "pointer", userSelect: "none" }}
+              >
+                0
+              </button>
+              <button
+                onClick={keypadBackspace}
+                style={{ padding: "20px 0", fontSize: 26, fontWeight: 800, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "#fbf8f3", color: "#a66a10", cursor: "pointer", userSelect: "none" }}
+              >
+                {"⌫"}
+              </button>
+
+              <button
+                onClick={keypadClear}
+                style={{ padding: "20px 0", fontSize: 16, fontWeight: 700, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "rgba(180,35,24,0.08)", color: "#b42318", cursor: "pointer", userSelect: "none" }}
+              >
+                Limpiar
+              </button>
+              <button
+                onClick={() => setShowNumKeypad(false)}
+                style={{ padding: "20px 0", fontSize: 16, fontWeight: 700, borderRadius: 14, border: "1px solid rgba(92,27,17,0.10)", background: "white", color: "#3b1c16", cursor: "pointer", userSelect: "none" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={keypadConfirm}
+                style={{ padding: "20px 0", fontSize: 16, fontWeight: 700, borderRadius: 14, border: "none", background: "#7b2218", color: "white", cursor: "pointer", userSelect: "none" }}
+              >
+                Aceptar
+              </button>
             </div>
           </div>
         </div>
