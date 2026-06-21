@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
   const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string; is_raw_material?: boolean; kg?: number | null; product_category?: string | null }[]>([]);
-  const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null }[]>([]);
+  const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null; canal_weight_kg: number | null; animal_type: string | null; status?: string | null }[]>([]);
   const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; method: string; supplier_id: string }[]>([]);
   const [supplierNameMap, setSupplierNameMap] = useState<Record<string, string>>({});
   const [productsMap, setProductsMap] = useState<Record<string, string>>({}); // name -> category
@@ -229,7 +229,7 @@ export default function AdminDashboardPage() {
     const [{ data: livestockMes }, { data: suppExpMes }] = await Promise.all([
       supabase
         .from("livestock_purchases")
-        .select("date, total_cost, total_live")
+        .select("date, total_cost, total_live, canal_weight_kg, animal_type, status")
         .gte("date", cmFirst)
         .lte("date", cmLastStr),
       supabase
@@ -912,12 +912,33 @@ export default function AdminDashboardPage() {
   const mermaStats = useMemo(() => {
     // Entradas por tipo de carne (Res, Cerdo, Pollo, Otro)
     const entradasByType: Record<string, { kg: number; cost: number; count: number }> = {};
+
+    // (a) Cargos de proveedores marcados como materia prima
     supplierExpensesMes.forEach((e) => {
       if (!e.is_raw_material || !e.kg || !e.product_category) return;
       const tipo = e.product_category;
       if (!entradasByType[tipo]) entradasByType[tipo] = { kg: 0, cost: 0, count: 0 };
       entradasByType[tipo].kg += Number(e.kg || 0);
       entradasByType[tipo].cost += Number(e.amount || 0);
+      entradasByType[tipo].count += 1;
+    });
+
+    // (b) Animales en pie (livestock_purchases): mapeo animal_type -> tipo de carne
+    // Solo contar compras con canal_weight_kg ya capturado (status >= 'pesado' o 'completo')
+    livestockPurchasesMes.forEach((p) => {
+      const animal = (p.animal_type || "").toLowerCase();
+      let tipo: string | null = null;
+      if (animal === "res" || animal === "vaca" || animal === "toro" || animal === "becerro") tipo = "Res";
+      else if (animal === "puerco" || animal === "cerdo" || animal === "lechon") tipo = "Cerdo";
+      else if (animal === "pollo" || animal === "gallina") tipo = "Pollo";
+      if (!tipo) return;
+      // Usar canal_weight_kg si existe (peso de canal real). Si no, fallback a peso vivo * factor o 0.
+      const canalKg = Number(p.canal_weight_kg || 0);
+      if (canalKg <= 0) return; // Aún no se ha capturado el canal
+      const cost = Number(p.total_cost || 0);
+      if (!entradasByType[tipo]) entradasByType[tipo] = { kg: 0, cost: 0, count: 0 };
+      entradasByType[tipo].kg += canalKg;
+      entradasByType[tipo].cost += cost;
       entradasByType[tipo].count += 1;
     });
 
@@ -971,7 +992,7 @@ export default function AdminDashboardPage() {
     const totalRevenue = rows.reduce((s, r) => s + r.salidas_revenue, 0);
 
     return { rows, totalEntradas, totalSalidas, totalCost, totalRevenue };
-  }, [supplierExpensesMes, productStats, productsMap]);
+  }, [supplierExpensesMes, livestockPurchasesMes, productStats, productsMap]);
 
   // Detalle de ventas individuales para el producto expandido
   const expandedProductSales = useMemo(() => {
