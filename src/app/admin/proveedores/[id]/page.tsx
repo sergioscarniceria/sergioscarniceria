@@ -199,32 +199,44 @@ export default function ProveedorDetallePage() {
     <div style={{
       minHeight: "100vh",
       background: COLORS.bg,
-      padding: 16,
-      paddingTop: "max(20px, env(safe-area-inset-top))",
+      padding: 0,
       fontFamily: "Arial, sans-serif",
     }}>
-      <div style={{ maxWidth: 700, margin: "0 auto" }}>
-        {/* Header — boton de regresar visible y prominente */}
-        <Link
-          href="/admin/proveedores"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "8px 14px",
-            background: "white",
-            color: COLORS.primary,
-            textDecoration: "none",
-            fontSize: 14,
-            fontWeight: 700,
-            borderRadius: 10,
-            border: `1px solid ${COLORS.border}`,
-            boxShadow: "0 2px 6px rgba(91,25,15,0.05)",
-            marginBottom: 14,
-          }}
-        >
-          ← Proveedores
-        </Link>
+      {/* Barra superior STICKY con boton de regresar — siempre visible */}
+      <div style={{
+        position: "sticky",
+        top: 0,
+        zIndex: 100,
+        background: COLORS.bg,
+        padding: "12px 16px",
+        paddingTop: "max(12px, env(safe-area-inset-top))",
+        borderBottom: `1px solid ${COLORS.border}`,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+      }}>
+        <div style={{ maxWidth: 700, margin: "0 auto" }}>
+          <Link
+            href="/admin/proveedores"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              background: "white",
+              color: COLORS.primary,
+              textDecoration: "none",
+              fontSize: 14,
+              fontWeight: 700,
+              borderRadius: 10,
+              border: `1px solid ${COLORS.border}`,
+              boxShadow: "0 2px 6px rgba(91,25,15,0.05)",
+            }}
+          >
+            ← Proveedores
+          </Link>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 700, margin: "0 auto", padding: 16 }}>
 
         <div style={{ background: COLORS.cardStrong, borderRadius: 18, padding: "18px 20px", marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
