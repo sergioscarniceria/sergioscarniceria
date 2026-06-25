@@ -28,6 +28,9 @@ type Expense = {
   amount: number;
   category: string;
   description: string | null;
+  is_raw_material?: boolean | null;
+  kg?: number | null;
+  product_category?: string | null;
   notes: string | null;
   created_at: string;
 };
@@ -43,6 +46,9 @@ export default function GastosPage() {
   const [category, setCategory] = useState("compras_ganado");
   const [description, setDescription] = useState("");
   const [notes, setNotes] = useState("");
+  const [isRawMaterial, setIsRawMaterial] = useState(false);
+  const [kg, setKg] = useState("");
+  const [productCategory, setProductCategory] = useState("Res");
   const [saving, setSaving] = useState(false);
 
   // Filters
@@ -96,6 +102,9 @@ export default function GastosPage() {
           category,
           description: description.trim() || null,
           notes: notes.trim() || null,
+          is_raw_material: isRawMaterial,
+          kg: isRawMaterial && kg ? Number(kg) : null,
+          product_category: isRawMaterial ? productCategory : null,
         })
         .eq("id", editId);
 
@@ -113,6 +122,9 @@ export default function GastosPage() {
           category,
           description: description.trim() || null,
           notes: notes.trim() || null,
+          is_raw_material: isRawMaterial,
+          kg: isRawMaterial && kg ? Number(kg) : null,
+          product_category: isRawMaterial ? productCategory : null,
         }]);
 
       if (error) {
@@ -139,6 +151,9 @@ export default function GastosPage() {
     setAmount(String(exp.amount));
     setCategory(exp.category);
     setDescription(exp.description || "");
+    setIsRawMaterial(!!exp.is_raw_material);
+    setKg(exp.kg ? String(exp.kg) : "");
+    setProductCategory(exp.product_category || "Res");
     setNotes(exp.notes || "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -149,6 +164,9 @@ export default function GastosPage() {
     setAmount("");
     setCategory("compras_ganado");
     setDescription("");
+    setIsRawMaterial(false);
+    setKg("");
+    setProductCategory("Res");
     setNotes("");
   }
 
@@ -246,6 +264,65 @@ export default function GastosPage() {
               style={{ ...inputStyle, width: "100%" }}
             />
           </div>
+
+          {/* Toggle Materia Prima */}
+          <div style={{
+            marginTop: 12, padding: 12, borderRadius: 10,
+            background: isRawMaterial ? "rgba(31,122,77,0.06)" : "rgba(0,0,0,0.02)",
+            border: `1px solid ${isRawMaterial ? "rgba(31,122,77,0.25)" : "rgba(0,0,0,0.06)"}`,
+          }}>
+            <label style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={isRawMaterial}
+                onChange={(e) => setIsRawMaterial(e.target.checked)}
+                style={{ width: 20, height: 20, cursor: "pointer" }}
+              />
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#3b1c16" }}>
+                  ¿Es compra de materia prima?
+                </div>
+                <div style={{ fontSize: 11, color: "#7a5a52", marginTop: 2 }}>
+                  Marca si compraste carne pagada en efectivo (entra a la comparativa de kg de carne).
+                </div>
+              </div>
+            </label>
+
+            {isRawMaterial && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 12 }}>Tipo de carne *</label>
+                  <select
+                    value={productCategory}
+                    onChange={(e) => setProductCategory(e.target.value)}
+                    style={inputStyle}
+                  >
+                    <option value="Res">Res</option>
+                    <option value="Cerdo">Cerdo</option>
+                    <option value="Pollo">Pollo</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ ...labelStyle, fontSize: 12 }}>Kilos *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ej: 25.5"
+                    value={kg}
+                    onChange={(e) => setKg(e.target.value)}
+                    style={inputStyle}
+                  />
+                  {kg && Number(kg) > 0 && amount && Number(amount) > 0 && (
+                    <div style={{ fontSize: 11, color: "#7a5a52", marginTop: 4 }}>
+                      $/kg: <b>${(Number(amount) / Number(kg)).toFixed(2)}</b>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
             <button onClick={saveExpense} disabled={saving} style={primaryButtonStyle}>
               {saving ? "Guardando..." : editId ? "Actualizar" : "Guardar gasto"}

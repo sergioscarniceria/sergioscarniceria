@@ -93,7 +93,7 @@ export default function AdminDashboardPage() {
 
   // Utilidades data
   const [showUtilities, setShowUtilities] = useState(false);
-  const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string }[]>([]);
+  const [ownerExpenses, setOwnerExpenses] = useState<{ expense_date: string; amount: number; category: string; is_raw_material?: boolean; kg?: number | null; product_category?: string | null }[]>([]);
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string; is_raw_material?: boolean; kg?: number | null; product_category?: string | null }[]>([]);
   const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null; canal_weight_kg: number | null; animal_type: string | null; status?: string | null }[]>([]);
@@ -212,7 +212,7 @@ export default function AdminDashboardPage() {
 
     const { data: oeData } = await supabase
       .from("owner_expenses")
-      .select("expense_date, amount, category")
+      .select("expense_date, amount, category, is_raw_material, kg, product_category")
       .gte("expense_date", cmFirst)
       .lte("expense_date", cmLastStr);
     setOwnerExpenses((oeData as any[]) || []);
@@ -273,7 +273,7 @@ export default function AdminDashboardPage() {
 
     const { data: pmOeData } = await supabase
       .from("owner_expenses")
-      .select("expense_date, amount, category")
+      .select("expense_date, amount, category, is_raw_material, kg, product_category")
       .gte("expense_date", pmFirst)
       .lte("expense_date", pmLastStr);
     setPrevMonthExpenses((pmOeData as any[]) || []);
@@ -300,7 +300,7 @@ export default function AdminDashboardPage() {
 
     const { data: pyOeData } = await supabase
       .from("owner_expenses")
-      .select("expense_date, amount, category")
+      .select("expense_date, amount, category, is_raw_material, kg, product_category")
       .gte("expense_date", pyFirst)
       .lte("expense_date", pyLastStr);
     setPrevYearExpenses((pyOeData as any[]) || []);
@@ -923,6 +923,16 @@ export default function AdminDashboardPage() {
       entradasByType[tipo].count += 1;
     });
 
+    // (a2) Gastos Externos marcados como materia prima (compras al contado sin crédito)
+    ownerExpenses.forEach((e) => {
+      if (!e.is_raw_material || !e.kg || !e.product_category) return;
+      const tipo = e.product_category;
+      if (!entradasByType[tipo]) entradasByType[tipo] = { kg: 0, cost: 0, count: 0 };
+      entradasByType[tipo].kg += Number(e.kg || 0);
+      entradasByType[tipo].cost += Number(e.amount || 0);
+      entradasByType[tipo].count += 1;
+    });
+
     // (b) Animales en pie (livestock_purchases): mapeo animal_type -> tipo de carne
     // Solo contar compras con canal_weight_kg ya capturado (status >= 'pesado' o 'completo')
     livestockPurchasesMes.forEach((p) => {
@@ -992,7 +1002,7 @@ export default function AdminDashboardPage() {
     const totalRevenue = rows.reduce((s, r) => s + r.salidas_revenue, 0);
 
     return { rows, totalEntradas, totalSalidas, totalCost, totalRevenue };
-  }, [supplierExpensesMes, livestockPurchasesMes, productStats, productsMap]);
+  }, [supplierExpensesMes, ownerExpenses, livestockPurchasesMes, productStats, productsMap]);
 
   // Detalle de ventas individuales para el producto expandido
   const expandedProductSales = useMemo(() => {
