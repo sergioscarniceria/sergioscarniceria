@@ -108,7 +108,7 @@ export default function AdminDashboardPage() {
   const [opExpenses, setOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
   const [supplierExpensesMes, setSupplierExpensesMes] = useState<{ date: string; amount: number; concept: string; is_raw_material?: boolean; kg?: number | null; product_category?: string | null }[]>([]);
   const [livestockPurchasesMes, setLivestockPurchasesMes] = useState<{ date: string; total_cost: number | null; total_live: number | null; canal_weight_kg: number | null; animal_type: string | null; status?: string | null }[]>([]);
-  const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; method: string; supplier_id: string }[]>([]);
+  const [supplierPaymentsMes, setSupplierPaymentsMes] = useState<{ date: string; amount: number; payment_method: string; supplier_id: string }[]>([]);
   const [supplierNameMap, setSupplierNameMap] = useState<Record<string, string>>({});
   const [productsMap, setProductsMap] = useState<Record<string, string>>({}); // name -> category
   const [prevMonthOpExpenses, setPrevMonthOpExpenses] = useState<{ expense_date: string; amount: number; concept: string; category: string }[]>([]);
@@ -255,7 +255,7 @@ export default function AdminDashboardPage() {
     // Pagos a proveedores hechos en el mes (lo que realmente sale del acumulado)
     const { data: suppPayMes } = await supabase
       .from("supplier_payments")
-      .select("date, amount, method, supplier_id")
+      .select("date, amount, payment_method, supplier_id")
       .gte("date", cmFirst)
       .lte("date", cmLastStr);
     setSupplierPaymentsMes((suppPayMes as any[]) || []);
