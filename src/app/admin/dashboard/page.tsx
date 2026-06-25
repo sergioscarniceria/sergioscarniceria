@@ -722,18 +722,20 @@ export default function AdminDashboardPage() {
       0
     );
     const currentVariableTotal = currentOpVariable + currentLivestockVar + currentSupplierVar;
-
     // Los gastos del dueño (owner_expenses) son típicamente fijos (renta, sueldo socio, etc.)
     const currentFixedTotal = currentOpFijo + currentOwnerExp;
 
-    // ─── PUNTO DE EQUILIBRIO ───
-    // Usamos un MARGEN OBJETIVO configurable (no las compras del mes), porque las compras
-    // del mes pueden ser INVENTARIO que se vende en meses futuros, lo que distorsiona el calculo.
-    // El usuario ajusta el margen objetivo (default 35%) y se guarda en localStorage.
-    const contributionMargin = targetMarginPct / 100;
-
-    // Punto de equilibrio en pesos: Costos Fijos / Margen de contribucion
-    const breakEvenSales = contributionMargin > 0 ? currentFixedTotal / contributionMargin : 0;
+    // ─── PUNTO DE EQUILIBRIO POR FLUJO DE CAJA ───
+    // Sergio quiere saber: "Cuánto necesito vender para cubrir TODO lo que salió de la cuenta este mes".
+    // Esto NO usa margen de contribucion — es flujo de caja puro.
+    // Suma: gastos del dueño + gastos operativos + pagos REALES hechos a proveedores este mes.
+    // (Las compras a credito no cuentan hasta que se paguen — supplier_payments ya filtra eso)
+    const currentSupplierPaymentsTotal = supplierPaymentsMes.reduce(
+      (sum, p) => sum + Number(p.amount || 0),
+      0
+    );
+    const breakEvenSales = currentOwnerExpRaw + currentOpVariable + currentOpFijo + currentSupplierPaymentsTotal;
+    const contributionMargin = 1; // no se usa pero mantengo variable para compatibilidad
     // % alcanzado del PE en lo que va del mes
     const breakEvenPct = breakEvenSales > 0 ? (currentSales / breakEvenSales) * 100 : 0;
     // Falta para alcanzar PE (si aplica)
@@ -792,7 +794,7 @@ export default function AdminDashboardPage() {
         gap: breakEvenGap,
       },
     };
-  }, [salesThisMonth, ownerExpenses, opExpenses, livestockPurchasesMes, supplierExpensesMes, supplierPaymentsMes, supplierNameMap, targetMarginPct, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
+  }, [salesThisMonth, ownerExpenses, opExpenses, livestockPurchasesMes, supplierExpensesMes, supplierPaymentsMes, supplierNameMap, prevMonthOrders, prevMonthExpenses, prevMonthOpExpenses, prevYearOrders, prevYearExpenses, prevYearOpExpenses, cxcNotes, supplierDebt]);
 
   // ─── Delivery KPIs ──────────────────────────────────────
   const deliveryStats = useMemo(() => {
@@ -1524,35 +1526,7 @@ export default function AdminDashboardPage() {
             Cuánto necesitas vender en {utilityStats.current.label} para cubrir todos los costos (no perder, no ganar)
           </p>
 
-          {/* Input editable de margen objetivo */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-            background: "rgba(123,34,24,0.04)", padding: "10px 14px", borderRadius: 10,
-            marginBottom: 16, border: `1px solid ${COLORS.border}`,
-          }}>
-            <div style={{ fontSize: 12, color: COLORS.muted, fontWeight: 700 }}>
-              Margen objetivo:
-            </div>
-            <input
-              type="number"
-              value={targetMarginPct}
-              min={5}
-              max={95}
-              step={1}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isFinite(n) && n > 0 && n < 100) setTargetMarginPct(n);
-              }}
-              style={{
-                width: 70, padding: "6px 10px", borderRadius: 8,
-                border: `1px solid ${COLORS.border}`, fontSize: 14, fontWeight: 700,
-                color: COLORS.text, background: "white", textAlign: "center",
-              }}
-            />
-            <div style={{ fontSize: 12, color: COLORS.muted }}>
-              % — el promedio que ganas por venta después de los costos directos (carne, empaque, etc.)
-            </div>
-          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 16 }}>
             <div style={{ background: "rgba(180,35,24,0.08)", borderRadius: 14, padding: 14, border: `1px solid rgba(180,35,24,0.18)` }}>
               <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6 }}>Necesitas vender</div>
@@ -1590,9 +1564,10 @@ export default function AdminDashboardPage() {
           <details style={{ background: COLORS.bgSoft, borderRadius: 12, padding: 12, border: `1px solid ${COLORS.border}` }}>
             <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: COLORS.text }}>Ver cómo se calcula</summary>
             <div style={{ marginTop: 12, fontSize: 13, color: COLORS.text, lineHeight: 1.7 }}>
-              <div style={{ background: "rgba(166,106,16,0.06)", padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 12, color: COLORS.text }}>
-                <b>Método actual:</b> Costos Fijos ÷ Margen objetivo ({targetMarginPct}%).
-                El margen lo configuras tú arriba. NO usa las compras del mes porque pueden ser inventario.
+              <div style={{ background: "rgba(31,122,77,0.06)", padding: 10, borderRadius: 8, marginBottom: 10, fontSize: 12, color: COLORS.text }}>
+                <b>Método (flujo de caja):</b> Suma TODO lo que salió de la cuenta este mes:
+                gastos del dueño + gastos operativos + pagos hechos a proveedores.
+                Si vendes esa cantidad, recuperas todo lo que pagaste este mes. Las compras a crédito NO cuentan hasta que se paguen.
               </div>
               <div><b>Costos fijos del mes</b> (renta, sueldos, servicios, mantenimiento...): <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.fixedCost)}</b></div>
               <div><b>Costos variables del mes</b>: <b style={{ color: COLORS.danger }}>${fmt(utilityStats.breakEven.variableCost)}</b></div>
