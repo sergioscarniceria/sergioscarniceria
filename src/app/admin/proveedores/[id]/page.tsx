@@ -196,14 +196,37 @@ export default function ProveedorDetallePage() {
   const isInterno = supplier.type === "interno";
 
   return (
-    <div style={{ minHeight: "100vh", background: COLORS.bg, padding: 16, fontFamily: "Arial, sans-serif" }}>
+    <div style={{
+      minHeight: "100vh",
+      background: COLORS.bg,
+      padding: 16,
+      paddingTop: "max(20px, env(safe-area-inset-top))",
+      fontFamily: "Arial, sans-serif",
+    }}>
       <div style={{ maxWidth: 700, margin: "0 auto" }}>
-        {/* Header */}
-        <Link href="/admin/proveedores" style={{ color: COLORS.primary, textDecoration: "none", fontSize: 13, fontWeight: 600 }}>
+        {/* Header — boton de regresar visible y prominente */}
+        <Link
+          href="/admin/proveedores"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            background: "white",
+            color: COLORS.primary,
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 700,
+            borderRadius: 10,
+            border: `1px solid ${COLORS.border}`,
+            boxShadow: "0 2px 6px rgba(91,25,15,0.05)",
+            marginBottom: 14,
+          }}
+        >
           ← Proveedores
         </Link>
 
-        <div style={{ background: COLORS.cardStrong, borderRadius: 18, padding: "18px 20px", marginTop: 10, marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
+        <div style={{ background: COLORS.cardStrong, borderRadius: 18, padding: "18px 20px", marginBottom: 16, border: `1px solid ${COLORS.border}` }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
               <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: COLORS.text }}>{supplier.name}</h1>
