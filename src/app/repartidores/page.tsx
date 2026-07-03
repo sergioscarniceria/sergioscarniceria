@@ -36,6 +36,17 @@ const C = {
 };
 
 // ─── Helpers ───────────────────────────────────────────────────
+function cleanCustomerNote(raw: string | null | undefined): string {
+  if (!raw) return "";
+  let t = String(raw);
+  t = t.replace(/Pedido por tel[eé]fono\.\s*Captur[oó]:[^.]*\.\s*Hora de captura:[^.]*\.\s*/gi, "");
+  t = t.replace(/\s*\|\s*Descuento[^|]*/gi, "");
+  t = t.replace(/\s*\|\s*Cobro agrupado[^|]*/gi, "");
+  t = t.replace(/\s*Pago mixto:[^|]*/gi, "");
+  t = t.replace(/\*+$/g, "").trim();
+  return t;
+}
+
 function todayStr() {
   const n = new Date();
   return `${n.getFullYear()}-${`${n.getMonth() + 1}`.padStart(2, "0")}-${`${n.getDate()}`.padStart(2, "0")}`;
@@ -548,6 +559,22 @@ export default function RepartidoresPage() {
                     )}
                   </div>
 
+                  {/* Nota del cliente arriba (visibilidad prioritaria para el repartidor) */}
+                  {cleanCustomerNote(o.notes) !== "" && (
+                    <div style={{
+                      padding: "12px 14px", borderRadius: 12,
+                      background: "rgba(166,106,16,0.10)",
+                      border: `2px solid rgba(166,106,16,0.35)`,
+                      color: C.text, fontSize: 15, fontWeight: 600,
+                      marginBottom: 12, lineHeight: 1.4,
+                    }}>
+                      <div style={{ fontSize: 11, color: C.warning, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                        📝 Nota del cliente
+                      </div>
+                      {cleanCustomerNote(o.notes)}
+                    </div>
+                  )}
+
                   {/* Info */}
                   <div style={{ background: C.bgSoft, border: `1px solid ${C.border}`, borderRadius: 16, padding: 12, marginBottom: 12, fontSize: 14 }}>
                     <InfoRow label="Dirección" value={o.delivery_address || "Sin dirección"} />
@@ -578,10 +605,19 @@ export default function RepartidoresPage() {
                     )}
                   </div>
 
-                  {/* Notes */}
-                  {o.notes && (
-                    <div style={{ padding: 10, borderRadius: 12, background: "rgba(255,255,255,0.7)", border: `1px solid ${C.border}`, color: C.text, fontSize: 13, marginBottom: 12 }}>
-                      <b>Notas:</b> {o.notes}
+                  {/* Notes — nota del cliente (limpia sin metadata) */}
+                  {cleanCustomerNote(o.notes) !== "" && (
+                    <div style={{
+                      padding: "12px 14px", borderRadius: 12,
+                      background: "rgba(166,106,16,0.10)",
+                      border: `2px solid rgba(166,106,16,0.35)`,
+                      color: C.text, fontSize: 15, fontWeight: 600,
+                      marginBottom: 12, lineHeight: 1.4,
+                    }}>
+                      <div style={{ fontSize: 11, color: C.warning, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                        📝 Nota del cliente
+                      </div>
+                      {cleanCustomerNote(o.notes)}
                     </div>
                   )}
                   {o.delivery_notes && (
