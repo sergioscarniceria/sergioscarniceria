@@ -441,27 +441,45 @@ export default function AdminCxcPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
-      const { data: notesData, error: notesError } = await supabase
-        .from("cxc_notes")
-        .select("*")
-        .order("note_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(500);
+      // CRÍTICO: cargar TODAS las notas abiertas (sin límite) para no perder saldos.
+      // Las pagadas se cargan aparte con límite razonable (solo para historial reciente).
+      const [openRes, paidRes] = await Promise.all([
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .gt("balance_due", 0)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .lte("balance_due", 0)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(300),
+      ]);
 
       if (customersError) {
         console.log("Error cargando clientes:", customersError);
         return;
       }
-
-      if (notesError) {
-        console.log("Error cargando notas CxC:", notesError);
+      if (openRes.error) {
+        console.log("Error cargando notas abiertas:", openRes.error);
         return;
       }
+      if (paidRes.error) {
+        console.log("Error cargando notas pagadas:", paidRes.error);
+      }
+
+      const allNotes = [
+        ...((openRes.data as CxcNote[]) || []),
+        ...((paidRes.data as CxcNote[]) || []),
+      ];
 
       setCustomers((customersData as Customer[]) || []);
-      setNotes((notesData as CxcNote[]) || []);
+      setNotes(allNotes);
     } catch (err) {
       console.log("Error en loadData CxC:", err);
     } finally {
@@ -572,14 +590,18 @@ export default function AdminCxcPage() {
       result = result.filter((c) => c.credit_enabled);
     }
 
-    const q = search.toLowerCase().trim();
+    // Normalizar quita acentos (é→e, á→a, ñ→n) para que buscar "rene" encuentre "René"
+    const norm = (t: string) => (t || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const q = norm(search.trim());
     if (!q) return result;
-
     return result.filter((c) => {
       return (
-        (c.customer_name || "").toLowerCase().includes(q) ||
-        (c.phone || "").toLowerCase().includes(q) ||
-        (c.email || "").toLowerCase().includes(q)
+        norm(c.customer_name || "").includes(q) ||
+        norm(c.phone || "").includes(q) ||
+        norm(c.email || "").includes(q)
       );
     });
   }, [customerSummaries, customerFilter, search]);

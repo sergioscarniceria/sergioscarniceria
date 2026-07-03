@@ -112,13 +112,13 @@ export default function CxcVencidosPage() {
         .order("name", { ascending: true })
         .limit(500);
 
+      // CRÍTICO: quitar limit para no perder notas viejas vencidas
       const { data: notesData, error: notesError } = await supabase
         .from("cxc_notes")
         .select("*")
         .gt("balance_due", 0)
         .order("due_date", { ascending: true })
-        .order("note_date", { ascending: true })
-        .limit(500);
+        .order("note_date", { ascending: true });
 
       if (customersError) {
         console.log(customersError);

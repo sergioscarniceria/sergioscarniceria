@@ -151,12 +151,27 @@ export default function AdminCxcPage() {
         .order("name", { ascending: true })
         .limit(500);
 
-      const { data: notesData, error: notesError } = await supabase
-        .from("cxc_notes")
-        .select("*")
-        .order("note_date", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(500);
+      // CRÍTICO: cargar TODAS las notas abiertas + 300 pagadas para no perder saldos
+      const [openRes, paidRes] = await Promise.all([
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .gt("balance_due", 0)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("cxc_notes")
+          .select("*")
+          .lte("balance_due", 0)
+          .order("note_date", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(300),
+      ]);
+      const notesData = [
+        ...((openRes.data as any[]) || []),
+        ...((paidRes.data as any[]) || []),
+      ];
+      const notesError = openRes.error;
 
       if (customersError) {
         console.log("Error cargando clientes:", customersError);
