@@ -64,6 +64,9 @@ type Product = {
   is_active?: boolean;
   is_excluded_from_discount?: boolean;
   category?: string | null;
+  fixed_piece_price?: number | null;
+  is_fixed_price_by_piece?: boolean | null;
+  sale_type?: string | null;
 };
 
 type CartItem = {

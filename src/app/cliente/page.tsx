@@ -541,7 +541,8 @@ export default function ClientePage() {
   }, []);
 
   function getPrice(product: Product) {
-    const basePrice = Number(product.price || 0);
+    const _raw = Number(product.price || 0);
+    const basePrice = _raw > 0 ? _raw : Number(product.fixed_piece_price || 0);
 
     if (customerType === "mayoreo" && !product.is_excluded_from_discount) {
       return Number((basePrice * 0.9).toFixed(2));
