@@ -781,7 +781,7 @@ return itemSubtotal(item);
     for (const ticket of allTickets) {
       if (ticket.order_items) {
         for (const item of ticket.order_items) {
-          if (item.sale_type === "pieza" && item.quantity) {
+          if (item.sale_type === "pieza" ? item.quantity : (item.kilos && item.kilos > 0)) {
             const { data: prod } = await supabase
               .from("products")
               .select("id, name, stock, category, fixed_piece_price, inventory_link_product_id")
@@ -804,7 +804,7 @@ return itemSubtotal(item);
                   invPrevStock = master.stock || 0;
                 }
               }
-              const qty = Number(item.quantity || 0);
+              const qty = Number(item.quantity ?? item.kilos ?? 0);
               const newStock = invPrevStock - qty;
               await supabase.from("products").update({ stock: newStock }).eq("id", invTargetId);
               await supabase.from("inventory_movements").insert({
@@ -960,7 +960,7 @@ return itemSubtotal(item);
     for (const ticket of allTickets) {
       if (ticket.order_items) {
         for (const item of ticket.order_items) {
-          if (item.sale_type === "pieza" && item.quantity) {
+          if (item.sale_type === "pieza" ? item.quantity : (item.kilos && item.kilos > 0)) {
             const { data: prod } = await supabase.from("products").select("id, name, stock, category, fixed_piece_price, inventory_link_product_id").eq("name", item.product).single();
             if (prod && (prod.category === "Complementos" || (prod.fixed_piece_price !== null && prod.fixed_piece_price > 0))) {
               let invTargetId = prod.id;
@@ -972,7 +972,7 @@ return itemSubtotal(item);
                   invPrevStock = master.stock || 0;
                 }
               }
-              const qty = Number(item.quantity || 0);
+              const qty = Number(item.quantity ?? item.kilos ?? 0);
               const newStock = invPrevStock - qty;
               await supabase.from("products").update({ stock: newStock }).eq("id", invTargetId);
               await supabase.from("inventory_movements").insert({ item_type: "complemento", item_id: invTargetId, movement_type: "salida", quantity: qty, previous_stock: invPrevStock, new_stock: newStock, notes: prod.id === invTargetId ? `Venta ticket ${ticket.id.slice(0, 6)}` : `Venta ticket ${ticket.id.slice(0, 6)} (vendido como ${prod.name})`, created_by: cashierName || "cajera" });
@@ -1405,7 +1405,7 @@ return itemSubtotal(item);
     for (const ticket of allTickets) {
       if (ticket.order_items) {
         for (const item of ticket.order_items) {
-          if (item.sale_type === "pieza" && item.quantity) {
+          if (item.sale_type === "pieza" ? item.quantity : (item.kilos && item.kilos > 0)) {
             const { data: prod } = await supabase
               .from("products")
               .select("id, name, stock, category, fixed_piece_price, inventory_link_product_id")
@@ -1425,7 +1425,7 @@ return itemSubtotal(item);
                   invPrevStock = master.stock || 0;
                 }
               }
-              const qty = Number(item.quantity || 0);
+              const qty = Number(item.quantity ?? item.kilos ?? 0);
               const newStock = invPrevStock - qty;
               await supabase.from("products").update({ stock: newStock }).eq("id", invTargetId);
               await supabase.from("inventory_movements").insert({
