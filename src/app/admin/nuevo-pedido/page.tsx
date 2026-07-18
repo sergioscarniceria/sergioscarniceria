@@ -636,11 +636,18 @@ export default function NuevoPedidoPage() {
       doc.setFontSize(20);
       doc.setTextColor(123, 34, 24);
       doc.text("Sergio's Carniceria", pageW / 2, y, { align: "center" });
-      y += 7;
+      y += 6;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(11);
       doc.setTextColor(80, 80, 80);
       doc.text("Lista de precios / Cotizacion", pageW / 2, y, { align: "center" });
+      y += 4;
+      // Contacto (bajo el titulo)
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Pedidos: 441 118 5767  |  441 115 3314", pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.text("sergioscarniceria.com  |  IG: @sergioscarniceria", pageW / 2, y, { align: "center" });
       y += 5;
       const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
       doc.setFontSize(9);
@@ -765,6 +772,17 @@ export default function NuevoPedidoPage() {
       doc.text("Precios sujetos a cambio sin previo aviso. Vigencia: 7 dias.", pageW / 2, y, { align: "center" });
       y += 4;
       doc.text("Sergio's Carniceria - Gracias por su preferencia", pageW / 2, y, { align: "center" });
+      y += 6;
+      // Contacto reforzado en pie
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(123, 34, 24);
+      doc.text("Pedidos: 441 118 5767   |   441 115 3314", pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(120, 120, 120);
+      doc.text("sergioscarniceria.com   |   IG @sergioscarniceria", pageW / 2, y, { align: "center" });
 
       const cashierSafe = priceListCashier.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       const fname = `lista-precios-${cashierSafe || "cajera"}-${new Date().toISOString().slice(0, 10)}.pdf`;
