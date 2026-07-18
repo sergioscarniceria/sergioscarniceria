@@ -138,16 +138,17 @@ const [recommendSearch, setRecommendSearch] = useState("");
     return;
   }
 
+  // REGLA: ningun producto puede tener precio $0. Minimo $1.
   if (saleType === "kg") {
     const cleanPrice = Number(price);
-    if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 0) {
-      alert("Escribe un precio válido por kg");
+    if (price === "" || Number.isNaN(cleanPrice) || cleanPrice < 1) {
+      alert("El precio por kg debe ser mínimo $1");
       return;
     }
   } else {
     const cleanPiece = Number(fixedPiecePrice);
-    if (fixedPiecePrice === "" || Number.isNaN(cleanPiece) || cleanPiece <= 0) {
-      alert("Escribe un precio válido por pieza");
+    if (fixedPiecePrice === "" || Number.isNaN(cleanPiece) || cleanPiece < 1) {
+      alert("El precio por pieza debe ser mínimo $1");
       return;
     }
   }
@@ -156,9 +157,14 @@ const [recommendSearch, setRecommendSearch] = useState("");
 
   const payload = {
     name: cleanName,
-    price: saleType === "kg" ? Number(Number(price).toFixed(2)) : 0,
+    // Cuando es pieza, guardar el precio TAMBIEN en price (para que aparezca en todos lados)
+    price: saleType === "kg"
+      ? Number(Number(price).toFixed(2))
+      : Number(Number(fixedPiecePrice).toFixed(2)),
     category: category.trim() || "Complementos",
     fixed_piece_price: saleType === "pieza" ? Number(Number(fixedPiecePrice).toFixed(2)) : null,
+    is_fixed_price_by_piece: saleType === "pieza",
+    sale_type: saleType === "pieza" ? "pieza" : "kilo",
     is_active: isActive,
     is_excluded_from_discount: isExcludedFromDiscount,
     recommended_with: recommendedWith,
