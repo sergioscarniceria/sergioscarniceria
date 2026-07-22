@@ -394,6 +394,27 @@ export default function AdminClientesPage() {
     );
   }
 
+  async function generarPinCliente(customerId: string) {
+    try {
+      const res = await fetch("/api/admin/clientes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-secret": getAdminSecret() },
+        body: JSON.stringify({ customer_id: customerId, action: "generar_pin" }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert("Error: " + (result.error || "no se pudo generar PIN"));
+        return;
+      }
+      const pin = result.customer?.client_pin;
+      const phone = result.customer?.phone || "sin teléfono";
+      alert(`PIN generado para ${result.customer?.name}\n\nTeléfono: ${phone}\nPIN: ${pin}\nContraseña alternativa: 123456\n\nURL: sergioscarniceria.com/cliente`);
+      await loadCustomers();
+    } catch (err: any) {
+      alert("Error: " + (err.message || "desconocido"));
+    }
+  }
+
   async function crearNuevoCliente() {
     if (!ncName.trim()) { setNcError("El nombre es obligatorio"); return; }
     setNcError("");
@@ -642,6 +663,21 @@ export default function AdminClientesPage() {
                       style={portalButtonStyle}
                     >
                       Crear acceso portal
+                    </button>
+                  )}
+                  {!c.client_pin && (
+                    <button
+                      onClick={() => {
+                        if (!confirm(`¿Generar PIN de acceso para "${c.name}"? Se le asignará un PIN de 4 dígitos único y la contraseña 123456.`)) return;
+                        generarPinCliente(c.id);
+                      }}
+                      style={{
+                        ...portalButtonStyle,
+                        background: "rgba(31,122,77,0.10)",
+                        color: "#1f7a4d",
+                      }}
+                    >
+                      🔑 Generar PIN
                     </button>
                   )}
 

@@ -464,6 +464,12 @@ export default function ClientePage() {
   const [phone, setPhone] = useState("");
 
   const [mode, setMode] = useState<"login" | "register" | "forgot" | "password">("login");
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [changePwdMsg, setChangePwdMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
   const [loginError, setLoginError] = useState("");
   const [loginSuccess, setLoginSuccess] = useState("");
   const [newCardData, setNewCardData] = useState<{ name: string; phone: string; email: string; password: string; pin?: string; customerId: string } | null>(null);
@@ -951,6 +957,62 @@ export default function ClientePage() {
 
     await checkUser();
     setSaving(false);
+  }
+
+  async function handleChangeMyPassword() {
+    setChangePwdMsg(null);
+    if (!oldPwd || !newPwd || !confirmPwd) {
+      setChangePwdMsg({ type: "err", text: "Llena todos los campos" });
+      return;
+    }
+    if (newPwd.length < 6) {
+      setChangePwdMsg({ type: "err", text: "La nueva contraseña debe tener al menos 6 caracteres" });
+      return;
+    }
+    if (newPwd !== confirmPwd) {
+      setChangePwdMsg({ type: "err", text: "Las contraseñas no coinciden" });
+      return;
+    }
+    setChangingPwd(true);
+    try {
+      // 1) Obtener sesión actual
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData?.session;
+      if (!session?.user?.email || !session.access_token) {
+        setChangePwdMsg({ type: "err", text: "Sesión expirada, vuelve a entrar" });
+        setChangingPwd(false);
+        return;
+      }
+      // 2) Verificar contraseña actual re-autenticando
+      const { error: signErr } = await supabase.auth.signInWithPassword({
+        email: session.user.email,
+        password: oldPwd,
+      });
+      if (signErr) {
+        setChangePwdMsg({ type: "err", text: "La contraseña actual es incorrecta" });
+        setChangingPwd(false);
+        return;
+      }
+      // 3) Llamar al endpoint que actualiza auth password + portal_password
+      const res = await fetch("/api/portal/actualizar-mi-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: session.access_token, new_password: newPwd }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setChangePwdMsg({ type: "err", text: result.error || "No se pudo cambiar la contraseña" });
+        setChangingPwd(false);
+        return;
+      }
+      setChangePwdMsg({ type: "ok", text: "Contraseña cambiada exitosamente ✅" });
+      setOldPwd(""); setNewPwd(""); setConfirmPwd("");
+      setTimeout(() => { setShowChangePwd(false); setChangePwdMsg(null); }, 1500);
+    } catch (err: any) {
+      setChangePwdMsg({ type: "err", text: err.message || "Error inesperado" });
+    } finally {
+      setChangingPwd(false);
+    }
   }
 
   async function logout() {
@@ -3316,6 +3378,24 @@ export default function ClientePage() {
               ) : null}
 
               <button
+                onClick={() => { setShowChangePwd(true); setChangePwdMsg(null); setOldPwd(""); setNewPwd(""); setConfirmPwd(""); }}
+                style={{
+                  padding: "14px 18px",
+                  width: "100%",
+                  background: "white",
+                  color: COLORS.primary,
+                  border: `1px solid ${COLORS.border}`,
+                  borderRadius: 12,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  marginBottom: 10,
+                }}
+              >
+                🔒 Cambiar mi contraseña
+              </button>
+
+              <button
                 onClick={logout}
                 style={{
                   ...primaryButtonStyle,
@@ -3416,6 +3496,66 @@ export default function ClientePage() {
           }
         }
       `}</style>
+
+      {/* Modal Cambiar mi contraseña */}
+      {showChangePwd && (
+        <div
+          onClick={() => !changingPwd && setShowChangePwd(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 2000, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 18, padding: 22,
+              width: "100%", maxWidth: 400,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+              <h2 style={{ margin: 0, color: COLORS.text, fontSize: 18 }}>🔒 Cambiar contraseña</h2>
+              <button onClick={() => setShowChangePwd(false)} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: COLORS.muted }}>×</button>
+            </div>
+
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, display: "block", marginBottom: 4 }}>Contraseña actual</label>
+                <input type="password" value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} placeholder="Tu contraseña actual" autoComplete="current-password" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${COLORS.border}`, fontSize: 15, color: COLORS.text, background: "white", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, display: "block", marginBottom: 4 }}>Nueva contraseña</label>
+                <input type="password" value={newPwd} onChange={(e) => setNewPwd(e.target.value)} placeholder="Mínimo 6 caracteres" autoComplete="new-password" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${COLORS.border}`, fontSize: 15, color: COLORS.text, background: "white", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, display: "block", marginBottom: 4 }}>Confirmar nueva contraseña</label>
+                <input type="password" value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} placeholder="Repite la nueva contraseña" autoComplete="new-password" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${COLORS.border}`, fontSize: 15, color: COLORS.text, background: "white", boxSizing: "border-box" }} />
+              </div>
+
+              {changePwdMsg && (
+                <div style={{
+                  padding: 10, borderRadius: 8, fontSize: 13, fontWeight: 600,
+                  background: changePwdMsg.type === "ok" ? "rgba(31,122,77,0.12)" : "rgba(180,35,24,0.10)",
+                  color: changePwdMsg.type === "ok" ? COLORS.success : COLORS.danger,
+                }}>
+                  {changePwdMsg.text}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                <button onClick={() => setShowChangePwd(false)} disabled={changingPwd} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: `1px solid ${COLORS.border}`, background: "white", color: COLORS.text, fontWeight: 700, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+                <button onClick={handleChangeMyPassword} disabled={changingPwd} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "none", background: COLORS.primary, color: "white", fontWeight: 800, cursor: changingPwd ? "default" : "pointer", opacity: changingPwd ? 0.6 : 1 }}>
+                  {changingPwd ? "Guardando..." : "Cambiar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

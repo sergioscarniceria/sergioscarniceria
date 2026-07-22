@@ -22,7 +22,6 @@ async function generateUniquePin(sb: ReturnType<typeof adminClient>): Promise<st
     const { data } = await sb.from("customers").select("id").eq("client_pin", pin).limit(1);
     if (!data || data.length === 0) return pin;
   }
-  // fallback (muy improbable)
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
@@ -50,7 +49,6 @@ export async function POST(req: Request) {
 
     const sb = adminClient();
 
-    // Preparar payload
     const payload: Record<string, unknown> = {
       name: String(name).trim(),
       phone: phone ? String(phone).trim() : null,
@@ -63,7 +61,6 @@ export async function POST(req: Request) {
       payload.discount_percent = Number(discount_percent);
     }
 
-    // Si se pidio generar PIN, tambien portal_password default 123456
     if (generar_pin) {
       const pin = await generateUniquePin(sb);
       payload.client_pin = pin;
@@ -80,9 +77,55 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      customer: data,
-    });
+    return NextResponse.json({ customer: data });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Internal error";
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
+/** PATCH /api/admin/clientes — generar PIN para cliente existente (o resetear password) */
+export async function PATCH(req: Request) {
+  try {
+    if (!isAuthorized(req)) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    const body = await req.json();
+    const { customer_id, action } = body;
+    if (!customer_id) {
+      return NextResponse.json({ error: "Falta customer_id" }, { status: 400 });
+    }
+
+    const sb = adminClient();
+
+    if (action === "generar_pin") {
+      // Verificar que el cliente exista
+      const { data: customer, error: findErr } = await sb
+        .from("customers")
+        .select("id, name, phone, client_pin, portal_password")
+        .eq("id", customer_id)
+        .single();
+      if (findErr || !customer) {
+        return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+      }
+      // Si ya tiene PIN, devolverlo
+      if (customer.client_pin) {
+        return NextResponse.json({ customer });
+      }
+      // Generar nuevo PIN
+      const pin = await generateUniquePin(sb);
+      const password = customer.portal_password || "123456";
+      const { data: updated, error: updErr } = await sb
+        .from("customers")
+        .update({ client_pin: pin, portal_password: password })
+        .eq("id", customer_id)
+        .select("id, name, phone, client_pin, portal_password")
+        .single();
+      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+      return NextResponse.json({ customer: updated });
+    }
+
+    return NextResponse.json({ error: "Acción no reconocida" }, { status: 400 });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Internal error";
     return NextResponse.json({ error: msg }, { status: 500 });
