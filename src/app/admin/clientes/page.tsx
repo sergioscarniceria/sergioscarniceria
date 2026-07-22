@@ -71,6 +71,20 @@ export default function AdminClientesPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState("");
 
+  // Modal Nuevo cliente
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [savingNewCustomer, setSavingNewCustomer] = useState(false);
+  const [ncName, setNcName] = useState("");
+  const [ncPhone, setNcPhone] = useState("");
+  const [ncEmail, setNcEmail] = useState("");
+  const [ncBusiness, setNcBusiness] = useState("");
+  const [ncAddress, setNcAddress] = useState("");
+  const [ncType, setNcType] = useState("menudeo");
+  const [ncDiscount, setNcDiscount] = useState<number>(10);
+  const [ncGenerarPin, setNcGenerarPin] = useState(true);
+  const [ncError, setNcError] = useState("");
+  const [ncResult, setNcResult] = useState<{ name: string; pin?: string; phone?: string | null } | null>(null);
+
   useEffect(() => {
     loadCustomers();
   }, []);
@@ -380,6 +394,62 @@ export default function AdminClientesPage() {
     );
   }
 
+  async function crearNuevoCliente() {
+    if (!ncName.trim()) { setNcError("El nombre es obligatorio"); return; }
+    setNcError("");
+    setSavingNewCustomer(true);
+    try {
+      const res = await fetch("/api/admin/clientes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-secret": getAdminSecret(),
+        },
+        body: JSON.stringify({
+          name: ncName.trim(),
+          phone: ncPhone.trim() || null,
+          email: ncEmail.trim() || null,
+          business_name: ncBusiness.trim() || null,
+          address: ncAddress.trim() || null,
+          customer_type: ncType,
+          discount_percent: ncType === "mayoreo" ? ncDiscount : null,
+          generar_pin: ncGenerarPin,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        setNcError(result.error || "Error al crear");
+        setSavingNewCustomer(false);
+        return;
+      }
+      // Mostrar resultado con PIN si aplica
+      setNcResult({
+        name: result.customer?.name || ncName.trim(),
+        phone: result.customer?.phone,
+        pin: result.customer?.client_pin,
+      });
+      // Recargar lista
+      await loadCustomers();
+    } catch (err: any) {
+      setNcError("Error: " + (err.message || "desconocido"));
+    } finally {
+      setSavingNewCustomer(false);
+    }
+  }
+
+  function resetNuevoClienteForm() {
+    setNcName("");
+    setNcPhone("");
+    setNcEmail("");
+    setNcBusiness("");
+    setNcAddress("");
+    setNcType("menudeo");
+    setNcDiscount(10);
+    setNcGenerarPin(true);
+    setNcError("");
+    setNcResult(null);
+  }
+
   return (
     <div style={pageStyle}>
       <div style={glowTopLeft} />
@@ -416,6 +486,17 @@ export default function AdminClientesPage() {
               style={secondaryButtonStyle}
             >
               Exportar Excel
+            </button>
+            <button
+              onClick={() => { resetNuevoClienteForm(); setShowNewCustomer(true); }}
+              style={{
+                ...secondaryButtonStyle,
+                background: "#7b2218",
+                color: "white",
+                border: "none",
+              }}
+            >
+              + Nuevo cliente
             </button>
             <Link href="/" style={secondaryButtonStyle}>
               Inicio
@@ -997,6 +1078,151 @@ export default function AdminClientesPage() {
           </div>
         )}
       </div>
+      {/* Modal Nuevo cliente */}
+      {showNewCustomer && (
+        <div
+          onClick={() => !savingNewCustomer && !ncResult && setShowNewCustomer(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 18, padding: 22,
+              width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+            }}
+          >
+            {!ncResult ? (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                  <h2 style={{ margin: 0, color: "#3b1c16", fontSize: 20 }}>Nuevo cliente</h2>
+                  <button onClick={() => setShowNewCustomer(false)} style={{ background: "transparent", border: "none", fontSize: 22, cursor: "pointer", color: "#7a5a52" }}>×</button>
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Nombre *</label>
+                    <input value={ncName} onChange={(e) => setNcName(e.target.value)} placeholder="Ej. Juan Pérez" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Teléfono</label>
+                      <input value={ncPhone} onChange={(e) => setNcPhone(e.target.value)} placeholder="10 dígitos" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Correo</label>
+                      <input value={ncEmail} onChange={(e) => setNcEmail(e.target.value)} placeholder="correo@dominio.com" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Negocio</label>
+                    <input value={ncBusiness} onChange={(e) => setNcBusiness(e.target.value)} placeholder="Ej. Restaurante Umami" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Dirección</label>
+                    <input value={ncAddress} onChange={(e) => setNcAddress(e.target.value)} placeholder="Colonia, ciudad, referencias" style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", display: "block", marginBottom: 4 }}>Tipo de cliente</label>
+                    <select value={ncType} onChange={(e) => setNcType(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16", background: "white", boxSizing: "border-box" }}>
+                      <option value="menudeo">Menudeo</option>
+                      <option value="mayoreo">Mayoreo</option>
+                    </select>
+                  </div>
+
+                  {ncType === "mayoreo" && (
+                    <div>
+                      <label style={{ fontSize: 12, fontWeight: 700, color: "#a66a10", display: "block", marginBottom: 6 }}>Descuento mayoreo (%)</label>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {[5, 10, 15].map((v) => (
+                          <button
+                            key={v}
+                            onClick={() => setNcDiscount(v)}
+                            style={{
+                              flex: 1, padding: "10px 12px", borderRadius: 10,
+                              border: ncDiscount === v ? "2px solid #a66a10" : "1px solid rgba(92,27,17,0.15)",
+                              background: ncDiscount === v ? "#a66a10" : "white",
+                              color: ncDiscount === v ? "white" : "#3b1c16",
+                              fontWeight: 700, cursor: "pointer",
+                            }}
+                          >
+                            {v}%
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <label style={{
+                    display: "flex", alignItems: "center", gap: 8, padding: 10, borderRadius: 10,
+                    background: ncGenerarPin ? "rgba(31,122,77,0.06)" : "rgba(0,0,0,0.02)",
+                    border: `1px solid ${ncGenerarPin ? "rgba(31,122,77,0.25)" : "rgba(0,0,0,0.06)"}`,
+                    cursor: "pointer",
+                  }}>
+                    <input type="checkbox" checked={ncGenerarPin} onChange={(e) => setNcGenerarPin(e.target.checked)} style={{ width: 18, height: 18, cursor: "pointer" }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#3b1c16" }}>Generar PIN de portal automáticamente</div>
+                      <div style={{ fontSize: 11, color: "#7a5a52", marginTop: 2 }}>El cliente podrá entrar en sergioscarniceria.com/cliente con tel + PIN de 4 dígitos. Contraseña inicial: 123456</div>
+                    </div>
+                  </label>
+
+                  {ncError && (
+                    <div style={{ padding: 10, background: "rgba(180,35,24,0.08)", color: "#b42318", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+                      {ncError}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button onClick={() => setShowNewCustomer(false)} disabled={savingNewCustomer} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", background: "white", color: "#3b1c16", fontWeight: 700, cursor: "pointer" }}>
+                      Cancelar
+                    </button>
+                    <button onClick={crearNuevoCliente} disabled={savingNewCustomer} style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "none", background: "#7b2218", color: "white", fontWeight: 800, cursor: savingNewCustomer ? "default" : "pointer", opacity: savingNewCustomer ? 0.6 : 1 }}>
+                      {savingNewCustomer ? "Guardando..." : "Crear cliente"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div>
+                <div style={{ textAlign: "center", padding: 12, marginBottom: 14, background: "rgba(31,122,77,0.08)", borderRadius: 12 }}>
+                  <div style={{ fontSize: 40 }}>✅</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "#1f7a4d", marginTop: 4 }}>Cliente creado</div>
+                  <div style={{ fontSize: 14, color: "#3b1c16", marginTop: 4 }}>{ncResult.name}</div>
+                </div>
+
+                {ncResult.pin && (
+                  <div style={{ padding: 14, background: "#fbf8f3", borderRadius: 12, marginBottom: 12, border: "1px solid rgba(92,27,17,0.12)" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#7a5a52", marginBottom: 6 }}>DATOS DE ACCESO AL PORTAL</div>
+                    <div style={{ fontSize: 13, marginBottom: 4 }}><b>URL:</b> sergioscarniceria.com/cliente</div>
+                    <div style={{ fontSize: 13, marginBottom: 4 }}><b>Teléfono:</b> {ncResult.phone || "—"}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: "#7b2218", marginTop: 6, letterSpacing: 4 }}>PIN: {ncResult.pin}</div>
+                    <div style={{ fontSize: 11, color: "#7a5a52", marginTop: 6 }}>Contraseña alternativa inicial: <b>123456</b></div>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => { setNcResult(null); resetNuevoClienteForm(); }}
+                    style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", background: "white", color: "#3b1c16", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Crear otro
+                  </button>
+                  <button
+                    onClick={() => { setShowNewCustomer(false); setNcResult(null); resetNuevoClienteForm(); }}
+                    style={{ flex: 1, padding: "12px 16px", borderRadius: 10, border: "none", background: "#7b2218", color: "white", fontWeight: 800, cursor: "pointer" }}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
