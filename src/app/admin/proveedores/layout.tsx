@@ -7,9 +7,9 @@ export default function ProveedoresLayout({
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin"]}
+      allowedRoles={["admin", "contabilidad"]}
       title="Proveedores"
-      subtitle="Solo administradores"
+      subtitle="Solo administradores y contabilidad"
     >
       {children}
     </AccessGate>

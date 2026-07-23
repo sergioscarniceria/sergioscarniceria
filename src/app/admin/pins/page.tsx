@@ -121,6 +121,7 @@ const ROLE_DESCRIPTIONS: Record<string, string> = {
   admin: "Acceso total: dashboards, caja, productos, clientes, asistencia y todos los módulos",
   cajera: "Cobranza y Cuentas por Cobrar (CxC)",
   empleado: "Ventas mostrador, Producción, Pedidos y Repartidores",
+  contabilidad: "Solo Proveedores / Cuentas por Pagar (contadora)",
 };
 
 export default function AdminPinsPage() {
@@ -523,6 +524,7 @@ export default function AdminPinsPage() {
 
   const cajeras = empCodes.filter((e) => e.role === "cajera");
   const carniceros = empCodes.filter((e) => e.role === "carnicero");
+  const contadores = empCodes.filter((e) => e.role === "contabilidad");
 
   if (loading) {
     return (
@@ -804,6 +806,7 @@ export default function AdminPinsPage() {
                   <select value={newEmpRole} onChange={(e) => setNewEmpRole(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 10, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16" }}>
                     <option value="cajera">Cajera</option>
                     <option value="carnicero">Carnicero</option>
+                    <option value="contabilidad">Contabilidad</option>
                   </select>
                 </div>
               </div>
@@ -841,6 +844,7 @@ export default function AdminPinsPage() {
                           <select value={editEmpRole} onChange={(e) => setEditEmpRole(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16" }}>
                             <option value="cajera">Cajera</option>
                             <option value="carnicero">Carnicero</option>
+                            <option value="contabilidad">Contabilidad</option>
                           </select>
                         </div>
                         <div style={{ display: "flex", gap: 4 }}>
@@ -895,6 +899,7 @@ export default function AdminPinsPage() {
                           <select value={editEmpRole} onChange={(e) => setEditEmpRole(e.target.value)} style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(92,27,17,0.15)", fontSize: 14, color: "#3b1c16" }}>
                             <option value="cajera">Cajera</option>
                             <option value="carnicero">Carnicero</option>
+                            <option value="contabilidad">Contabilidad</option>
                           </select>
                         </div>
                         <div style={{ display: "flex", gap: 4 }}>
