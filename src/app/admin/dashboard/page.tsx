@@ -123,6 +123,9 @@ export default function AdminDashboardPage() {
   const [roundingCount, setRoundingCount] = useState(0);
   const [productSearch, setProductSearch] = useState("");
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
+  // productStats viene de RPC (agregacion en BD) para no limitarse a 2000 pedidos
+  const [rpcProductStats, setRpcProductStats] = useState<ProductStats[]>([]);
+  const [loadingProductStats, setLoadingProductStats] = useState(false);
   const [cashMovements, setCashMovements] = useState<{ amount: number; type: string; is_cancelled: boolean; payment_method?: string }[]>([]);
 
   // Market prices
@@ -869,28 +872,47 @@ export default function AdminDashboardPage() {
       .sort((a, b) => b.count - a.count);
   }, [orders]);
 
-  const productStats = useMemo(() => {
-    const totals: Record<string, ProductStats> = {};
-
-    for (const order of orders) {
-      for (const item of order.order_items || []) {
-        const key = item.product || "Sin nombre";
-        const esPieza = item.sale_type === "pieza" || !!item.is_fixed_price_piece;
-        if (!totals[key]) {
-          totals[key] = { product: key, revenue: 0, kilos: 0, piezas: 0, times: 0, isPieza: esPieza };
-        }
-        totals[key].revenue += itemSubtotal(item);
-        if (esPieza) {
-          totals[key].piezas += Number(item.quantity || 1);
+  // Cargar ventas por producto desde la BD (agregacion server-side, sin limite de 2000)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingProductStats(true);
+      try {
+        const { data, error } = await supabase.rpc("ventas_por_producto", {
+          p_from: dateFrom || null,
+          p_to: dateTo || null,
+        });
+        if (cancelled) return;
+        if (error) {
+          console.log("Error RPC ventas_por_producto:", error);
+          setRpcProductStats([]);
         } else {
-          totals[key].kilos += Number(item.kilos || 0);
+          const rows: ProductStats[] = (data || []).map((r: {
+            product: string; is_pieza: boolean; kilos: number | string;
+            piezas: number | string; veces: number | string; revenue: number | string;
+          }) => ({
+            product: r.product || "Sin nombre",
+            isPieza: !!r.is_pieza,
+            kilos: Number(r.kilos || 0),
+            piezas: Number(r.piezas || 0),
+            times: Number(r.veces || 0),
+            revenue: Number(r.revenue || 0),
+          }));
+          setRpcProductStats(rows);
         }
-        totals[key].times += 1;
+      } catch (err) {
+        if (!cancelled) {
+          console.log("Error cargando ventas por producto:", err);
+          setRpcProductStats([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingProductStats(false);
       }
-    }
+    })();
+    return () => { cancelled = true; };
+  }, [dateFrom, dateTo, supabase]);
 
-    return Object.values(totals).sort((a, b) => b.revenue - a.revenue);
-  }, [orders]);
+  const productStats = useMemo(() => rpcProductStats, [rpcProductStats]);
 
   const filteredProductStats = useMemo(() => {
     if (!productSearch.trim()) return productStats;
