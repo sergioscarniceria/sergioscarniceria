@@ -35,6 +35,14 @@ const moduleCategories = {
       { title: "Pantalla cliente", href: "/admin/display", desc: "Imágenes y videos del display" },
     ],
   },
+  contabilidad: {
+    label: "Contabilidad",
+    roles: ["contabilidad"],
+    items: [
+      { title: "Proveedores / CxP", href: "/admin/proveedores", desc: "Compras y pagos a proveedores" },
+      { title: "CxC", href: "/cxc", desc: "Cuentas por cobrar a clientes" },
+    ],
+  },
   gestion: {
     label: "Gestión",
     roles: ["admin", "cajera"],
@@ -176,7 +184,7 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
       const { data: appPin } = await supabase.from("app_pins").select("role").eq("pin", pin.trim()).single();
       if (appPin) { clearTimeout(timeout); onSuccess(appPin.role, ""); setChecking(false); return; }
       const { data: empCode } = await supabase.from("employee_codes").select("name, role").eq("code", pin.trim()).single();
-      if (empCode) { clearTimeout(timeout); onSuccess(empCode.role === "cajera" ? "cajera" : "carnicero", empCode.name); setChecking(false); return; }
+      if (empCode) { clearTimeout(timeout); onSuccess(empCode.role, empCode.name); setChecking(false); return; }
       clearTimeout(timeout);
       setError("PIN incorrecto");
       setChecking(false);
@@ -629,11 +637,11 @@ export default function HomePage() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div style={{ width: 40, height: 40, borderRadius: 12, background: C.primary, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 800, fontSize: 18 }}>
-                          {empRole === "admin" ? "A" : empRole === "cajera" ? "C" : "K"}
+                          {empRole === "admin" ? "A" : empRole === "cajera" ? "C" : empRole === "contabilidad" ? "$" : "K"}
                         </div>
                         <div>
                           <div style={{ fontWeight: 800, color: C.text, fontSize: 16 }}>
-                            {empRole === "admin" ? "Administrador" : empRole === "cajera" ? "Cajera" : "Carnicero"}
+                            {empRole === "admin" ? "Administrador" : empRole === "cajera" ? "Cajera" : empRole === "contabilidad" ? "Contabilidad" : "Carnicero"}
                             {empName && <span style={{ fontWeight: 600, color: C.muted }}> — {empName}</span>}
                           </div>
                           <div style={{ fontSize: 12, color: C.muted }}>Centro de operaciones</div>
