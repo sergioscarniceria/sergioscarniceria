@@ -7,7 +7,7 @@ export default function CxcLayout({
 }) {
   return (
     <AccessGate
-      allowedRoles={["admin", "cajera"]}
+      allowedRoles={["admin", "cajera", "contabilidad"]}
       title="Cuentas por cobrar"
       subtitle="Ingresa tu PIN para continuar"
     >
