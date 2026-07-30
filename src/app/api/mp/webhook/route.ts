@@ -124,21 +124,63 @@ export async function POST(req: NextRequest) {
       .update(updateData)
       .eq("id", orderId);
 
-    // Si quedo PAGADO, descontar inventario de complementos (una sola vez)
+    // Si quedo PAGADO: descontar inventario + registrar movimiento de caja (una sola vez)
     if (payment.status === "approved") {
       try {
         const { data: orderItems } = await supabase
           .from("order_items")
-          .select("product, kilos, quantity, sale_type, is_fixed_price_piece")
+          .select("product, kilos, quantity, sale_type, is_fixed_price_piece, price")
           .eq("order_id", orderId);
+
         if (orderItems && orderItems.length > 0) {
+          // a) Descontar inventario
           await descontarInventarioDeVenta(supabase, orderItems, {
             referencia: `pedido online ${String(orderId).slice(0, 6)}`,
             createdBy: "mercado pago",
           });
+
+          // b) Registrar movimiento en caja (categoria propia: mercado_pago)
+          //    Evitar duplicado si el webhook llega dos veces
+          const { data: existing } = await supabase
+            .from("cash_movements")
+            .select("id")
+            .eq("reference_id", orderId)
+            .eq("payment_method", "mercado_pago")
+            .limit(1);
+
+          if (!existing || existing.length === 0) {
+            const total = orderItems.reduce((acc: number, it: {
+              sale_type?: string | null; is_fixed_price_piece?: boolean | null;
+              quantity?: number | null; kilos?: number | null; price?: number | null;
+            }) => {
+              const esPieza = it.sale_type === "pieza" || !!it.is_fixed_price_piece;
+              const qty = Number(esPieza ? (it.quantity ?? it.kilos ?? 0) : (it.kilos ?? 0));
+              return acc + qty * Number(it.price || 0);
+            }, 0);
+
+            if (total > 0) {
+              const { data: orderRow } = await supabase
+                .from("orders")
+                .select("customer_name, discount_amount")
+                .eq("id", orderId)
+                .single();
+
+              const descuento = Number(orderRow?.discount_amount || 0);
+              const montoFinal = Math.max(0, total - descuento);
+
+              await supabase.from("cash_movements").insert([{
+                type: "venta",
+                source: "mercado_pago",
+                amount: montoFinal,
+                payment_method: "mercado_pago",
+                reference_id: orderId,
+                cashier_name: "Pago en línea",
+              }]);
+            }
+          }
         }
       } catch (e) {
-        console.error("Error descontando inventario (MP webhook):", e);
+        console.error("Error procesando venta MP (inventario/caja):", e);
       }
     }
 

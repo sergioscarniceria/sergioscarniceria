@@ -293,6 +293,7 @@ function methodName(m?: string | null) {
   if (m === "efectivo") return "Efectivo";
   if (m === "tarjeta") return "Tarjeta";
   if (m === "transferencia") return "Transferencia";
+  if (m === "mercado_pago" || m === "tarjeta_mp") return "Mercado Pago";
   return m;
 }
 
@@ -773,16 +774,19 @@ export default function CajaPage() {
     const ventasEfectivo = sum(ventas, "efectivo");
     const ventasTarjeta = sum(ventas, "tarjeta");
     const ventasTransferencia = sum(ventas, "transferencia");
+    const ventasMercadoPago = sum(ventas, "mercado_pago") + sum(ventas, "tarjeta_mp");
     const cxcEfectivo = sum(cxc, "efectivo");
     const cxcTarjeta = sum(cxc, "tarjeta");
     const cxcTransferencia = sum(cxc, "transferencia");
+    const cxcMercadoPago = sum(cxc, "mercado_pago") + sum(cxc, "tarjeta_mp");
 
-    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia;
-    const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia;
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia + ventasMercadoPago;
+    const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia + cxcMercadoPago;
     const totalEfectivoIngreso = ventasEfectivo + cxcEfectivo;
     const totalTarjeta = ventasTarjeta + cxcTarjeta;
     const totalTransferencia = ventasTransferencia + cxcTransferencia;
-    const totalGeneral = totalEfectivoIngreso + totalTarjeta + totalTransferencia;
+    const totalMercadoPago = ventasMercadoPago + cxcMercadoPago;
+    const totalGeneral = totalEfectivoIngreso + totalTarjeta + totalTransferencia + totalMercadoPago;
 
     // Filtrar gastos posteriores al último corte (si existe)
     const activeExpenses = todayClosure?.created_at
@@ -808,10 +812,10 @@ export default function CajaPage() {
     const ticketPromedio = ticketCount > 0 ? totalVentas / ticketCount : 0;
 
     return {
-      ventasEfectivo, ventasTarjeta, ventasTransferencia,
-      cxcEfectivo, cxcTarjeta, cxcTransferencia,
+      ventasEfectivo, ventasTarjeta, ventasTransferencia, ventasMercadoPago,
+      cxcEfectivo, cxcTarjeta, cxcTransferencia, cxcMercadoPago,
       totalVentas, totalCxc,
-      totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalGeneral,
+      totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalMercadoPago, totalGeneral,
       totalGastos, totalGastosEfectivo, totalPrestamos, fondoInicial, efectivoEsperado,
       ticketCount, ticketPromedio,
       totalMovements: active.length,
@@ -1818,6 +1822,7 @@ export default function CajaPage() {
       ["Ventas efectivo", Number(stats.ventasEfectivo.toFixed(2))],
       ["Ventas tarjeta", Number(stats.ventasTarjeta.toFixed(2))],
       ["Ventas transferencia", Number(stats.ventasTransferencia.toFixed(2))],
+      ["Ventas Mercado Pago", Number(stats.ventasMercadoPago.toFixed(2))],
       ["Total ventas", Number(stats.totalVentas.toFixed(2))],
       ["Cobros CxC efectivo", Number(stats.cxcEfectivo.toFixed(2))],
       ["Cobros CxC tarjeta", Number(stats.cxcTarjeta.toFixed(2))],
@@ -2054,6 +2059,9 @@ export default function CajaPage() {
                   <MiniCard label="Efectivo" value={`$${money(stats.ventasEfectivo)}`} />
                   <MiniCard label="Tarjeta" value={`$${money(stats.ventasTarjeta)}`} />
                   <MiniCard label="Transferencia" value={`$${money(stats.ventasTransferencia)}`} />
+                  {stats.ventasMercadoPago > 0 && (
+                    <MiniCard label="Mercado Pago" value={`$${money(stats.ventasMercadoPago)}`} />
+                  )}
                   <MiniCard label="Total ventas" value={`$${money(stats.totalVentas)}`} strong />
                 </MiniGrid>
                 <div style={{ marginTop: 10, color: C.muted, fontSize: 13 }}>
@@ -2066,6 +2074,9 @@ export default function CajaPage() {
                   <MiniCard label="Efectivo" value={`$${money(stats.cxcEfectivo)}`} />
                   <MiniCard label="Tarjeta" value={`$${money(stats.cxcTarjeta)}`} />
                   <MiniCard label="Transferencia" value={`$${money(stats.cxcTransferencia)}`} />
+                  {stats.cxcMercadoPago > 0 && (
+                    <MiniCard label="Mercado Pago" value={`$${money(stats.cxcMercadoPago)}`} />
+                  )}
                   <MiniCard label="Total CxC" value={`$${money(stats.totalCxc)}`} strong />
                 </MiniGrid>
               </Panel>
