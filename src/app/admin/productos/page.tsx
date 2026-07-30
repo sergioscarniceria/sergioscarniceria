@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { getAdminSecret } from "@/lib/admin-secret";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { exportToExcel } from "@/lib/exportExcel";
@@ -201,6 +202,34 @@ const [recommendSearch, setRecommendSearch] = useState("");
 
     resetForm();
     await loadProducts();
+  }
+
+  async function deleteProduct(product: Product) {
+    const ok = confirm(
+      `¿ELIMINAR permanentemente "${product.name}"?\n\n` +
+      `Esta acción no se puede deshacer.\n\n` +
+      `Si el producto tiene ventas en el historial, el sistema NO lo va a borrar ` +
+      `(para no perder tus reportes). En ese caso solo desactívalo.`
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch("/api/admin/productos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", "x-admin-secret": getAdminSecret() },
+        body: JSON.stringify({ product_id: product.id }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        alert(result.error || "No se pudo eliminar");
+        return;
+      }
+      alert(`"${result.deleted}" eliminado correctamente`);
+      await loadProducts();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "desconocido";
+      alert("Error: " + msg);
+    }
   }
 
   async function toggleActive(product: Product) {
@@ -629,6 +658,19 @@ const [recommendSearch, setRecommendSearch] = useState("");
                     >
                       {product.is_active ? "Desactivar" : "Activar"}
                     </button>
+                    {!product.is_active && (
+                      <button
+                        onClick={() => deleteProduct(product)}
+                        style={{
+                          ...toggleButtonStyle,
+                          background: "rgba(180,35,24,0.10)",
+                          color: "#b42318",
+                          borderColor: "rgba(180,35,24,0.25)",
+                        }}
+                      >
+                        🗑 Eliminar
+                      </button>
+                    )}
 
                     <button
                       onClick={() => toggleExcluded(product)}
