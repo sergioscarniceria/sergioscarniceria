@@ -64,6 +64,17 @@ export default function InventarioComplementosPage() {
 
   // Edit purchase price
   const [editPriceId, setEditPriceId] = useState<string | null>(null);
+
+  // Modal historial completo de modificaciones
+  const [showAllMovements, setShowAllMovements] = useState(false);
+  const [allMovements, setAllMovements] = useState<{
+    id: string; item_id: string; movement_type: string; quantity: number;
+    previous_stock: number; new_stock: number; notes: string | null;
+    created_by: string | null; created_at: string; authorized_by: string | null;
+  }[]>([]);
+  const [loadingMovements, setLoadingMovements] = useState(false);
+  const [movFilterType, setMovFilterType] = useState<"todos" | "entrada" | "salida">("todos");
+  const [movSearchProduct, setMovSearchProduct] = useState("");
   const [editPriceVal, setEditPriceVal] = useState("");
 
   // History
@@ -225,6 +236,43 @@ export default function InventarioComplementosPage() {
     outline: "none", background: "rgba(255,255,255,0.85)", color: C.text, fontSize: 15, width: "100%",
   };
 
+  async function loadAllMovements() {
+    setLoadingMovements(true);
+    try {
+      const { data, error } = await supabase
+        .from("inventory_movements")
+        .select("id, item_id, movement_type, quantity, previous_stock, new_stock, notes, created_by, created_at, authorized_by")
+        .eq("item_type", "complemento")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) {
+        console.log("Error cargando movimientos:", error);
+        setAllMovements([]);
+      } else {
+        setAllMovements((data as typeof allMovements) || []);
+      }
+    } catch (err) {
+      console.log("Error:", err);
+      setAllMovements([]);
+    } finally {
+      setLoadingMovements(false);
+    }
+  }
+
+  function productNameById(id: string): string {
+    const p = products.find((x) => x.id === id);
+    return p?.name || "(producto eliminado)";
+  }
+
+  const filteredMovements = allMovements.filter((mv) => {
+    if (movFilterType !== "todos" && mv.movement_type !== movFilterType) return false;
+    if (movSearchProduct.trim()) {
+      const q = movSearchProduct.toLowerCase().trim();
+      if (!productNameById(mv.item_id).toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
   return (
     <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${C.bgSoft} 0%, ${C.bg} 100%)`, padding: 16, fontFamily: "Arial, sans-serif" }}>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -250,6 +298,15 @@ export default function InventarioComplementosPage() {
               padding: "10px 18px", borderRadius: 14, border: `1px solid ${C.border}`,
               background: "white", color: C.text, textDecoration: "none", fontWeight: 700, fontSize: 14,
             }}>Auditoría</Link>
+            <button
+              onClick={() => { setShowAllMovements(true); loadAllMovements(); }}
+              style={{
+                padding: "10px 18px", borderRadius: 14, border: "none",
+                background: C.primary, color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer",
+              }}
+            >
+              Modificaciones
+            </button>
             <Link href="/" style={{
               padding: "10px 18px", borderRadius: 14, border: `1px solid ${C.border}`,
               background: "rgba(255,255,255,0.75)", color: C.text, textDecoration: "none", fontWeight: 700,
@@ -505,6 +562,122 @@ export default function InventarioComplementosPage() {
                 background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
                 color: "white", opacity: editSaving ? 0.7 : 1,
               }}>{editSaving ? "..." : "Guardar cambios"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal: Historial completo de modificaciones */}
+      {showAllMovements && (
+        <div
+          onClick={() => setShowAllMovements(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white", borderRadius: 18, padding: 20,
+              width: "100%", maxWidth: 900, maxHeight: "90vh",
+              display: "flex", flexDirection: "column", gap: 12,
+              boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h2 style={{ margin: 0, color: C.text, fontSize: 20 }}>Modificaciones de inventario</h2>
+                <p style={{ margin: "4px 0 0", color: C.muted, fontSize: 13 }}>
+                  Últimos 500 movimientos — {filteredMovements.length} mostrados
+                </p>
+              </div>
+              <button onClick={() => setShowAllMovements(false)} style={{ background: "transparent", border: "none", fontSize: 24, cursor: "pointer", color: C.muted }}>×</button>
+            </div>
+
+            {/* Filtros */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                placeholder="Buscar producto..."
+                value={movSearchProduct}
+                onChange={(e) => setMovSearchProduct(e.target.value)}
+                style={{
+                  flex: "1 1 200px", padding: "8px 12px", borderRadius: 10,
+                  border: `1px solid ${C.border}`, fontSize: 14, color: C.text, background: "white",
+                }}
+              />
+              {(["todos", "entrada", "salida"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setMovFilterType(t)}
+                  style={{
+                    padding: "8px 14px", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer",
+                    border: movFilterType === t ? "none" : `1px solid ${C.border}`,
+                    background: movFilterType === t
+                      ? (t === "entrada" ? C.success : t === "salida" ? C.danger : C.primary)
+                      : "white",
+                    color: movFilterType === t ? "white" : C.text,
+                  }}
+                >
+                  {t === "todos" ? "Todos" : t === "entrada" ? "Entradas" : "Salidas"}
+                </button>
+              ))}
+            </div>
+
+            {/* Lista */}
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 200 }}>
+              {loadingMovements ? (
+                <div style={{ textAlign: "center", padding: 30, color: C.muted }}>Cargando...</div>
+              ) : filteredMovements.length === 0 ? (
+                <div style={{ textAlign: "center", padding: 30, color: C.muted }}>Sin movimientos</div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {filteredMovements.map((mv) => {
+                    const esEntrada = mv.movement_type === "entrada";
+                    return (
+                      <div key={mv.id} style={{
+                        padding: 12, borderRadius: 10,
+                        background: esEntrada ? "rgba(31,122,77,0.04)" : "rgba(180,35,24,0.04)",
+                        border: `1px solid ${esEntrada ? "rgba(31,122,77,0.18)" : "rgba(180,35,24,0.18)"}`,
+                        display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12,
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, color: C.text, fontSize: 15 }}>
+                            {productNameById(mv.item_id)}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
+                            {new Date(mv.created_at).toLocaleString("es-MX", {
+                              timeZone: "America/Mexico_City",
+                              day: "2-digit", month: "short", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.text, marginTop: 4 }}>
+                            Por: <b>{mv.created_by || "—"}</b>
+                            {mv.authorized_by && <> · Autorizó: <b>{mv.authorized_by}</b></>}
+                          </div>
+                          {mv.notes && (
+                            <div style={{ fontSize: 12, color: C.muted, marginTop: 4, fontStyle: "italic" }}>
+                              {mv.notes}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div style={{
+                            fontSize: 18, fontWeight: 900,
+                            color: esEntrada ? C.success : C.danger,
+                          }}>
+                            {esEntrada ? "+" : "−"}{mv.quantity}
+                          </div>
+                          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                            {mv.previous_stock} → {mv.new_stock}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
