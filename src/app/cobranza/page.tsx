@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { itemSubtotal } from "@/lib/itemSubtotal";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -1767,6 +1768,23 @@ if (customerMode === "existente" && selectedCustomerId) {
     alert("La venta se guardó, pero fallaron los renglones");
     setSaving(false);
     return;
+  }
+
+  // Descontar inventario de complementos/piezas vendidas manualmente
+  try {
+    await descontarInventarioDeVenta(
+      supabase,
+      itemsPayload.map((it) => ({
+        product: it.product,
+        kilos: it.kilos,
+        quantity: null,
+        sale_type: "kg",
+        is_fixed_price_piece: false,
+      })),
+      { referencia: `venta manual ${orderData.id.slice(0, 6)}`, createdBy: cashierName || "cajera" }
+    );
+  } catch (e) {
+    console.log("Error descontando inventario (venta manual):", e);
   }
 
   const { error: cashError } = await supabase

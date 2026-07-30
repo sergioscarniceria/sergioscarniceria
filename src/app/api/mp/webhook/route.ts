@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
 
@@ -122,6 +123,24 @@ export async function POST(req: NextRequest) {
       .from("orders")
       .update(updateData)
       .eq("id", orderId);
+
+    // Si quedo PAGADO, descontar inventario de complementos (una sola vez)
+    if (payment.status === "approved") {
+      try {
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("product, kilos, quantity, sale_type, is_fixed_price_piece")
+          .eq("order_id", orderId);
+        if (orderItems && orderItems.length > 0) {
+          await descontarInventarioDeVenta(supabase, orderItems, {
+            referencia: `pedido online ${String(orderId).slice(0, 6)}`,
+            createdBy: "mercado pago",
+          });
+        }
+      } catch (e) {
+        console.error("Error descontando inventario (MP webhook):", e);
+      }
+    }
 
     console.log(`Webhook procesado: order=${orderId} status=${paymentStatus} mpPayment=${paymentId}`);
 

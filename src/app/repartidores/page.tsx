@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 
@@ -255,6 +256,23 @@ export default function RepartidoresPage() {
       payment_method: "mercado_pago",
     }).eq("id", order.id);
     if (error) { alert("Error al marcar como pagado"); console.log(error); }
+    else {
+      // Descontar inventario de complementos al marcar pagado
+      try {
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("product, kilos, quantity, sale_type, is_fixed_price_piece")
+          .eq("order_id", order.id);
+        if (orderItems && orderItems.length > 0) {
+          await descontarInventarioDeVenta(supabase, orderItems, {
+            referencia: `entrega ${order.id.slice(0, 6)}`,
+            createdBy: order.delivery_driver || "repartidor",
+          });
+        }
+      } catch (e) {
+        console.log("Error descontando inventario:", e);
+      }
+    }
     setSavingId(null);
     await loadOrders(false);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
@@ -186,6 +187,24 @@ const [changingId, setChangingId] = useState<string | null>(null);
         payment_method: "mercado_pago",
       })
       .eq("id", id);
+
+    // Descontar inventario de complementos al marcar pagado
+    if (!error) {
+      try {
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("product, kilos, quantity, sale_type, is_fixed_price_piece")
+          .eq("order_id", id);
+        if (orderItems && orderItems.length > 0) {
+          await descontarInventarioDeVenta(supabase, orderItems, {
+            referencia: `pedido ${id.slice(0, 6)}`,
+            createdBy: "pedidos",
+          });
+        }
+      } catch (e) {
+        console.log("Error descontando inventario:", e);
+      }
+    }
 
     if (error) {
       alert("Error al marcar como pagado: " + error.message);

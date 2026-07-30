@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { moneyRound, roundingDiff } from "@/lib/money";
@@ -399,6 +400,23 @@ export default function NuevaNotaCxcPage() {
       alert("La nota se creó, pero fallaron los renglones");
       setSaving(false);
       return;
+    }
+
+    // Descontar inventario de complementos vendidos a credito
+    try {
+      await descontarInventarioDeVenta(
+        supabase,
+        itemsPayload.map((it) => ({
+          product: it.product,
+          quantity: it.unit === "pieza" || it.unit === "pza" ? it.quantity : null,
+          kilos: it.unit === "pieza" || it.unit === "pza" ? null : it.quantity,
+          sale_type: it.unit === "pieza" || it.unit === "pza" ? "pieza" : "kg",
+          is_fixed_price_piece: it.unit === "pieza" || it.unit === "pza",
+        })),
+        { referencia: `nota ${finalNoteNumber}`, createdBy: "cxc" }
+      );
+    } catch (e) {
+      console.log("Error descontando inventario (CxC):", e);
     }
 
     alert("Nota a crédito guardada");
