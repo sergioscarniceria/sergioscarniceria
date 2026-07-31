@@ -125,6 +125,11 @@ export default function AdminDashboardPage() {
   const [expandedProduct, setExpandedProduct] = useState<string | null>(null);
   // productStats viene de RPC (agregacion en BD) para no limitarse a 2000 pedidos
   const [rpcProductStats, setRpcProductStats] = useState<ProductStats[]>([]);
+  // Resumen de ventas agregado en BD (sin limite de 2000 pedidos)
+  const [rpcResumen, setRpcResumen] = useState<{
+    tickets: number; total_bruto: number; descuentos: number;
+    total_neto: number; kilos_vendidos: number; clientes_unicos: number;
+  } | null>(null);
   const [loadingProductStats, setLoadingProductStats] = useState(false);
   const [cashMovements, setCashMovements] = useState<{ amount: number; type: string; is_cancelled: boolean; payment_method?: string }[]>([]);
 
@@ -493,13 +498,14 @@ export default function AdminDashboardPage() {
     [orders]
   );
 
-  const totalSales = ordersSales + historicalSales;
+  // Preferir los totales del RPC (cuentan TODOS los pedidos, no solo los 2000 cargados)
+  const totalSales = rpcResumen ? rpcResumen.total_neto + historicalSales : ordersSales + historicalSales;
 
-  const totalOrders = orders.length;
+  const totalOrders = rpcResumen ? rpcResumen.tickets : orders.length;
 
   const totalKilos = useMemo(
-    () => orders.reduce((acc, order) => acc + orderKilos(order), 0),
-    [orders]
+    () => rpcResumen ? rpcResumen.kilos_vendidos : orders.reduce((acc, order) => acc + orderKilos(order), 0),
+    [orders, rpcResumen]
   );
 
   const averageTicket = totalOrders > 0 ? totalSales / totalOrders : 0;
@@ -878,6 +884,31 @@ export default function AdminDashboardPage() {
     (async () => {
       setLoadingProductStats(true);
       try {
+        // Cargar resumen general en paralelo
+        supabase
+          .rpc("resumen_ventas", { p_from: dateFrom || null, p_to: dateTo || null })
+          .then(({ data: rd, error: rerr }) => {
+            if (cancelled) return;
+            if (rerr) {
+              console.log("Error RPC resumen_ventas:", rerr);
+              setRpcResumen(null);
+            } else if (rd && rd.length > 0) {
+              const r = rd[0] as {
+                tickets: number | string; total_bruto: number | string;
+                descuentos: number | string; total_neto: number | string;
+                kilos_vendidos: number | string; clientes_unicos: number | string;
+              };
+              setRpcResumen({
+                tickets: Number(r.tickets || 0),
+                total_bruto: Number(r.total_bruto || 0),
+                descuentos: Number(r.descuentos || 0),
+                total_neto: Number(r.total_neto || 0),
+                kilos_vendidos: Number(r.kilos_vendidos || 0),
+                clientes_unicos: Number(r.clientes_unicos || 0),
+              });
+            }
+          });
+
         const { data, error } = await supabase.rpc("ventas_por_producto", {
           p_from: dateFrom || null,
           p_to: dateTo || null,
