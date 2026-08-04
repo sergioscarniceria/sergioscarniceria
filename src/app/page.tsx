@@ -54,6 +54,7 @@ const moduleCategories = {
       { title: "Compras", href: "/inventario/compras", desc: "Órdenes a proveedores" },
       { title: "Auditoría", href: "/inventario/auditoria", desc: "Conteo físico y pérdidas" },
       { title: "Dashboard asistencia", href: "/admin/dashboard/asistencia", desc: "Control de asistencia" },
+      { title: "Incidencias personal", href: "/admin/incidencias", desc: "Retardos, amonestaciones y faltas" },
     ],
   },
   caja: {
