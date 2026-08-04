@@ -31,6 +31,7 @@ const moduleCategories = {
     items: [
       { title: "Dashboard ventas", href: "/admin/dashboard", desc: "Resumen del negocio" },
       { title: "Historial clientes", href: "/admin/historial-clientes", desc: "Cuanto ha comprado cada cliente" },
+      { title: "Programa de puntos", href: "/admin/puntos", desc: "Puntos por cliente y canje" },
       { title: "Proveedores / CxP", href: "/admin/proveedores", desc: "Compras y pagos" },
       { title: "Gestión de PINs", href: "/admin/pins", desc: "Accesos por rol" },
       { title: "Pantalla cliente", href: "/admin/display", desc: "Imágenes y videos del display" },
