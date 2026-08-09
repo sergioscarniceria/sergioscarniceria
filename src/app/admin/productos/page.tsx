@@ -12,6 +12,7 @@ type Product = {
   price: number | null;
   fixed_piece_price?: number | null;
   is_active?: boolean | null;
+  is_excluded_from_points?: boolean | null;
   is_excluded_from_discount?: boolean | null;
   category?: string | null;
   recommended_with?: string[] | null;
@@ -230,6 +231,21 @@ const [recommendSearch, setRecommendSearch] = useState("");
       const msg = err instanceof Error ? err.message : "desconocido";
       alert("Error: " + msg);
     }
+  }
+
+  async function togglePoints(product: Product) {
+    const nextValue = !product.is_excluded_from_points;
+    setSaving(true);
+    const { error } = await supabase
+      .from("products")
+      .update({ is_excluded_from_points: nextValue })
+      .eq("id", product.id);
+    if (error) {
+      alert("Error: " + error.message);
+    } else {
+      await loadProducts();
+    }
+    setSaving(false);
   }
 
   async function toggleActive(product: Product) {
@@ -679,6 +695,16 @@ const [recommendSearch, setRecommendSearch] = useState("");
                       {product.is_excluded_from_discount
                         ? "Permitir descuento"
                         : "Quitar descuento"}
+                    </button>
+                    <button
+                      onClick={() => togglePoints(product)}
+                      style={{
+                        ...discountButtonStyle,
+                        background: product.is_excluded_from_points ? "rgba(180,35,24,0.10)" : "rgba(53,92,125,0.10)",
+                        color: product.is_excluded_from_points ? "#b42318" : "#355c7d",
+                      }}
+                    >
+                      {product.is_excluded_from_points ? "Sin puntos" : "Da puntos"}
                     </button>
                   </div>
                 </div>

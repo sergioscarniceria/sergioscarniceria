@@ -826,9 +826,40 @@ return itemSubtotal(item);
       }
     }
 
-    // ─── Puntos de lealtad (solo sin descuento, con cliente identificado) ───
-    if (descuento <= 0 && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
-      const pointsEarned = Math.floor(finalTotal / 100);
+    // ─── Puntos de lealtad ───
+    // NO acumula puntos si: hay descuento manual, es cliente mayoreo, o tiene descuento por perfil
+    const clienteConDescuento = await (async () => {
+      if (!selectedTicket.customer_id) return false;
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("customer_type, discount_percent")
+        .eq("id", selectedTicket.customer_id)
+        .maybeSingle();
+      if (!cust) return false;
+      return cust.customer_type === "mayoreo" || Number(cust.discount_percent || 0) > 0;
+    })();
+
+    if (descuento <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+      // Excluir del calculo los productos marcados como "no dan puntos"
+      const baseParaPuntos = await (async () => {
+        const nombres = (selectedTicket.order_items || []).map((it) => it.product).filter(Boolean);
+        if (nombres.length === 0) return finalTotal;
+        const { data: prods } = await supabase
+          .from("products")
+          .select("name, is_excluded_from_points")
+          .in("name", nombres as string[]);
+        const excluidos = new Set(
+          (prods || []).filter((p) => p.is_excluded_from_points).map((p) => p.name)
+        );
+        if (excluidos.size === 0) return finalTotal;
+        const montoExcluido = (selectedTicket.order_items || []).reduce((acc, it) => {
+          if (!excluidos.has(it.product)) return acc;
+          return acc + itemSubtotal(it);
+        }, 0);
+        return Math.max(0, finalTotal - montoExcluido);
+      })();
+
+      const pointsEarned = Math.floor(baseParaPuntos / 100);
       if (pointsEarned > 0) {
         const { data: acct } = await supabase
           .from("loyalty_accounts")
@@ -983,9 +1014,40 @@ return itemSubtotal(item);
       }
     }
 
-    // ─── Puntos de lealtad (solo sin descuento, con cliente identificado) ───
-    if (descuento <= 0 && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
-      const pointsEarned = Math.floor(finalTotal / 100);
+    // ─── Puntos de lealtad ───
+    // NO acumula puntos si: hay descuento manual, es cliente mayoreo, o tiene descuento por perfil
+    const clienteConDescuento = await (async () => {
+      if (!selectedTicket.customer_id) return false;
+      const { data: cust } = await supabase
+        .from("customers")
+        .select("customer_type, discount_percent")
+        .eq("id", selectedTicket.customer_id)
+        .maybeSingle();
+      if (!cust) return false;
+      return cust.customer_type === "mayoreo" || Number(cust.discount_percent || 0) > 0;
+    })();
+
+    if (descuento <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+      // Excluir del calculo los productos marcados como "no dan puntos"
+      const baseParaPuntos = await (async () => {
+        const nombres = (selectedTicket.order_items || []).map((it) => it.product).filter(Boolean);
+        if (nombres.length === 0) return finalTotal;
+        const { data: prods } = await supabase
+          .from("products")
+          .select("name, is_excluded_from_points")
+          .in("name", nombres as string[]);
+        const excluidos = new Set(
+          (prods || []).filter((p) => p.is_excluded_from_points).map((p) => p.name)
+        );
+        if (excluidos.size === 0) return finalTotal;
+        const montoExcluido = (selectedTicket.order_items || []).reduce((acc, it) => {
+          if (!excluidos.has(it.product)) return acc;
+          return acc + itemSubtotal(it);
+        }, 0);
+        return Math.max(0, finalTotal - montoExcluido);
+      })();
+
+      const pointsEarned = Math.floor(baseParaPuntos / 100);
       if (pointsEarned > 0) {
         const { data: acct } = await supabase
           .from("loyalty_accounts")
