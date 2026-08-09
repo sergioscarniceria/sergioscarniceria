@@ -5,7 +5,7 @@ import { itemSubtotal } from "@/lib/itemSubtotal";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
-import { printCashCut, type CashCutData } from "@/lib/printer";
+import { printCashCut, smartPrintTicket, type CashCutData, type TicketData } from "@/lib/printer";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
 // jsPDF se carga desde CDN (el paquete npm falla en build con Turbopack/fflate)
@@ -395,6 +395,7 @@ export default function CajaPage() {
   const [changingMethod, setChangingMethod] = useState(false);
   const [changeMethodError, setChangeMethodError] = useState<string>("");
   const [showMethodChangePanel, setShowMethodChangePanel] = useState(false);
+  const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [cancelCode, setCancelCode] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [cancelSaving, setCancelSaving] = useState(false);
@@ -575,6 +576,72 @@ export default function CajaPage() {
     }
 
     setDesgloseLoading(false);
+  }
+
+  async function reimprimirTicket(m: Movement) {
+    if (!m.reference_id) {
+      alert("Este movimiento no tiene ticket asociado");
+      return;
+    }
+    setReprintingId(m.id);
+    try {
+      const { data: order, error } = await supabase
+        .from("orders")
+        .select("id, customer_name, captured_by, butcher_name, discount_amount, rounding_amount, notes, payment_method, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")
+        .eq("id", m.reference_id)
+        .single();
+
+      if (error || !order) {
+        alert("No se encontró el ticket original");
+        setReprintingId(null);
+        return;
+      }
+
+      const items = (order.order_items || []) as {
+        product: string; kilos: number | null; price: number | null;
+        quantity: number | null; sale_type: string | null;
+        is_fixed_price_piece: boolean | null; prepared_kilos: number | null;
+      }[];
+
+      const subtotal = items.reduce((acc, it) => {
+        const esPieza = it.sale_type === "pieza" || !!it.is_fixed_price_piece;
+        const qty = Number(esPieza ? (it.quantity ?? it.kilos ?? 0) : (it.prepared_kilos ?? it.kilos ?? 0));
+        return acc + qty * Number(it.price || 0);
+      }, 0);
+
+      const descuento = Number(order.discount_amount || 0);
+      const total = Number(m.amount || 0) || (subtotal - descuento);
+
+      const ticket: TicketData = {
+        folio: `TK-${String(order.id).slice(0, 6).toUpperCase()}`,
+        customerName: order.customer_name || null,
+        attendant: order.butcher_name || null,
+        cashier: order.captured_by || m.cashier_name || null,
+        items: items.map((it) => ({
+          product: it.product,
+          kilos: it.kilos,
+          price: it.price,
+          quantity: it.quantity,
+          sale_type: it.sale_type,
+          is_fixed_price_piece: it.is_fixed_price_piece,
+          prepared_kilos: it.prepared_kilos,
+        })),
+        subtotal,
+        discount: descuento,
+        total,
+        paymentMethod: order.payment_method || m.payment_method || null,
+        qrData: String(order.id),
+        notes: order.notes || null,
+        type: "venta",
+      };
+
+      await smartPrintTicket(ticket);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "desconocido";
+      alert("Error al reimprimir: " + msg);
+    } finally {
+      setReprintingId(null);
+    }
   }
 
   async function changeMethodSave() {
@@ -2134,6 +2201,15 @@ export default function CajaPage() {
                               Ver desglose
                             </button>
                           )}
+                          {m.reference_id && (
+                            <button
+                              onClick={() => reimprimirTicket(m)}
+                              disabled={reprintingId === m.id}
+                              style={reprintBtnSt}
+                            >
+                              {reprintingId === m.id ? "Imprimiendo..." : "Reimprimir"}
+                            </button>
+                          )}
                           <button
                             onClick={() => {
                               setChangeMethodMovement(m);
@@ -2194,9 +2270,16 @@ export default function CajaPage() {
                           </div>
                         </div>
                         {m.reference_id && (
-                          <div style={{ marginTop: 8 }}>
+                          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <button onClick={() => openDesglose(m)} style={desgloseBtnSt}>
                               Ver desglose
+                            </button>
+                            <button
+                              onClick={() => reimprimirTicket(m)}
+                              disabled={reprintingId === m.id}
+                              style={reprintBtnSt}
+                            >
+                              {reprintingId === m.id ? "Imprimiendo..." : "Reimprimir"}
                             </button>
                           </div>
                         )}
@@ -3616,6 +3699,7 @@ const btnSec: React.CSSProperties = { display: "inline-block", padding: "10px 16
 const btnPri: React.CSSProperties = { display: "inline-block", padding: "12px 20px", borderRadius: 14, border: "none", background: `linear-gradient(180deg, ${C.primary} 0%, ${C.primaryDark} 100%)`, color: "white", fontWeight: 700, boxShadow: "0 8px 18px rgba(123, 34, 24, 0.20)", cursor: "pointer", fontSize: 15 };
 const tdSt: React.CSSProperties = { padding: "8px", borderBottom: `1px solid ${C.border}`, color: C.text };
 const tabBtnSt: React.CSSProperties = { padding: "10px 16px", borderRadius: 14, border: `1px solid ${C.border}`, fontWeight: 700, cursor: "pointer", fontSize: 14 };
+const reprintBtnSt: React.CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(53,92,125,0.12)", color: C.info, fontWeight: 700, fontSize: 12, cursor: "pointer" };
 const changeMethodBtnSt: React.CSSProperties = { padding: "6px 12px", borderRadius: 8, border: "none", background: "rgba(166,106,16,0.12)", color: C.warning, fontWeight: 700, fontSize: 12, cursor: "pointer" };
 const desgloseBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: `1px solid ${C.border}`, background: "white", color: C.info, fontWeight: 700, fontSize: 13, cursor: "pointer" };
 const cancelBtnSt: React.CSSProperties = { padding: "8px 14px", borderRadius: 12, border: "none", background: "rgba(180,35,24,0.10)", color: C.danger, fontWeight: 700, fontSize: 13, cursor: "pointer" };
