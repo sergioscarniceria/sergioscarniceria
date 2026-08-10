@@ -395,6 +395,11 @@ export default function CajaPage() {
   const [changingMethod, setChangingMethod] = useState(false);
   const [changeMethodError, setChangeMethodError] = useState<string>("");
   const [showMethodChangePanel, setShowMethodChangePanel] = useState(false);
+  // Modo mixto al cambiar metodo
+  const [changeMethodMixto, setChangeMethodMixto] = useState(false);
+  const [mixMethodA, setMixMethodA] = useState("efectivo");
+  const [mixAmountA, setMixAmountA] = useState("");
+  const [mixMethodB, setMixMethodB] = useState("tarjeta");
   const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [cancelCode, setCancelCode] = useState("");
   const [cancelReason, setCancelReason] = useState("");
@@ -642,6 +647,100 @@ export default function CajaPage() {
     } finally {
       setReprintingId(null);
     }
+  }
+
+  async function changeMethodSaveMixto() {
+    if (!changeMethodMovement) return;
+    if (!changeMethodCode.trim()) { setChangeMethodError("Ingresa tu código de cajera"); return; }
+    if (!changeMethodReason.trim()) { setChangeMethodError("Pon una razón del cambio"); return; }
+
+    const total = Number(changeMethodMovement.amount || 0);
+    const montoA = Number(mixAmountA || 0);
+    const montoB = total - montoA;
+
+    if (montoA <= 0 || montoA >= total) {
+      setChangeMethodError(`El monto del primer método debe estar entre $1 y $${money(total - 1)}`);
+      return;
+    }
+    if (mixMethodA === mixMethodB) {
+      setChangeMethodError("Los dos métodos deben ser distintos");
+      return;
+    }
+
+    setChangingMethod(true);
+    setChangeMethodError("");
+
+    // Validar codigo de cajera
+    const { data: emp } = await supabase
+      .from("employee_codes")
+      .select("name, code")
+      .eq("code", changeMethodCode.trim())
+      .eq("role", "cajera")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!emp) {
+      setChangeMethodError("Código de cajera incorrecto");
+      setChangingMethod(false);
+      return;
+    }
+
+    const original = changeMethodMovement.payment_method_original || changeMethodMovement.payment_method;
+    const ahora = new Date().toISOString();
+    const razonBase = changeMethodReason.trim();
+
+    // 1) Convertir el movimiento existente en la parte A
+    const { error: errA } = await supabase.from("cash_movements").update({
+      amount: montoA,
+      payment_method: mixMethodA,
+      payment_method_original: original,
+      payment_method_changed_at: ahora,
+      payment_method_changed_by: emp.name,
+      payment_method_change_reason: `${razonBase} (pago mixto 1/2: $${money(montoA)} ${methodName(mixMethodA)})`,
+    }).eq("id", changeMethodMovement.id);
+
+    if (errA) {
+      setChangeMethodError("Error: " + errA.message);
+      setChangingMethod(false);
+      return;
+    }
+
+    // 2) Crear el movimiento de la parte B
+    const { error: errB } = await supabase.from("cash_movements").insert([{
+      type: changeMethodMovement.type,
+      source: changeMethodMovement.source,
+      amount: montoB,
+      payment_method: mixMethodB,
+      reference_id: changeMethodMovement.reference_id,
+      cashier_name: changeMethodMovement.cashier_name,
+      created_at: changeMethodMovement.created_at,
+      payment_method_original: original,
+      payment_method_changed_at: ahora,
+      payment_method_changed_by: emp.name,
+      payment_method_change_reason: `${razonBase} (pago mixto 2/2: $${money(montoB)} ${methodName(mixMethodB)})`,
+    }]);
+
+    if (errB) {
+      setChangeMethodError("Se actualizó la primera parte pero falló la segunda: " + errB.message);
+      setChangingMethod(false);
+      await loadMovements();
+      return;
+    }
+
+    // 3) Actualizar el ticket con nota de pago mixto
+    if (changeMethodMovement.reference_id) {
+      await supabase.from("orders").update({
+        payment_method: "mixto",
+      }).eq("id", changeMethodMovement.reference_id);
+    }
+
+    setChangingMethod(false);
+    setChangeMethodMovement(null);
+    setChangeMethodCode("");
+    setChangeMethodReason("");
+    setChangeMethodMixto(false);
+    setMixAmountA("");
+    await loadMovements();
   }
 
   async function changeMethodSave() {
@@ -2217,6 +2316,10 @@ export default function CajaPage() {
                               setChangeMethodReason("");
                               setChangeMethodCode("");
                               setChangeMethodError("");
+                              setChangeMethodMixto(false);
+                              setMixMethodA(m.payment_method === "efectivo" ? "efectivo" : "efectivo");
+                              setMixMethodB(m.payment_method === "efectivo" ? "tarjeta" : "tarjeta");
+                              setMixAmountA("");
                             }}
                             style={changeMethodBtnSt}
                           >
@@ -3107,25 +3210,102 @@ export default function CajaPage() {
               )}
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 6 }}>Nuevo método *</label>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {["efectivo", "tarjeta", "transferencia", "credito"].map((mtd) => (
-                  <button
-                    key={mtd}
-                    onClick={() => setNewPaymentMethod(mtd)}
-                    style={{
-                      flex: 1, minWidth: 100, padding: "10px 12px", borderRadius: 10,
-                      border: newPaymentMethod === mtd ? `2px solid ${C.warning}` : `1px solid ${C.border}`,
-                      background: newPaymentMethod === mtd ? "rgba(166,106,16,0.1)" : "white",
-                      color: C.text, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                    }}
-                  >
-                    {methodName(mtd)}
-                  </button>
-                ))}
-              </div>
+            {/* Toggle: un solo metodo o mixto */}
+            <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+              <button
+                onClick={() => setChangeMethodMixto(false)}
+                style={{
+                  flex: 1, padding: "9px 12px", borderRadius: 10,
+                  border: !changeMethodMixto ? "none" : `1px solid ${C.border}`,
+                  background: !changeMethodMixto ? C.warning : "white",
+                  color: !changeMethodMixto ? "white" : C.text,
+                  fontWeight: 700, fontSize: 13, cursor: "pointer",
+                }}
+              >
+                Un solo método
+              </button>
+              <button
+                onClick={() => setChangeMethodMixto(true)}
+                style={{
+                  flex: 1, padding: "9px 12px", borderRadius: 10,
+                  border: changeMethodMixto ? "none" : `1px solid ${C.border}`,
+                  background: changeMethodMixto ? C.warning : "white",
+                  color: changeMethodMixto ? "white" : C.text,
+                  fontWeight: 700, fontSize: 13, cursor: "pointer",
+                }}
+              >
+                Pago mixto
+              </button>
             </div>
+
+            {!changeMethodMixto ? (
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 6 }}>Nuevo método *</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {["efectivo", "tarjeta", "transferencia", "credito"].map((mtd) => (
+                    <button
+                      key={mtd}
+                      onClick={() => setNewPaymentMethod(mtd)}
+                      style={{
+                        flex: 1, minWidth: 100, padding: "10px 12px", borderRadius: 10,
+                        border: newPaymentMethod === mtd ? `2px solid ${C.warning}` : `1px solid ${C.border}`,
+                        background: newPaymentMethod === mtd ? "rgba(166,106,16,0.1)" : "white",
+                        color: C.text, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                      }}
+                    >
+                      {methodName(mtd)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 12, padding: 12, background: "rgba(166,106,16,0.05)", borderRadius: 10, border: `1px solid rgba(166,106,16,0.20)` }}>
+                <div style={{ fontSize: 12, color: C.muted, fontWeight: 700, marginBottom: 10 }}>
+                  Dividir ${money(Number(changeMethodMovement?.amount || 0))} en dos métodos:
+                </div>
+
+                {/* Parte 1 */}
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Parte 1</label>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+                    {["efectivo", "tarjeta", "transferencia"].map((mtd) => (
+                      <button key={mtd} onClick={() => setMixMethodA(mtd)} style={{
+                        flex: 1, minWidth: 90, padding: "8px 10px", borderRadius: 8,
+                        border: mixMethodA === mtd ? `2px solid ${C.success}` : `1px solid ${C.border}`,
+                        background: mixMethodA === mtd ? "rgba(31,122,77,0.1)" : "white",
+                        color: C.text, fontWeight: 700, fontSize: 12, cursor: "pointer",
+                      }}>{methodName(mtd)}</button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    value={mixAmountA}
+                    onChange={(e) => setMixAmountA(e.target.value)}
+                    placeholder="Monto de esta parte"
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 15, fontWeight: 700, color: C.text, background: "white", boxSizing: "border-box" }}
+                  />
+                </div>
+
+                {/* Parte 2 (calculada) */}
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>
+                    Parte 2 — resto: <b style={{ color: C.success }}>
+                      ${money(Math.max(0, Number(changeMethodMovement?.amount || 0) - Number(mixAmountA || 0)))}
+                    </b>
+                  </label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {["efectivo", "tarjeta", "transferencia"].map((mtd) => (
+                      <button key={mtd} onClick={() => setMixMethodB(mtd)} style={{
+                        flex: 1, minWidth: 90, padding: "8px 10px", borderRadius: 8,
+                        border: mixMethodB === mtd ? `2px solid ${C.info}` : `1px solid ${C.border}`,
+                        background: mixMethodB === mtd ? "rgba(53,92,125,0.1)" : "white",
+                        color: C.text, fontWeight: 700, fontSize: 12, cursor: "pointer",
+                      }}>{methodName(mtd)}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: C.text, display: "block", marginBottom: 4 }}>Código de cajera *</label>
@@ -3165,7 +3345,7 @@ export default function CajaPage() {
                 Cancelar
               </button>
               <button
-                onClick={changeMethodSave}
+                onClick={changeMethodMixto ? changeMethodSaveMixto : changeMethodSave}
                 disabled={changingMethod}
                 style={{
                   flex: 1, padding: "12px 16px", borderRadius: 10, border: "none",
