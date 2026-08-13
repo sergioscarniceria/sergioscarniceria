@@ -675,7 +675,7 @@ export default function NuevoPedidoPage() {
       }
 
       // Orden preferido de categorias
-      const categoryOrder = ["Res", "Cerdo", "Carne para asar", "Embutidos", "Preparados", "Para caldo", "Comida", "Complementos"];
+      const categoryOrder = ["Res", "Cerdo", "Pollos y Mariscos", "Carne para asar", "Embutidos", "Preparados", "Para caldo", "Comida", "Complementos"];
       const sortedCategories = Object.keys(byCategory).sort((a, b) => {
         const ia = categoryOrder.indexOf(a);
         const ib = categoryOrder.indexOf(b);

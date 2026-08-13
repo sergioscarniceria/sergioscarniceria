@@ -44,6 +44,7 @@ const CATEGORY_OPTIONS = [
   "Preparados",
   "Complementos",
   "Comida",
+  "Pollos y Mariscos",
 ];
 
 export default function AdminProductosPage() {
