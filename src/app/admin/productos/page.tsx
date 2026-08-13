@@ -354,6 +354,7 @@ const [recommendSearch, setRecommendSearch] = useState("");
             <Link href="/" style={secondaryButtonStyle}>Inicio</Link>
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/produccion" style={secondaryButtonStyle}>Producción</Link>
+            <Link href="/admin/precios" style={{ ...secondaryButtonStyle, background: "#7b2218", color: "white", border: "none" }}>Administración de precios</Link>
             <Link href="/admin/dashboard" style={secondaryButtonStyle}>Dashboard</Link>
           </div>
         </div>

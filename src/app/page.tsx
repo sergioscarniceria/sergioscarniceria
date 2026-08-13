@@ -52,6 +52,7 @@ const moduleCategories = {
     items: [
       { title: "Admin clientes", href: "/admin/clientes", desc: "Altas y control" },
       { title: "Admin productos", href: "/admin/productos", desc: "Catálogo y precios" },
+      { title: "Admin de precios", href: "/admin/precios", desc: "Costo, margen y precio de venta" },
       { title: "Inventario", href: "/inventario/complementos", desc: "Bodega y complementos" },
       { title: "Compras", href: "/inventario/compras", desc: "Órdenes a proveedores" },
       { title: "Auditoría", href: "/inventario/auditoria", desc: "Conteo físico y pérdidas" },
