@@ -1349,6 +1349,7 @@ export default function AdminDashboardPage() {
             <Link href="/admin/clientes" style={secondaryButtonStyle}>Clientes</Link>
             <Link href="/admin/productos" style={secondaryButtonStyle}>Productos</Link>
             <Link href="/admin/caja" style={secondaryButtonStyle}>Caja</Link>
+            <Link href="/admin/categorias" style={{ ...secondaryButtonStyle, background: "#7b2218", color: "white", border: "none" }}>Categorías</Link>
           </div>
         </div>
 
