@@ -29,6 +29,15 @@ type CatRow = {
   margen_pct: number;
 };
 
+type DetalleInv = {
+  fuente: string;
+  producto: string;
+  unidades: number;
+  ventas: number;
+  costo: number;
+  utilidad: number;
+};
+
 type Inversion = {
   id: string;
   nombre: string;
@@ -66,6 +75,9 @@ export default function CategoriasPage() {
   const [dateFrom, setDateFrom] = useState(mesInicio());
   const [dateTo, setDateTo] = useState(todayStr());
   const [catSeleccionada, setCatSeleccionada] = useState<string | null>(null);
+  const [invExpandida, setInvExpandida] = useState<string | null>(null);
+  const [detalleInv, setDetalleInv] = useState<DetalleInv[]>([]);
+  const [loadingDetalleInv, setLoadingDetalleInv] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -113,6 +125,36 @@ export default function CategoriasPage() {
   }, [supabase, dateFrom, dateTo]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  async function toggleDetalleInversion(invId: string) {
+    if (invExpandida === invId) {
+      setInvExpandida(null);
+      setDetalleInv([]);
+      return;
+    }
+    setInvExpandida(invId);
+    setLoadingDetalleInv(true);
+    try {
+      const { data, error } = await supabase.rpc("detalle_inversion", { p_inversion_id: invId });
+      if (error) {
+        console.log("Error:", error);
+        setDetalleInv([]);
+      } else {
+        setDetalleInv(
+          (data || []).map((r: Record<string, unknown>) => ({
+            fuente: String(r.fuente || ""),
+            producto: String(r.producto || ""),
+            unidades: Number(r.unidades || 0),
+            ventas: Number(r.ventas || 0),
+            costo: Number(r.costo || 0),
+            utilidad: Number(r.utilidad || 0),
+          }))
+        );
+      }
+    } finally {
+      setLoadingDetalleInv(false);
+    }
+  }
 
   const totales = useMemo(() => ({
     ventas: rows.reduce((a, r) => a + r.ventas, 0),
@@ -203,6 +245,57 @@ export default function CategoriasPage() {
                       color={listo ? C.success : C.warning}
                     />
                   </div>
+
+                  {/* Boton desglose */}
+                  <button
+                    onClick={() => toggleDetalleInversion(inv.id)}
+                    style={{
+                      marginTop: 12, width: "100%", padding: "9px 14px", borderRadius: 10,
+                      border: `1px solid ${C.border}`, background: "white",
+                      color: C.text, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                    }}
+                  >
+                    {invExpandida === inv.id ? "▲ Ocultar desglose" : "▼ Ver qué está aportando"}
+                  </button>
+
+                  {invExpandida === inv.id && (
+                    <div style={{ marginTop: 10 }}>
+                      {loadingDetalleInv ? (
+                        <div style={{ padding: 16, textAlign: "center", color: C.muted, fontSize: 13 }}>Cargando...</div>
+                      ) : detalleInv.length === 0 ? (
+                        <div style={{
+                          padding: 16, textAlign: "center", color: C.muted, fontSize: 13,
+                          background: "white", borderRadius: 10, border: `1px solid ${C.border}`,
+                        }}>
+                          Todavía no hay ventas registradas de estos productos
+                        </div>
+                      ) : (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          {detalleInv.map((d, idx) => (
+                            <div key={`${d.producto}-${idx}`} style={{
+                              padding: "10px 12px", background: "white", borderRadius: 10,
+                              border: `1px solid ${C.border}`,
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              gap: 10, flexWrap: "wrap",
+                            }}>
+                              <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+                                <div style={{ fontWeight: 700, color: C.text, fontSize: 13 }}>{d.producto}</div>
+                                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                                  {money(d.unidades)} vendidos · Ventas ${money(d.ventas)} · Costo ${money(d.costo)}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right", flexShrink: 0 }}>
+                                <div style={{ fontSize: 16, fontWeight: 800, color: C.success }}>
+                                  ${money(d.utilidad)}
+                                </div>
+                                <div style={{ fontSize: 10, color: C.muted }}>utilidad</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
