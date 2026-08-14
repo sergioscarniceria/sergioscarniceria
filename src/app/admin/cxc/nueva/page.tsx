@@ -124,7 +124,7 @@ export default function NuevaNotaCxcPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
       const { data: productsData, error: productsError } = await supabase
         .from("products")

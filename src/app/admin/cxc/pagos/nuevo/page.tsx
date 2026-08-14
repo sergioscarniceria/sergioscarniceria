@@ -101,7 +101,7 @@ export default function NuevoPagoCxcPage() {
         .select("id, name, phone, email, credit_enabled, credit_days")
         .eq("credit_enabled", true)
         .order("name", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
       if (error) {
         console.log("Error cargando clientes con crédito:", error);

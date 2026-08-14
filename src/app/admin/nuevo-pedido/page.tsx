@@ -163,7 +163,7 @@ export default function NuevoPedidoPage() {
         .from("customers")
         .select("*")
         .order("name", { ascending: true })
-        .limit(500);
+        .limit(2000);
 
       const { data: productsData, error: productsError } = await supabase
         .from("products")
@@ -564,23 +564,28 @@ export default function NuevoPedidoPage() {
   }
 
   const searchedCustomers = useMemo(() => {
-    const q = customerSearch.toLowerCase().trim();
+    // Normaliza quitando acentos para que "jose" encuentre "José"
+    const norm = (t: string) => (t || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    const q = norm(customerSearch.trim());
     if (!q) return [];
     return customers
       .filter((c) => {
         return (
-          (c.name || "").toLowerCase().includes(q) ||
-          (c.phone || "").toLowerCase().includes(q) ||
-          (c.email || "").toLowerCase().includes(q) ||
-          (c.business_name || "").toLowerCase().includes(q)
+          norm(c.name || "").includes(q) ||
+          norm(c.phone || "").includes(q) ||
+          norm(c.email || "").includes(q) ||
+          norm(c.business_name || "").includes(q)
         );
       })
-      .slice(0, 20);
+      .slice(0, 50);
   }, [customers, customerSearch]);
 
   const customerCatalog = useMemo(() => {
     if (!showCustomerCatalog) return [];
-    return customers.slice(0, 150);
+    return customers;
   }, [customers, showCustomerCatalog]);
 
   // ── Lista de precios ──
