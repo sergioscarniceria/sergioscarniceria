@@ -1723,6 +1723,26 @@ async function saveManualCredit() {
     return;
   }
 
+  // Descontar inventario de complementos/piezas vendidas a credito
+  try {
+    await descontarInventarioDeVenta(
+      supabase,
+      itemsPayload.map((it) => ({
+        product: it.product,
+        kilos: it.kilos,
+        quantity: null,
+        sale_type: "kg",
+        is_fixed_price_piece: false,
+      })),
+      {
+        referencia: `venta manual credito ${orderData.id.slice(0, 6)}`,
+        createdBy: cashierName || "credito",
+      }
+    );
+  } catch (e) {
+    console.log("Error descontando inventario (venta manual credito):", e);
+  }
+
   // Imprimir 2 tickets con pagaré integrado
   const creditTicket: TicketData = {
     folio: ticketFolio(orderData.id),
