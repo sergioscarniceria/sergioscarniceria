@@ -637,6 +637,25 @@ async function deleteTicket(id: string) {
     return;
   }
 
+  // Un ticket ya entregado o ya pagado NO se puede borrar
+  const { data: ord } = await supabase
+    .from("orders")
+    .select("status, payment_status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (ord?.status === "entregado") {
+    alert("Este ticket YA FUE ENTREGADO al cliente y no se puede eliminar.");
+    return;
+  }
+
+  if (ord && ["pagado", "credito", "credito_autorizado"].includes(String(ord.payment_status || ""))) {
+    alert(
+      "Este ticket ya está cobrado y no se puede eliminar desde mostrador.\n\nSi hay un error, cancélalo desde Caja con el código de cajera para que quede registrado."
+    );
+    return;
+  }
+
   if (!confirm("¿Seguro que quieres eliminar este ticket? Esta acción no se puede deshacer.")) return;
 
   // Eliminar items y luego el order
@@ -654,7 +673,7 @@ async function deleteTicket(id: string) {
 async function deliverTicket(id: string) {
   const { error } = await supabase
     .from("orders")
-    .update({ status: "entregado" })
+    .update({ status: "entregado", delivered_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) {

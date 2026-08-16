@@ -828,6 +828,23 @@ export default function CajaPage() {
       return;
     }
 
+    // Un ticket YA ENTREGADO no se puede cancelar: la mercancía ya salió
+    if (cancelMovement.reference_id) {
+      const { data: ord } = await supabase
+        .from("orders")
+        .select("status")
+        .eq("id", cancelMovement.reference_id)
+        .maybeSingle();
+
+      if (ord && ord.status === "entregado") {
+        setCancelError(
+          "Este ticket YA FUE ENTREGADO al cliente y no se puede cancelar. La mercancía ya salió. Si hay un error, regístralo como devolución."
+        );
+        setCancelSaving(false);
+        return;
+      }
+    }
+
     // Update cash_movement as cancelled
     const { error } = await supabase
       .from("cash_movements")
@@ -850,7 +867,11 @@ export default function CajaPage() {
     if (cancelMovement.reference_id) {
       await supabase
         .from("orders")
-        .update({ status: "cancelado", payment_status: "cancelado" })
+        .update({
+          status: "cancelado",
+          payment_status: "cancelado",
+          canceled_at: new Date().toISOString(),
+        })
         .eq("id", cancelMovement.reference_id);
     }
 
@@ -1246,6 +1267,38 @@ export default function CajaPage() {
       return;
     }
 
+    // Bloquear cierre si hay tickets de MOSTRADOR ya cobrados pero sin entregar
+    // (los que siguen apareciendo en el tablero de los carniceros).
+    // No aplica al panel de repartidores: esos son pedidos a domicilio.
+    const { data: sinEntregar } = await supabase
+      .from("orders")
+      .select("id, customer_name, created_at, status, payment_status, source")
+      .eq("source", "mostrador")
+      .in("payment_status", ["pagado", "credito", "credito_autorizado"])
+      .gte("created_at", todayStart)
+      .lte("created_at", todayEnd);
+
+    const pendientesEntrega = (sinEntregar || []).filter(
+      (o: any) => o.status !== "entregado" && o.status !== "cancelado"
+    );
+
+    if (pendientesEntrega.length > 0) {
+      const list2 = pendientesEntrega.slice(0, 10).map((o: any) => {
+        const hora = new Date(o.created_at).toLocaleTimeString("es-MX", {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "America/Mexico_City",
+        });
+        return `• TK-${o.id.slice(0, 6)} — ${o.customer_name || "Mostrador"} (${hora})`;
+      }).join("\n");
+
+      alert(
+        `No puedes cerrar caja. Hay ${pendientesEntrega.length} ticket(s) de mostrador ya cobrados que NO se han entregado:\n\n${list2}\n\n` +
+        `Los carniceros los siguen viendo pendientes en su pantalla. Entrégalos desde Mostrador antes de hacer el cierre.`
+      );
+      return;
+    }
+
     setSaving(true);
 
     const closedBy = (() => {
@@ -1335,7 +1388,7 @@ export default function CajaPage() {
       supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
       supabaseRef.from("cxc_notes").select("id, customer_name, total_amount, note_number, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cxc_payments").select("id, customer_name, amount, payment_method, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
-      supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status").eq("status", "cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status").or("status.eq.cancelado,payment_status.eq.cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       // Orders del día con items para top productos, clientes, carniceros, descuentos
       supabaseRef.from("orders").select("id, customer_name, captured_by, discount_amount, edited_at, edited_by, status, order_items(product, kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)").in("status", ["pendiente", "terminado", "entregado"]).gte("created_at", dayStart).lte("created_at", dayEnd),
       // Tickets editados del día

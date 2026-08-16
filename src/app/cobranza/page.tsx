@@ -1107,6 +1107,33 @@ return itemSubtotal(item);
     setSaving(true);
     setCancelError("");
 
+    // Releer el estado real desde la BD: nadie puede cancelar un ticket ya entregado
+    const { data: fresh, error: freshError } = await supabase
+      .from("orders")
+      .select("status, payment_status")
+      .eq("id", selectedTicket.id)
+      .maybeSingle();
+
+    if (freshError || !fresh) {
+      setCancelError("No pudimos verificar el estado del ticket. Intenta de nuevo.");
+      setSaving(false);
+      return;
+    }
+
+    if (fresh.status === "entregado") {
+      setCancelError(
+        "Este ticket YA FUE ENTREGADO al cliente y no se puede cancelar. Si hay un error, avisa al administrador."
+      );
+      setSaving(false);
+      return;
+    }
+
+    if (fresh.payment_status === "cancelado") {
+      setCancelError("Este ticket ya estaba cancelado.");
+      setSaving(false);
+      return;
+    }
+
     const cancellerName = (() => {
       try { return sessionStorage.getItem("pin_name") || sessionStorage.getItem("pin_role") || "cajera"; }
       catch { return "cajera"; }
@@ -1115,6 +1142,7 @@ return itemSubtotal(item);
     const { error } = await supabase
       .from("orders")
       .update({
+        status: "cancelado",
         payment_status: "cancelado",
         canceled_at: new Date().toISOString(),
       })
