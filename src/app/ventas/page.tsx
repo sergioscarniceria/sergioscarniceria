@@ -327,9 +327,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
   async function loadTickets() {
   try {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`
+    const SELECT = `
         id,
         customer_name,
         status,
@@ -346,18 +344,44 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
           quantity,
           is_fixed_price_piece
         )
-      `)
-      .eq("source", "mostrador")
-      .gte("created_at", since)
-      .order("created_at", { ascending: false })
-      .limit(12);
+      `;
 
-    if (error) {
-      console.log(error);
+    // 1) Los mas recientes (vista normal del mostrador)
+    // 2) TODOS los que siguen pendientes de entrega, sin limite:
+    //    si no se ven aqui, bloquean el cierre de caja sin que nadie sepa por que.
+    const [recientesRes, pendientesRes] = await Promise.all([
+      supabase
+        .from("orders")
+        .select(SELECT)
+        .eq("source", "mostrador")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(12),
+      supabase
+        .from("orders")
+        .select(SELECT)
+        .eq("source", "mostrador")
+        .gte("created_at", since)
+        .not("status", "in", '("entregado","cancelado")')
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (recientesRes.error) {
+      console.log(recientesRes.error);
       return;
     }
 
-    setTickets((data as Ticket[]) || []);
+    // Unir sin duplicados, mas nuevo primero
+    const porId = new Map<string, Ticket>();
+    for (const t of ((recientesRes.data as Ticket[]) || [])) porId.set(t.id, t);
+    for (const t of ((pendientesRes.data as Ticket[]) || [])) porId.set(t.id, t);
+
+    const merged = Array.from(porId.values()).sort(
+      (a, b) =>
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+    );
+
+    setTickets(merged);
   } catch {
     // Silent — polling should never block operations
   }
