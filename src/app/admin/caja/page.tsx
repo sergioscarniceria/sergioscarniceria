@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { itemSubtotal } from "@/lib/itemSubtotal";
+import { reponerInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
@@ -873,6 +874,23 @@ export default function CajaPage() {
           canceled_at: new Date().toISOString(),
         })
         .eq("id", cancelMovement.reference_id);
+
+      // Devolver al inventario lo que se habia descontado en la venta
+      try {
+        const { data: itemsDevueltos } = await supabase
+          .from("order_items")
+          .select("product, sale_type, quantity, kilos, is_fixed_price_piece")
+          .eq("order_id", cancelMovement.reference_id);
+
+        if (itemsDevueltos && itemsDevueltos.length > 0) {
+          await reponerInventarioDeVenta(supabase, itemsDevueltos, {
+            referencia: `ticket ${String(cancelMovement.reference_id).slice(0, 6)}`,
+            createdBy: emp.name,
+          });
+        }
+      } catch (e) {
+        console.log("Error devolviendo inventario al cancelar:", e);
+      }
     }
 
     alert(`Movimiento cancelado por ${emp.name}. Motivo: ${cancelReason.trim()}`);

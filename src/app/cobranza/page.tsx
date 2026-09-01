@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { descontarInventarioDeVenta } from "@/lib/inventory";
+import { descontarInventarioDeVenta, reponerInventarioDeVenta } from "@/lib/inventory";
 import { itemSubtotal } from "@/lib/itemSubtotal";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -1165,6 +1165,25 @@ return itemSubtotal(item);
         cancelled_at: new Date().toISOString(),
       })
       .eq("reference_id", selectedTicket.id);
+
+    // Devolver al inventario lo que se habia descontado (si es que se descontó)
+    if (fresh.payment_status === "pagado" || fresh.status === "terminado") {
+      try {
+        const { data: itemsDevueltos } = await supabase
+          .from("order_items")
+          .select("product, sale_type, quantity, kilos, is_fixed_price_piece")
+          .eq("order_id", selectedTicket.id);
+
+        if (itemsDevueltos && itemsDevueltos.length > 0) {
+          await reponerInventarioDeVenta(supabase, itemsDevueltos, {
+            referencia: `ticket ${selectedTicket.id.slice(0, 6)}`,
+            createdBy: cancellerName,
+          });
+        }
+      } catch (e) {
+        console.log("Error devolviendo inventario al cancelar:", e);
+      }
+    }
 
     alert("Ticket cancelado. Motivo: " + cancelReasonText.trim());
     setShowCancelModal(false);
