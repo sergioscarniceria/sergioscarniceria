@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { createClient } from "@supabase/supabase-js";
 import crypto from "crypto";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -149,14 +150,8 @@ export async function POST(req: NextRequest) {
             .limit(1);
 
           if (!existing || existing.length === 0) {
-            const total = orderItems.reduce((acc: number, it: {
-              sale_type?: string | null; is_fixed_price_piece?: boolean | null;
-              quantity?: number | null; kilos?: number | null; price?: number | null;
-            }) => {
-              const esPieza = it.sale_type === "pieza" || !!it.is_fixed_price_piece;
-              const qty = Number(esPieza ? (it.quantity ?? it.kilos ?? 0) : (it.kilos ?? 0));
-              return acc + qty * Number(it.price || 0);
-            }, 0);
+            const total = orderItems.reduce(
+              (acc: number, it: unknown) => acc + itemSubtotal(it as never), 0);
 
             if (total > 0) {
               const { data: orderRow } = await supabase

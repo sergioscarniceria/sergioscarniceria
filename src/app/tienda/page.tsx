@@ -21,6 +21,8 @@ type CartItem = {
   price: number;
   qty: number;
   sale_type: "kg" | "pieza";
+  // Solo true si el catalogo tiene precio fijo por pieza para ese producto
+  is_fixed_price_piece: boolean;
 };
 
 type UserMode = "welcome" | "guest" | "registered";
@@ -144,7 +146,8 @@ export default function TiendaPage() {
   const addToCart = useCallback((p: Product, qty: number) => {
     if (qty <= 0) return;
     const saleType = p.sale_type === "pieza" ? "pieza" as const : "kg" as const;
-    const price = saleType === "pieza" && p.fixed_piece_price ? p.fixed_piece_price : p.price;
+    const precioFijoPorPieza = Number(p.fixed_piece_price || 0) > 0;
+    const price = precioFijoPorPieza ? Number(p.fixed_piece_price) : p.price;
     setCart((prev) => {
       const idx = prev.findIndex((c) => c.productId === p.id);
       if (idx >= 0) {
@@ -152,7 +155,10 @@ export default function TiendaPage() {
         next[idx] = { ...next[idx], qty: next[idx].qty + qty };
         return next;
       }
-      return [...prev, { productId: p.id, name: p.name, price, qty, sale_type: saleType }];
+      return [...prev, {
+        productId: p.id, name: p.name, price, qty,
+        sale_type: saleType, is_fixed_price_piece: precioFijoPorPieza,
+      }];
     });
     setQtyInputs((prev) => ({ ...prev, [p.id]: "" }));
     setAddedAnim(p.id);
@@ -216,7 +222,8 @@ export default function TiendaPage() {
       price: c.price,
       sale_type: c.sale_type,
       quantity: c.sale_type === "pieza" ? c.qty : null,
-      is_fixed_price_piece: c.sale_type === "pieza",
+      // Solo es precio fijo por pieza si el catalogo lo dice
+      is_fixed_price_piece: Boolean(c.is_fixed_price_piece),
     }));
     await supabase.from("order_items").insert(items);
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { itemsSinPesar } from "@/lib/itemSubtotal";
 
 // ─── Types ─────────────────────────────────────────────────────
 type Order = {
@@ -249,6 +250,20 @@ export default function RepartidoresPage() {
   }
 
   async function markAsPaid(order: Order) {
+    // El listado no trae los renglones: se consultan al momento de cobrar
+    const { data: renglones } = await supabase
+      .from("order_items")
+      .select("product, kilos, prepared_kilos, price, sale_type, quantity, is_fixed_price_piece")
+      .eq("order_id", order.id);
+
+    const faltantes = itemsSinPesar(renglones || []);
+    if (faltantes.length > 0) {
+      alert(
+        "No se puede marcar como pagado.\n\n" +
+        "Falta pesar: " + faltantes.map((f) => f.product).join(", ")
+      );
+      return;
+    }
     if (!confirm(`¿Confirmar que el pedido de ${order.customer_name} ya fue pagado (Mercado Pago)?`)) return;
     setSavingId(order.id);
     const { error } = await supabase.from("orders").update({

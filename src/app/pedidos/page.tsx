@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
 import { itemSubtotal } from "@/lib/itemSubtotal";
+import { itemsSinPesar } from "@/lib/itemSubtotal";
 
 type OrderItem = {
   id: string;
@@ -177,6 +178,19 @@ const [changingId, setChangingId] = useState<string | null>(null);
 
   async function markAsPaid(id: string) {
     const supabase = getSupabaseClient();
+
+    // No se marca pagado un pedido con productos por kilo sin pesar
+    const pedido = orders.find((o) => o.id === id);
+    const faltantes = itemsSinPesar(pedido?.order_items || []);
+    if (faltantes.length > 0) {
+      alert(
+        "No se puede marcar como pagado.\n\n" +
+        "Falta pesar: " + faltantes.map((f) => f.product).join(", ") + "\n\n" +
+        "Se pidieron por piezas pero se venden por kilo."
+      );
+      return;
+    }
+
     if (!confirm("¿Confirmar que este pedido ya fue pagado (Mercado Pago)?")) return;
 
     setChangingId(id);

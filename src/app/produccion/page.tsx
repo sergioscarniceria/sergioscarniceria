@@ -6,6 +6,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
 import ScaleButton from "@/components/ScaleButton";
 import { getScale } from "@/lib/scale";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 
 type OrderItem = {
   id: string;
@@ -250,15 +251,11 @@ export default function ProduccionPage() {
   }
 
   function getItemDisplayTotal(item: OrderItem) {
-    if (item.sale_type === "pieza") {
-      const prepared = Number(item.prepared_kilos || 0);
-      if (!prepared) return null;
-      return prepared * Number(item.price || 0);
+    // Un producto por kilo pedido en piezas no tiene importe hasta que se pesa
+    if (item.sale_type === "pieza" && !item.is_fixed_price_piece) {
+      if (!Number(item.prepared_kilos || 0)) return null;
     }
-
-    // Para kg: usar prepared_kilos si existe (peso real ajustado), si no, kilos original
-    const kg = Number(item.prepared_kilos || item.kilos || 0);
-    return kg * Number(item.price || 0);
+    return itemSubtotal(item);
   }
   async function deleteOrder(id: string) {
   const supabase = getSupabaseClient();
@@ -322,16 +319,8 @@ export default function ProduccionPage() {
   loadData();
 }
 
-      function total(order: Order) {
-    return (order.order_items || []).reduce((acc, item) => {
-      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-        return acc + Number(item.quantity || 0) * Number(item.price || 0);
-      }
-
-      // Para kg: usar prepared_kilos si existe, si no kilos original
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
-      return acc + kg * Number(item.price || 0);
-    }, 0);
+  function total(order: Order) {
+    return (order.order_items || []).reduce((acc, item) => acc + itemSubtotal(item), 0);
   }
 
   function statusBadgeStyle(status: string): React.CSSProperties {
@@ -630,7 +619,10 @@ function Section({
 
                                 <div style={totalBadgeStyle}>
                   {(o.order_items || []).some(
-                    (item) => item.sale_type === "pieza" && !item.prepared_kilos
+                    (item) =>
+                      item.sale_type === "pieza" &&
+                      !item.is_fixed_price_piece &&
+                      !item.prepared_kilos
                   )
                     ? "Por pesar"
                     : `$${total(o).toFixed(2)}`}

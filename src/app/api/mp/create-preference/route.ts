@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -31,15 +32,13 @@ export async function POST(req: NextRequest) {
 
     // Construir items para MP
     const items = (order.order_items || []).map((item: Record<string, unknown>) => {
-      const qty = item.sale_type === "pieza" ? Number(item.quantity || item.kilos || 1) : 1;
-      const unitPrice =
-        item.sale_type === "pieza"
-          ? Number(item.price || 0)
-          : Number(item.price || 0) * Number(item.kilos || 0);
+      // El importe del renglon sale SIEMPRE de itemSubtotal: un producto por
+      // kilo pedido en piezas se cobra al peso real, nunca piezas x precio kg.
+      const unitPrice = itemSubtotal(item as never);
 
       return {
         title: String(item.product || "Producto"),
-        quantity: qty,
+        quantity: 1,
         unit_price: Number(unitPrice.toFixed(2)),
         currency_id: "MXN",
       };

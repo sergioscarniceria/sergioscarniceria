@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 import { listenCfd, type CfdMessage, type CfdItemLine } from "@/lib/cfd-channel";
 import { useKeepAwake } from "@/lib/useKeepAwake";
 
@@ -182,12 +183,7 @@ export default function DisplayMostradorPage() {
     }
   }, [items, mode]);
 
-  function itemSubtotal(item: CfdItemLine) {
-    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-      return Number(item.quantity || 0) * Number(item.price || 0);
-    }
-    return Number(item.kilos || 0) * Number(item.price || 0);
-  }
+
 
   const frase = FRASES_TICKET[fraseIdx];
 

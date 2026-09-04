@@ -22,6 +22,9 @@ type CartItem = {
   price: number;
   kilos: number;
   sale_type: "kg" | "pieza";
+  // Solo true si el producto tiene precio fijo por pieza en el catalogo.
+  // Si es false y sale_type es "pieza", el cobro sale del peso real.
+  is_fixed_price_piece: boolean;
 };
 
 type OrderItem = {
@@ -1083,7 +1086,13 @@ export default function ClientePage() {
       }
       setCart((prev) => [
         ...prev,
-        { name: product.name, price, kilos: qty, sale_type: "pieza" as const },
+        {
+          name: product.name,
+          price: piece ? Number(product.fixed_piece_price || price) : price,
+          kilos: qty,
+          sale_type: "pieza" as const,
+          is_fixed_price_piece: piece,
+        },
       ]);
       return;
     }
@@ -1117,7 +1126,7 @@ export default function ClientePage() {
 
     setCart((prev) => [
       ...prev,
-      { name: product.name, price, kilos, sale_type: "kg" as const },
+      { name: product.name, price, kilos, sale_type: "kg" as const, is_fixed_price_piece: false },
     ]);
   }
 
@@ -1126,12 +1135,9 @@ export default function ClientePage() {
   }
 
   function cartTotal() {
-    return cart.reduce((acc, item) => {
-      if (item.sale_type === "pieza") {
-        return acc + Number(item.price || 0) * Number(item.kilos || 0); // kilos = quantity for pieces
-      }
-      return acc + Number(item.price || 0) * Number(item.kilos || 0);
-    }, 0);
+    // En este carrito `kilos` guarda la cantidad tanto para kg como para piezas
+    return cart.reduce(
+      (acc, item) => acc + Number(item.price || 0) * Number(item.kilos || 0), 0);
   }
 
   // Sugerencias combinando: recomendaciones manuales + categoría complementaria + top vendidos
@@ -1216,6 +1222,7 @@ export default function ClientePage() {
           kilos: Number(item.kilos || 0),
           price: Number(item.price || 0),
           sale_type: (piece ? "pieza" : "kg") as "kg" | "pieza",
+          is_fixed_price_piece: piece,
         };
       }) || [];
 
@@ -1261,6 +1268,7 @@ export default function ClientePage() {
           price: piece ? Number(match.fixed_piece_price) : Number(match.price || 0),
           kilos: qty,
           sale_type: piece ? "pieza" : "kg",
+          is_fixed_price_piece: piece,
         });
       } else {
         notFound.push(ing.name);
@@ -1361,10 +1369,12 @@ export default function ClientePage() {
     const items = cart.map((p) => ({
       order_id: order.id,
       product: p.name,
-      kilos: p.kilos,
+      // Para un producto por kilo pedido en piezas, kilos va en 0:
+      // el peso real lo captura el carnicero en Produccion.
+      kilos: p.sale_type === "pieza" ? 0 : p.kilos,
       price: p.price,
       sale_type: p.sale_type || "kg",
-      is_fixed_price_piece: p.sale_type === "pieza",
+      is_fixed_price_piece: Boolean(p.is_fixed_price_piece),
       quantity: p.sale_type === "pieza" ? p.kilos : null,
     }));
 

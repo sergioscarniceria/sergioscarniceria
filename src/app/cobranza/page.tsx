@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { descontarInventarioDeVenta, reponerInventarioDeVenta } from "@/lib/inventory";
+import { itemsSinPesar } from "@/lib/itemSubtotal";
 import { itemSubtotal } from "@/lib/itemSubtotal";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
@@ -458,23 +459,43 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     setLoading(false);
   }
 
+  /**
+   * Un producto POR KILO que se pidio en piezas no se puede cobrar hasta que
+   * el carnicero lo pese: el gramaje varia y cobrar piezas x precio del kilo
+   * sale carisimo. Devuelve true (y avisa) si hay que detener el cobro.
+   */
+  function bloquearSiFaltaPeso(): boolean {
+    const sinPesar = allSelectedTickets().flatMap((t) =>
+      itemsSinPesar(t.order_items || []).map((it) => ({
+        folio: ticketFolio(t.id),
+        producto: it.product || "(sin nombre)",
+        piezas: Number(it.quantity || 0),
+      }))
+    );
+
+    if (sinPesar.length === 0) return false;
+
+    const lista = sinPesar
+      .map((x) => `• ${x.producto} — ${x.piezas} pza${x.piezas === 1 ? "" : "s"} (${x.folio})`)
+      .join("\n");
+
+    alert(
+      "No se puede cobrar todavía.\n\n" +
+      "Estos productos se pidieron por piezas pero se venden por kilo, " +
+      "y nadie los ha pesado:\n\n" + lista + "\n\n" +
+      "Pídele al carnicero que capture el peso en Producción y vuelve a intentar."
+    );
+    return true;
+  }
+
   function ticketTotal(ticket: Ticket | null) {
     if (!ticket) return 0;
-    return (ticket.order_items || []).reduce((acc, item) => {
-      if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-        return acc + Number(item.quantity || 0) * Number(item.price || 0);
-      }
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
-      return acc + kg * Number(item.price || 0);
-    }, 0);
+    return (ticket.order_items || []).reduce((acc, item) => acc + itemSubtotal(item), 0);
   }
 
   // Calcula el total de una línea respetando pieza vs kilo
   function itemLineTotal(item: OrderItem): number {
-    if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-      return Number(item.quantity || 0) * Number(item.price || 0);
-    }
-return itemSubtotal(item);
+    return itemSubtotal(item);
   }
 
   // Texto descriptivo de cantidad para una línea
@@ -693,9 +714,10 @@ return itemSubtotal(item);
   async function markTicketPaid(method: Exclude<PaymentMethod, "credito">) {
     if (!selectedTicket) return;
 
-    setSaving(true);
+    if (bloquearSiFaltaPeso()) return;
 
     const allTickets = allSelectedTickets();
+    setSaving(true);
     const subtotal = combinedTotal();
     const mayoreoDesc = combinedMayoreoDiscount();
     const descuento = calcDiscount(subtotal);
@@ -905,6 +927,7 @@ return itemSubtotal(item);
 
   async function markTicketPaidMixed() {
     if (!selectedTicket) return;
+    if (bloquearSiFaltaPeso()) return;
     const mEf = Number(mixedEfectivo || 0);
     const mTa = Number(mixedTarjeta || 0);
     const mTr = Number(mixedTransferencia || 0);
@@ -1363,6 +1386,7 @@ return itemSubtotal(item);
 
   async function sendTicketToCredit() {
     if (!selectedTicket) return;
+    if (bloquearSiFaltaPeso()) return;
 
     if (!selectedTicket.customer_id) {
       alert("Este ticket no tiene cliente ligado");
@@ -1435,13 +1459,14 @@ return itemSubtotal(item);
     const allTickets = allSelectedTickets();
     const noteItems = allTickets.flatMap((t) =>
       (t.order_items || []).map((item) => {
-        const isPieza = item.sale_type === "pieza" && item.is_fixed_price_piece;
-        const qty = isPieza
-          ? Number(item.quantity || 1)
-          : Number(item.prepared_kilos || item.kilos || 0);
+        const isPieza = Boolean(item.is_fixed_price_piece);
         const unitPrice = isPieza
           ? Number(item.fixed_piece_price || item.price || 0)
           : Number(item.price || 0);
+        // La cantidad se deduce del importe canonico para que la nota de CxC
+        // diga exactamente lo mismo que cobro la caja.
+        const importe = itemSubtotal(item);
+        const qty = unitPrice > 0 ? importe / unitPrice : 0;
         return {
           cxc_note_id: noteData.id,
           product: item.product,

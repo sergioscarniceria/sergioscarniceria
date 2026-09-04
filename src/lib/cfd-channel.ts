@@ -11,6 +11,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 export type CfdItemLine = {
   product: string;
   kilos: number;
+  prepared_kilos?: number | null;
   price: number;
   sale_type?: "kg" | "pieza";
   quantity?: number | null;

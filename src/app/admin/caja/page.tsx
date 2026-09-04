@@ -609,11 +609,7 @@ export default function CajaPage() {
         is_fixed_price_piece: boolean | null; prepared_kilos: number | null;
       }[];
 
-      const subtotal = items.reduce((acc, it) => {
-        const esPieza = it.sale_type === "pieza" || !!it.is_fixed_price_piece;
-        const qty = Number(esPieza ? (it.quantity ?? it.kilos ?? 0) : (it.prepared_kilos ?? it.kilos ?? 0));
-        return acc + qty * Number(it.price || 0);
-      }, 0);
+      const subtotal = items.reduce((acc, it) => acc + itemSubtotal(it as never), 0);
 
       const descuento = Number(order.discount_amount || 0);
       const total = Number(m.amount || 0) || (subtotal - descuento);
@@ -1418,7 +1414,7 @@ export default function CajaPage() {
       supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", mStart).lte("created_at", mEnd),
       supabaseRef.from("cash_movements").select("amount").eq("is_cancelled", false).eq("type", "venta").gte("created_at", aStart).lte("created_at", aEnd),
       // Pedidos para mañana
-      supabaseRef.from("orders").select("id, customer_name, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece)").in("status", ["nuevo", "pendiente", "proceso"]).gte("delivery_date", fmtD(tomorrowDate)).lte("delivery_date", fmtD(tomorrowDate)),
+      supabaseRef.from("orders").select("id, customer_name, order_items(product, kilos, prepared_kilos, price, quantity, sale_type, is_fixed_price_piece)").in("status", ["nuevo", "pendiente", "proceso"]).gte("delivery_date", fmtD(tomorrowDate)).lte("delivery_date", fmtD(tomorrowDate)),
       // Fallback: daily_summaries para comparativos históricos
       supabaseRef.from("daily_summaries").select("date, venta").in("date", [fmtD(yesterdayDate), fmtD(lastMonthDate), fmtD(lastYearDate)]),
     ]);
@@ -1482,14 +1478,12 @@ export default function CajaPage() {
       for (const it of (o.order_items || [])) {
         const key = it.product || "Sin nombre";
         if (!prodMap[key]) prodMap[key] = { kg: 0, pz: 0, total: 0 };
-        if (it.sale_type === "pieza" && it.is_fixed_price_piece) {
+        if (it.is_fixed_price_piece) {
           prodMap[key].pz += Number(it.quantity || 0);
-          prodMap[key].total += Number(it.quantity || 0) * Number(it.price || 0);
         } else {
-          const kg = Number(it.prepared_kilos || it.kilos || 0);
-          prodMap[key].kg += kg;
-          prodMap[key].total += kg * Number(it.price || 0);
+          prodMap[key].kg += Number(it.prepared_kilos ?? it.kilos ?? 0);
         }
+        prodMap[key].total += itemSubtotal(it as never);
       }
     }
     const topProds = Object.entries(prodMap).sort((a, b) => b[1].total - a[1].total).slice(0, 10);
@@ -2887,13 +2881,7 @@ export default function CajaPage() {
                   let creditoNuevo = 0;
                   for (const ord of (creditOrders || [])) {
                     for (const it of (ord.order_items || [])) {
-                      const itAny = it as any;
-                      if (itAny.sale_type === "pieza" && itAny.is_fixed_price_piece) {
-                        creditoNuevo += (Number(itAny.quantity) || 0) * (Number(itAny.price) || 0);
-                      } else {
-                        const kg = Number(itAny.prepared_kilos || itAny.kilos || 0);
-                        creditoNuevo += kg * (Number(itAny.price) || 0);
-                      }
+                      creditoNuevo += itemSubtotal(it as never);
                     }
                   }
 
@@ -3204,9 +3192,12 @@ export default function CajaPage() {
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 {desgloseItems.map((item) => {
-                  const qty = item.sale_type === "pieza" ? Number(item.quantity || 0) : Number(item.kilos || 0);
-                  const unit = item.sale_type === "pieza" ? "pz" : "kg";
-                  const subtotal = qty * Number(item.price || 0);
+                  const esPieza = Boolean(item.is_fixed_price_piece);
+                  const qty = esPieza
+                    ? Number(item.quantity || 0)
+                    : Number(item.prepared_kilos ?? item.kilos ?? 0);
+                  const unit = esPieza ? "pz" : "kg";
+                  const subtotal = itemSubtotal(item as never);
                   return (
                     <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", borderRadius: 12, background: "white", border: `1px solid ${C.border}` }}>
                       <div>

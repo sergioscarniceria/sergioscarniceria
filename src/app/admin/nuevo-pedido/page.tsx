@@ -291,14 +291,19 @@ export default function NuevoPedidoPage() {
         return;
       }
 
+      // ¿El producto tiene precio fijo por pieza? Solo esos se cobran por pieza.
+      // Los demas se piden en piezas pero se cobran al peso que registre el carnicero.
+      const precioFijoPorPieza = Number(product.fixed_piece_price || 0) > 0;
+
       setCart((prev) => [
         ...prev,
         {
           name: product.name,
-          price,
+          price: precioFijoPorPieza ? Number(product.fixed_piece_price || 0) : price,
           sale_type: "pieza",
           kilos: 0,
           quantity,
+          is_fixed_price_piece: precioFijoPorPieza,
           is_excluded_from_discount: Boolean(product.is_excluded_from_discount),
         },
       ]);
@@ -534,6 +539,7 @@ export default function NuevoPedidoPage() {
       price: item.price,
       sale_type: item.sale_type,
       quantity: item.sale_type === "pieza" ? item.quantity : null,
+      is_fixed_price_piece: Boolean(item.is_fixed_price_piece),
       prepared_kilos: null,
       is_ready: false,
     }));
@@ -1248,7 +1254,10 @@ export default function NuevoPedidoPage() {
                             </div>
                           ) : (
                             <div style={{ color: COLORS.muted, fontSize: 14, marginTop: 4 }}>
-                              {item.quantity} pieza{item.quantity === 1 ? "" : "s"} · se pesa en producción
+                              {item.quantity} pieza{item.quantity === 1 ? "" : "s"}
+                              {item.is_fixed_price_piece
+                                ? " · precio fijo por pieza"
+                                : " · SE COBRA AL PESO (el carnicero lo pesa en producción)"}
                             </div>
                           )}
 

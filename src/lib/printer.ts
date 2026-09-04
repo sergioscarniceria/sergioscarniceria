@@ -1,4 +1,5 @@
-/**
+
+import { itemSubtotal } from "@/lib/itemSubtotal";/**
  * Servicio de impresión ESC/POS para Epson T20iv-l
  * Usa WebUSB API para comunicación directa desde Chrome en Windows
  * Sin necesidad de instalar software adicional
@@ -275,11 +276,9 @@ function money(n: number): string {
 
 function itemTotal(item: TicketItem): number {
   if (item.total !== undefined) return item.total;
-  if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
-    return (Number(item.quantity) || 0) * (Number(item.price) || 0);
-  }
-  const kg = Number(item.prepared_kilos || item.kilos || 0);
-  return kg * (Number(item.price) || 0);
+  // Una sola fuente de verdad para el importe: el ticket impreso y la caja
+  // tienen que decir exactamente lo mismo.
+  return itemSubtotal(item);
 }
 
 export function buildTicketBytes(ticket: TicketData): number[] {
@@ -341,7 +340,7 @@ export function buildTicketBytes(ticket: TicketData): number[] {
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${qty} pza x $${money(price)}`, `$${money(total)}`));
     } else {
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${kg.toFixed(3)}kg x $${money(price)}`, `$${money(total)}`));
     }
@@ -601,7 +600,7 @@ export function browserPrintTicket(ticket: TicketData): void {
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       detail = `${item.quantity} pza x $${money(Number(item.price) || 0)}`;
     } else {
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       detail = `${kg.toFixed(3)}kg x $${money(Number(item.price) || 0)}`;
     }
     itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;
@@ -781,7 +780,7 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${qty} pza x $${money(price)}`, `$${money(total)}`));
     } else {
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${kg.toFixed(3)}kg x $${money(price)}`, `$${money(total)}`));
     }
@@ -910,7 +909,7 @@ function browserPrintCreditTicket(ticket: TicketData): void {
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       detail = `${item.quantity} pza x $${money(Number(item.price) || 0)}`;
     } else {
-      const kg = Number(item.prepared_kilos || item.kilos || 0);
+      const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       detail = `${kg.toFixed(3)}kg x $${money(Number(item.price) || 0)}`;
     }
     itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;

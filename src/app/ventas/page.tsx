@@ -14,6 +14,7 @@ type Item = {
   id: string;
   product: string;
   kilos: number;
+  prepared_kilos?: number | null;
   price: number;
   sale_type?: "kg" | "pieza";
   quantity?: number | null;
@@ -403,15 +404,21 @@ async function loadCustomers() {
 
 function pullProdOrder(order: Ticket) {
   if (items.length > 0 && !confirm("Ya tienes productos en el carrito. ¿Reemplazar con este pedido?")) return;
-  const loadedItems: Item[] = (order.order_items || []).map((oi) => ({
-    id: crypto.randomUUID(),
-    product: oi.product,
-    kilos: Number(oi.kilos || 0),
-    price: Number(oi.price || 0),
-    quantity: oi.quantity ?? undefined,
-    sale_type: oi.sale_type || "kg",
-    is_fixed_price_piece: oi.is_fixed_price_piece ?? false,
-  }));
+  const loadedItems: Item[] = (order.order_items || []).map((oi) => {
+    // Si el carnicero ya lo peso, ese peso manda y NO se puede perder:
+    // sin el, cobranza volveria a calcular piezas x precio del kilo.
+    const pesado = Number((oi as { prepared_kilos?: number | null }).prepared_kilos || 0);
+    return {
+      id: crypto.randomUUID(),
+      product: oi.product,
+      kilos: pesado > 0 ? pesado : Number(oi.kilos || 0),
+      prepared_kilos: pesado > 0 ? pesado : null,
+      price: Number(oi.price || 0),
+      quantity: oi.quantity ?? undefined,
+      sale_type: oi.sale_type || "kg",
+      is_fixed_price_piece: oi.is_fixed_price_piece ?? false,
+    };
+  });
   setItems(loadedItems);
   setPulledOrderId(order.id);
   // Cargar cliente del pedido
@@ -430,7 +437,7 @@ async function loadProdOrders() {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const { data } = await supabase
       .from("orders")
-      .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, price, sale_type, quantity, is_fixed_price_piece)`)
+      .select(`id, customer_name, customer_id, status, source, notes, created_at, payment_status, order_items (id, product, kilos, prepared_kilos, price, sale_type, quantity, is_fixed_price_piece)`)
       .not("source", "in", "(mostrador,caja_manual,pedido_mostrador)")
       .or("payment_status.eq.pendiente,payment_status.is.null")
       .not("status", "eq", "cancelado")
@@ -835,6 +842,11 @@ if (pulledOrderId) {
     order_id: pulledOrderId,
     product: item.product,
     kilos: Number(Number(item.kilos || 0).toFixed(3)),
+    prepared_kilos: item.prepared_kilos != null
+      ? Number(Number(item.prepared_kilos).toFixed(3))
+      : (item.sale_type === "pieza" && !item.is_fixed_price_piece && Number(item.kilos || 0) > 0
+          ? Number(Number(item.kilos).toFixed(3))
+          : null),
     price: Number(Number(item.price || 0).toFixed(2)),
     sale_type: item.sale_type || "kg",
     quantity: item.sale_type === "pieza" ? Number(item.quantity || 0) : null,
@@ -1605,11 +1617,7 @@ const paidTickets = useMemo(() => {
       <div style={orderItemNameStyle}>{item.product}</div>
       <div style={orderItemSubtotalStyle}>
         $
-        {money(
-          item.sale_type === "pieza" && item.is_fixed_price_piece
-            ? Number(item.quantity || 0) * Number(item.price || 0)
-            : Number(item.kilos || 0) * Number(item.price || 0)
-        )}
+        {money(itemSubtotal(item))}
       </div>
     </div>
 
