@@ -19,6 +19,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  // Necesario para que las rutas relativas (og:image, canonical) se vuelvan absolutas
+  metadataBase: new URL("https://sergioscarniceria.com"),
+  alternates: { canonical: "/" },
   title: {
     default: "Sergio's Carnicería | Carnes de calidad en Ezequiel Montes, Qro.",
     template: "%s | Sergio's Carnicería",
@@ -47,6 +50,22 @@ export const metadata: Metadata = {
     siteName: "Sergio's Carnicería",
     locale: "es_MX",
     type: "website",
+    // Sin esto, al compartir el link por WhatsApp o Facebook no aparecía imagen
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "Sergio's Carnicería — Carne de calidad desde 1976, Ezequiel Montes, Querétaro",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Sergio's Carnicería | Carnes de calidad en Ezequiel Montes, Qro.",
+    description:
+      "Cortes de carne premium, marinados y productos frescos con entrega a domicilio.",
+    images: ["/og-image.jpg"],
   },
 };
 
@@ -56,7 +75,7 @@ const jsonLd = {
   name: "Sergio's Carnicería",
   url: "https://sergioscarniceria.com",
   logo: "https://sergioscarniceria.com/logo.png",
-  image: "https://sergioscarniceria.com/logo.png",
+  image: "https://sergioscarniceria.com/og-image.jpg",
   description:
     "Cortes de carne premium, marinados y productos frescos con entrega a domicilio en Ezequiel Montes, Querétaro.",
   address: {
@@ -71,7 +90,11 @@ const jsonLd = {
     latitude: 20.6649555,
     longitude: -99.8990919,
   },
-  telephone: "+524421234567",
+  telephone: "+524411153314",
+  sameAs: [
+    "https://www.instagram.com/sergioscarniceria",
+    "https://www.facebook.com/share/1RS83jZX6D/",
+  ],
   servesCuisine: "Carnicería mexicana",
   priceRange: "$$",
   openingHoursSpecification: [
