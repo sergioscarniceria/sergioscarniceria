@@ -361,7 +361,7 @@ export default function HomePage() {
             {["Inicio", "Recetario", "Ubicación", "Contacto"].map((t) => (
               <a key={t} href={`#${t.toLowerCase().replace("ó", "o")}`} className="nav-link" style={{ padding: "8px 14px", borderRadius: 10, color: C.text, textDecoration: "none", fontWeight: 600, fontSize: 14 }}>{t}</a>
             ))}
-            <Link href="/cliente" className="cta-btn" style={{ padding: "9px 18px", borderRadius: 12, background: C.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 14, marginLeft: 8 }}>
+            <Link href="/tienda" className="cta-btn" style={{ padding: "9px 18px", borderRadius: 12, background: C.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 14, marginLeft: 8 }}>
               Hacer pedido
             </Link>
           </div>
@@ -376,7 +376,7 @@ export default function HomePage() {
             {["Inicio", "Recetario", "Ubicación", "Contacto"].map((t) => (
               <a key={t} href={`#${t.toLowerCase().replace("ó", "o")}`} onClick={() => setMobileMenuOpen(false)} style={{ padding: "14px 16px", borderRadius: 12, color: C.text, textDecoration: "none", fontWeight: 600, fontSize: 16 }}>{t}</a>
             ))}
-            <Link href="/cliente" onClick={() => setMobileMenuOpen(false)} style={{ padding: "14px 16px", borderRadius: 12, background: C.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 }}>
+            <Link href="/tienda" onClick={() => setMobileMenuOpen(false)} style={{ padding: "14px 16px", borderRadius: 12, background: C.primary, color: "white", textDecoration: "none", fontWeight: 700, fontSize: 16, textAlign: "center", marginTop: 4 }}>
               Hacer pedido
             </Link>
           </div>
@@ -407,7 +407,7 @@ export default function HomePage() {
           </p>
 
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/cliente" className="cta-btn" style={{
+            <Link href="/tienda" className="cta-btn" style={{
               padding: "16px 40px", borderRadius: 16, border: "none",
               background: `linear-gradient(135deg, ${C.primary} 0%, ${C.primaryDark} 100%)`,
               color: "white", textDecoration: "none", fontWeight: 800, fontSize: 17,

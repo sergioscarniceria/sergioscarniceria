@@ -353,6 +353,9 @@ export default function CajaPage() {
   const [closureHistory, setClosureHistory] = useState<CashClosure[]>([]);
   const [todayOpening, setTodayOpening] = useState<CashOpening | null>(null);
   const [expenses, setExpenses] = useState<CashExpense[]>([]);
+  // Canje de puntos del dia: no es efectivo que salio del cajon, pero si
+  // dinero que la carniceria regalo, y tiene que verse en el corte.
+  const [canjePuntos, setCanjePuntos] = useState({ canjes: 0, puntos: 0, pesos: 0 });
   const [weekData, setWeekData] = useState<Movement[]>([]);
   const [weekExpenses, setWeekExpenses] = useState<CashExpense[]>([]);
 
@@ -513,6 +516,19 @@ export default function CajaPage() {
       // Table may not exist yet
     }
   }, [today]);
+
+  const loadCanjePuntos = useCallback(async () => {
+    const { data, error } = await supabase.rpc("puntos_canjeados_rango", {
+      p_from: today, p_to: today,
+    });
+    if (error) { console.log(error); return; }
+    const r = Array.isArray(data) ? data[0] : data;
+    setCanjePuntos({
+      canjes: Number(r?.canjes || 0),
+      puntos: Number(r?.puntos || 0),
+      pesos: Number(r?.pesos || 0),
+    });
+  }, [supabase, today]);
 
   const loadExpenses = useCallback(async () => {
     try {
@@ -944,7 +960,7 @@ export default function CajaPage() {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await Promise.all([loadMovements(), loadTodayClosure(), loadClosureHistory(), loadOpening(), loadExpenses(), loadWeekData(), loadWeekExpenses()]);
+      await Promise.all([loadMovements(), loadTodayClosure(), loadClosureHistory(), loadOpening(), loadExpenses(), loadWeekData(), loadWeekExpenses(), loadCanjePuntos()]);
       setLoading(false);
     })();
   }, [dateFrom, dateTo]);
@@ -1654,6 +1670,15 @@ export default function CajaPage() {
       row("Total gastos", `-$${money(totalGastos)}`, true);
     }
     y += 3;
+
+    // ═══ CANJE DE PUNTOS ═══
+    if (canjePuntos.pesos > 0) {
+      sectionTitle("PROGRAMA DE PUNTOS");
+      row("Canjes del día", String(canjePuntos.canjes));
+      row("Puntos usados", String(canjePuntos.puntos));
+      row("Descuento otorgado", `-$${money(canjePuntos.pesos)}`, true);
+      y += 3;
+    }
 
     // ═══ CANCELACIONES ═══
     if (cancelled.length > 0) {
@@ -2684,6 +2709,13 @@ export default function CajaPage() {
               <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
               <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
               <SummaryRow label="(-) Gastos del día" value={`-$${money(stats.totalGastos)}`} color={C.danger} />
+              {canjePuntos.pesos > 0 && (
+                <SummaryRow
+                  label={`⭐ Canje de puntos (${canjePuntos.canjes})`}
+                  value={`-$${money(canjePuntos.pesos)}`}
+                  color={C.info}
+                />
+              )}
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>
@@ -2775,6 +2807,13 @@ export default function CajaPage() {
               <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
               <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
               <SummaryRow label="(-) Gastos del día" value={`-$${money(stats.totalGastos)}`} color={C.danger} />
+              {canjePuntos.pesos > 0 && (
+                <SummaryRow
+                  label={`⭐ Canje de puntos (${canjePuntos.canjes})`}
+                  value={`-$${money(canjePuntos.pesos)}`}
+                  color={C.info}
+                />
+              )}
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>

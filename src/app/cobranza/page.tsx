@@ -205,6 +205,13 @@ const [productSearchManual, setProductSearchManual] = useState("");
 const [manualDiscountMode, setManualDiscountMode] = useState<"none" | "percent" | "amount">("none");
 const [manualDiscountValue, setManualDiscountValue] = useState("");
 
+  // Canje de puntos de lealtad
+  const [puntosInfo, setPuntosInfo] = useState<{
+    saldo: number; valorPunto: number; minimo: number;
+    activo: boolean; pesos: number; puedeCanjear: boolean;
+  } | null>(null);
+  const [puntosACanjear, setPuntosACanjear] = useState(0);
+
   // Descuento
   const [discountMode, setDiscountMode] = useState<"none" | "percent" | "amount">("none");
   const [discountValue, setDiscountValue] = useState("");
@@ -230,6 +237,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   // Cancel con motivo obligatorio
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReasonText, setCancelReasonText] = useState("");
+  const [cancelCode, setCancelCode] = useState("");
   const [cancelError, setCancelError] = useState("");
 
   // Calculadora de cambio (efectivo)
@@ -296,6 +304,35 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       customerName: selectedTicket.customer_name || undefined,
     });
   }, [selectedTicket?.id, extraTickets.length, discountMode, discountValue]);
+
+  // Saldo de puntos del cliente del ticket seleccionado
+  useEffect(() => {
+    let vivo = true;
+    setPuntosACanjear(0);
+    const cid = selectedTicket?.customer_id;
+
+    if (!cid || selectedTicket?.customer_name === "MOSTRADOR") {
+      setPuntosInfo(null);
+      return;
+    }
+
+    (async () => {
+      const { data, error } = await supabase.rpc("puntos_de_cliente", { p_customer_id: cid });
+      if (!vivo) return;
+      const r = Array.isArray(data) ? data[0] : data;
+      if (error || !r) { setPuntosInfo(null); return; }
+      setPuntosInfo({
+        saldo: Number(r.saldo || 0),
+        valorPunto: Number(r.valor_punto || 0),
+        minimo: Number(r.minimo_canje || 0),
+        activo: Boolean(r.canje_activo),
+        pesos: Number(r.pesos_disponibles || 0),
+        puedeCanjear: Boolean(r.puede_canjear),
+      });
+    })();
+
+    return () => { vivo = false; };
+  }, [supabase, selectedTicket?.id, selectedTicket?.customer_id, selectedTicket?.customer_name]);
 
   // Heartbeat cada 5s
   useEffect(() => {
@@ -654,11 +691,47 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     return allSelectedTickets().reduce((acc, t) => acc + Number(t.discount_amount || 0), 0);
   }
 
+  /**
+   * Ejecuta el canje en la base ANTES de marcar el ticket como pagado.
+   * Si falla, devuelve null y el cobro se detiene: nunca se descuenta
+   * del ticket sin haber restado los puntos.
+   */
+  async function ejecutarCanje(orderId: string): Promise<number | null> {
+    if (puntosACanjear <= 0 || !selectedTicket?.customer_id) return 0;
+
+    const { data, error } = await supabase.rpc("canjear_puntos", {
+      p_customer_id: selectedTicket.customer_id,
+      p_puntos: puntosACanjear,
+      p_order_id: orderId,
+      p_created_by: cashierName || "cajera",
+    });
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo canjear los puntos: " + (error.message || "error desconocido"));
+      return null;
+    }
+
+    const r = Array.isArray(data) ? data[0] : data;
+    return Number(r?.pesos_descuento || 0);
+  }
+
+  /** Pesos de descuento por los puntos que la cajera eligió canjear */
+  function descuentoPorPuntos(): number {
+    if (!puntosInfo || puntosACanjear <= 0) return 0;
+    const sub = combinedTotal();
+    const mayoreo = combinedMayoreoDiscount();
+    const manual = calcDiscount(sub);
+    const restante = Math.max(0, sub - mayoreo - manual);
+    // Nunca dejar el ticket en negativo
+    return Math.min(restante, moneyRound(puntosACanjear * puntosInfo.valorPunto));
+  }
+
   function combinedFinalTotal(): number {
     const sub = combinedTotal();
     const mayoreo = combinedMayoreoDiscount();
     const manual = calcDiscount(sub);
-    return moneyRound(Math.max(0, sub - mayoreo - manual));
+    return moneyRound(Math.max(0, sub - mayoreo - manual - descuentoPorPuntos()));
   }
 
   /**
@@ -721,7 +794,11 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     const subtotal = combinedTotal();
     const mayoreoDesc = combinedMayoreoDiscount();
     const descuento = calcDiscount(subtotal);
-    const finalTotal = Math.max(0, subtotal - mayoreoDesc - descuento);
+    const finalTotal = Math.max(0, subtotal - mayoreoDesc - descuento - descuentoPorPuntos());
+
+    // El canje va PRIMERO: si falla, no se cobra nada
+    const canjePesos = await ejecutarCanje(selectedTicket.id);
+    if (canjePesos === null) { setSaving(false); return; }
 
     const paidAt = new Date().toISOString();
     const isMulti = allTickets.length > 1;
@@ -736,6 +813,11 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         cashier_name: cashierName || null,
       };
 
+      // Los puntos canjeados se registran en el ticket principal
+      if (puntosACanjear > 0 && ticket.id === selectedTicket.id) {
+        orderUpdate.loyalty_points_redeemed = puntosACanjear;
+      }
+
       // Distribuir descuento manual proporcionalmente entre tickets del lote
       if (descuento > 0) {
         const tTotalForDisc = ticketTotal(ticket);
@@ -748,7 +830,11 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
 
       // Descuento solo en nota del ticket principal
-      if (descuento > 0 && ticket.id === selectedTicket.id) {
+      if (puntosACanjear > 0 && ticket.id === selectedTicket.id) {
+        const canjeNote = `Canje ${puntosACanjear} pts = -$${Math.ceil(descuentoPorPuntos())}`;
+        const partes = [ticket.notes || "", canjeNote, groupNote].filter(Boolean);
+        orderUpdate.notes = partes.join(" | ");
+      } else if (descuento > 0 && ticket.id === selectedTicket.id) {
         const discountNote = discountMode === "percent"
           ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}`
           : `Descuento -$${Math.ceil(descuento)}`;
@@ -862,7 +948,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       return cust.customer_type === "mayoreo" || Number(cust.discount_percent || 0) > 0;
     })();
 
-    if (descuento <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+    if (descuento <= 0 && puntosACanjear <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
       // Excluir del calculo los productos marcados como "no dan puntos"
       const baseParaPuntos = await (async () => {
         const nombres = (selectedTicket.order_items || []).map((it) => it.product).filter(Boolean);
@@ -928,6 +1014,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   async function markTicketPaidMixed() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
+
+    // El canje va primero: si falla, no se cobra
+    const canjeMixto = await ejecutarCanje(selectedTicket.id);
+    if (canjeMixto === null) return;
     const mEf = Number(mixedEfectivo || 0);
     const mTa = Number(mixedTarjeta || 0);
     const mTr = Number(mixedTransferencia || 0);
@@ -1123,13 +1213,34 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
   async function cancelTicket() {
     if (!selectedTicket) return;
+    if (!cancelCode.trim()) {
+      setCancelError("Ingresa tu código de cajera");
+      return;
+    }
+
     if (!cancelReasonText.trim()) {
-      setCancelError("Escribe el motivo de cancelacion");
+      setCancelError("Escribe el motivo de cancelación");
       return;
     }
 
     setSaving(true);
     setCancelError("");
+
+    // El nombre de quien cancela sale de la lista de empleados, no de la
+    // sesión abierta en la tablet: así nadie cancela a nombre de otra.
+    const { data: emp } = await supabase
+      .from("employee_codes")
+      .select("name, code")
+      .eq("code", cancelCode.trim())
+      .eq("role", "cajera")
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!emp) {
+      setCancelError("Código de cajera incorrecto");
+      setSaving(false);
+      return;
+    }
 
     // Releer el estado real desde la BD: nadie puede cancelar un ticket ya entregado
     const { data: fresh, error: freshError } = await supabase
@@ -1158,10 +1269,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       return;
     }
 
-    const cancellerName = (() => {
-      try { return sessionStorage.getItem("pin_name") || sessionStorage.getItem("pin_role") || "cajera"; }
-      catch { return "cajera"; }
-    })();
+    const cancellerName = emp.name;
 
     const { error } = await supabase
       .from("orders")
@@ -2837,6 +2945,82 @@ if (cashError) {
                       </div>
                     )}
 
+                    {/* Puntos de lealtad del cliente */}
+                    {puntosInfo && puntosInfo.saldo > 0 && (
+                      <div style={{
+                        background: puntosInfo.puedeCanjear ? "rgba(31,122,77,0.07)" : "rgba(0,0,0,0.03)",
+                        border: `1.5px solid ${puntosInfo.puedeCanjear ? "rgba(31,122,77,0.30)" : COLORS.border}`,
+                        borderRadius: 14, padding: 14, marginBottom: 12,
+                      }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <div>
+                            <div style={{ fontWeight: 800, color: COLORS.text, fontSize: 15 }}>
+                              ⭐ {puntosInfo.saldo.toLocaleString("es-MX")} puntos
+                            </div>
+                            <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 2 }}>
+                              {!puntosInfo.activo
+                                ? "El canje está desactivado"
+                                : puntosInfo.puedeCanjear
+                                  ? `Valen $${money(puntosInfo.pesos)} de descuento`
+                                  : `Le faltan ${(puntosInfo.minimo - puntosInfo.saldo).toLocaleString("es-MX")} pts para llegar al mínimo de ${puntosInfo.minimo.toLocaleString("es-MX")}`}
+                            </div>
+                          </div>
+
+                          {puntosInfo.puedeCanjear && (
+                            puntosACanjear > 0 ? (
+                              <button
+                                onClick={() => setPuntosACanjear(0)}
+                                style={{
+                                  padding: "9px 16px", borderRadius: 10, cursor: "pointer",
+                                  border: `1.5px solid rgba(180,35,24,0.30)`,
+                                  background: "white", color: COLORS.danger,
+                                  fontWeight: 700, fontSize: 13.5,
+                                }}
+                              >
+                                Quitar canje
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => {
+                                  // Nunca canjear más puntos de los que cubre el ticket
+                                  const sub = combinedTotal();
+                                  const restante = Math.max(0, sub - combinedMayoreoDiscount() - calcDiscount(sub));
+                                  const maxPorTicket = Math.floor(restante / (puntosInfo.valorPunto || 1));
+                                  const usar = Math.min(puntosInfo.saldo, maxPorTicket);
+                                  if (usar < puntosInfo.minimo) {
+                                    alert(
+                                      `Este ticket es muy chico para canjear.\n\n` +
+                                      `El mínimo son ${puntosInfo.minimo} puntos = $${money(puntosInfo.minimo * puntosInfo.valorPunto)}, ` +
+                                      `y el ticket va en $${money(restante)}.`
+                                    );
+                                    return;
+                                  }
+                                  setPuntosACanjear(usar);
+                                }}
+                                style={{
+                                  padding: "9px 16px", borderRadius: 10, cursor: "pointer",
+                                  border: "none", background: COLORS.success, color: "white",
+                                  fontWeight: 800, fontSize: 13.5,
+                                }}
+                              >
+                                Canjear puntos
+                              </button>
+                            )
+                          )}
+                        </div>
+
+                        {puntosACanjear > 0 && (
+                          <div style={{ marginTop: 10, fontSize: 12.5, color: COLORS.muted }}>
+                            Se usarán <b>{puntosACanjear.toLocaleString("es-MX")} pts</b>. Le quedan{" "}
+                            <b>{(puntosInfo.saldo - puntosACanjear).toLocaleString("es-MX")}</b>.
+                            <div style={{ color: "#a66a10", marginTop: 4 }}>
+                              Ojo: al canjear, este ticket no acumula puntos nuevos.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Resumen de cobro */}
                     <div style={discountSummaryStyle}>
                       <div style={summaryRowStyle}>
@@ -2853,6 +3037,12 @@ if (cashError) {
                         <div style={{ ...summaryRowStyle, color: COLORS.success }}>
                           <span>Descuento {discountMode === "percent" ? `(${discountValue}%)` : ""}</span>
                           <span>-${money(calcDiscount(combinedTotal()))}</span>
+                        </div>
+                      )}
+                      {descuentoPorPuntos() > 0 && (
+                        <div style={{ ...summaryRowStyle, color: COLORS.success }}>
+                          <span>⭐ Canje de {puntosACanjear.toLocaleString("es-MX")} puntos</span>
+                          <span>-${money(descuentoPorPuntos())}</span>
                         </div>
                       )}
                       <div style={{ ...summaryRowStyle, fontWeight: 800, fontSize: 22 }}>
@@ -2910,7 +3100,7 @@ if (cashError) {
                     </div>
 
                     <button
-                      onClick={() => { setShowCancelModal(true); setCancelReasonText(""); setCancelError(""); }}
+                      onClick={() => { setShowCancelModal(true); setCancelReasonText(""); setCancelCode(""); setCancelError(""); }}
                       style={dangerButtonStyle}
                       disabled={saving}
                     >
@@ -2954,7 +3144,27 @@ if (cashError) {
                           )}
 
                           <div style={{ marginBottom: 14 }}>
-                            <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Motivo de cancelacion *</div>
+                            <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Tu código de cajera *</div>
+                            <input
+                              value={cancelCode}
+                              onChange={(e) => setCancelCode(e.target.value)}
+                              type="password"
+                              inputMode="numeric"
+                              placeholder="••••"
+                              style={{
+                                width: "100%", padding: 12, borderRadius: 12,
+                                border: `1px solid ${COLORS.border}`, boxSizing: "border-box" as const,
+                                outline: "none", background: "rgba(255,255,255,0.9)", color: COLORS.text,
+                                fontSize: 18, letterSpacing: 4, textAlign: "center" as const,
+                              }}
+                            />
+                            <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 5 }}>
+                              Queda registrado quién cancela y por qué.
+                            </div>
+                          </div>
+
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 700, marginBottom: 6 }}>Motivo de cancelación *</div>
                             <textarea
                               value={cancelReasonText}
                               onChange={(e) => setCancelReasonText(e.target.value)}
