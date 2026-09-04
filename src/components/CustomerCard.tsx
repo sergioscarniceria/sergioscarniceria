@@ -58,11 +58,11 @@ export default function CustomerCard({ name, phone, email, password, customerId,
 </style></head><body>
 <div class="card">
   <div class="left">
-    <div class="shop-name">Sergio's Carnicer\u00eda</div>
+    <div class="shop-name">Sergio's Carnicería</div>
     <div class="customer-name">${name}</div>
-    ${phone ? `<div class="field"><div class="label">Tel\u00e9fono</div><div class="value">${phone}</div></div>` : ""}
+    ${phone ? `<div class="field"><div class="label">Teléfono</div><div class="value">${phone}</div></div>` : ""}
     ${email ? `<div class="field"><div class="label">Correo</div><div class="value">${email}</div></div>` : ""}
-    ${password ? `<div class="field"><div class="label">Contrase\u00f1a</div><div class="value">${password}</div></div>` : ""}
+    ${password ? `<div class="field"><div class="label">Contraseña</div><div class="value">${password}</div></div>` : ""}
   </div>
   <div class="right">
     <div class="qr"><img src="${qrUrl}" alt="QR" /></div>

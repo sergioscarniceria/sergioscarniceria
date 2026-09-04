@@ -299,7 +299,7 @@ export default function AdminClientesPage() {
   }
 
   async function deleteCustomer(id: string, name: string) {
-    if (!confirm(`\u00bfEliminar cliente "${name}" y todos sus datos (pedidos, cr\u00e9ditos, cuenta)?`)) return;
+    if (!confirm(`¿Eliminar cliente "${name}" y todos sus datos (pedidos, créditos, cuenta)?`)) return;
 
     setDeletingId(id);
 
@@ -319,7 +319,7 @@ export default function AdminClientesPage() {
 
       setCustomers((prev) => prev.filter((c) => c.id !== id));
     } catch {
-      alert("Error de conexi\u00f3n al eliminar");
+      alert("Error de conexión al eliminar");
     }
     setDeletingId(null);
   }

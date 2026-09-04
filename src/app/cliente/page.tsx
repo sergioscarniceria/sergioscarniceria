@@ -805,11 +805,11 @@ export default function ClientePage() {
   async function register() {
     setLoginError("");
     if (!name || !phone || !password) {
-      setLoginError("Llena tu nombre, tel\u00e9fono y contrase\u00f1a");
+      setLoginError("Llena tu nombre, teléfono y contraseña");
       return;
     }
     if (password.length < 4) {
-      setLoginError("La contrase\u00f1a debe tener al menos 4 caracteres");
+      setLoginError("La contraseña debe tener al menos 4 caracteres");
       return;
     }
 
@@ -847,7 +847,7 @@ export default function ClientePage() {
       setNewCardData({ name, phone, email, password, pin: result.client_pin, customerId: result.customer_id });
       await checkUser();
     } catch {
-      setLoginError("Error de conexi\u00f3n. Intenta de nuevo.");
+      setLoginError("Error de conexión. Intenta de nuevo.");
     }
 
     setSaving(false);
@@ -857,11 +857,11 @@ export default function ClientePage() {
     setLoginError("");
     setLoginSuccess("");
     if (!forgotPhone.trim()) {
-      setLoginError("Escribe tu n\u00famero de tel\u00e9fono");
+      setLoginError("Escribe tu número de teléfono");
       return;
     }
     if (!forgotNewPass || forgotNewPass.length < 4) {
-      setLoginError("Escribe tu nueva contrase\u00f1a (m\u00ednimo 4 caracteres)");
+      setLoginError("Escribe tu nueva contraseña (mínimo 4 caracteres)");
       return;
     }
 
@@ -875,17 +875,17 @@ export default function ClientePage() {
       const result = await res.json();
 
       if (!res.ok || !result.success) {
-        setLoginError(result.error || "No se pudo cambiar la contrase\u00f1a");
+        setLoginError(result.error || "No se pudo cambiar la contraseña");
         setSaving(false);
         return;
       }
 
-      setLoginSuccess(`Listo, ${result.name || ""}. Tu contrase\u00f1a fue cambiada. Ya puedes entrar.`);
+      setLoginSuccess(`Listo, ${result.name || ""}. Tu contraseña fue cambiada. Ya puedes entrar.`);
       setForgotPhone("");
       setForgotNewPass("");
       setTimeout(() => { setMode("login"); setLoginSuccess(""); }, 3000);
     } catch {
-      setLoginError("Error de conexi\u00f3n");
+      setLoginError("Error de conexión");
     }
     setSaving(false);
   }
@@ -898,7 +898,7 @@ export default function ClientePage() {
       : { email: email.trim() };
 
     if (loginMethod === "phone" && !loginPhone.trim()) {
-      setLoginError("Escribe tu tel\u00e9fono");
+      setLoginError("Escribe tu teléfono");
       return;
     }
     if (loginMethod === "email" && !email.trim()) {
@@ -906,7 +906,7 @@ export default function ClientePage() {
       return;
     }
     if (!password) {
-      setLoginError("Escribe tu contrase\u00f1a");
+      setLoginError("Escribe tu contraseña");
       return;
     }
 
@@ -924,8 +924,8 @@ export default function ClientePage() {
       if (!res.ok || !result.email) {
         setLoginError(
           loginMethod === "phone"
-            ? "No encontramos una cuenta con ese tel\u00e9fono. Verifica o crea una cuenta nueva."
-            : "No encontramos una cuenta con ese correo. Verifica o usa tel\u00e9fono."
+            ? "No encontramos una cuenta con ese teléfono. Verifica o crea una cuenta nueva."
+            : "No encontramos una cuenta con ese correo. Verifica o usa teléfono."
         );
         setSaving(false);
         return;
@@ -948,12 +948,12 @@ export default function ClientePage() {
       }
 
       if (!loginOk) {
-        setLoginError("Contrase\u00f1a incorrecta. Si la olvidaste, usa \"\u00bfOlvid\u00e9 mi contrase\u00f1a?\" para poner una nueva.");
+        setLoginError("Contraseña incorrecta. Si la olvidaste, usa \"¿Olvidé mi contraseña?\" para poner una nueva.");
         setSaving(false);
         return;
       }
     } catch {
-      setLoginError("Error de conexi\u00f3n. Intenta de nuevo.");
+      setLoginError("Error de conexión. Intenta de nuevo.");
       setSaving(false);
       return;
     }

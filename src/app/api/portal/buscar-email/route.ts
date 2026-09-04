@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     const { phone, email } = body;
 
     if ((!phone || !phone.trim()) && (!email || !email.trim())) {
-      return NextResponse.json({ error: "Tel\u00e9fono o correo requerido" }, { status: 400 });
+      return NextResponse.json({ error: "Teléfono o correo requerido" }, { status: 400 });
     }
 
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

@@ -177,7 +177,7 @@ export default function TiendaPage() {
   /* ─── Submit order (guest = Mercado Pago only) ─── */
   const submitOrder = async () => {
     if (!name.trim() || !phone.trim() || !address.trim()) {
-      alert("Completa tu nombre, tel\u00e9fono y direcci\u00f3n");
+      alert("Completa tu nombre, teléfono y dirección");
       return;
     }
     if (cart.length === 0) return;
@@ -268,6 +268,7 @@ export default function TiendaPage() {
       background: C.bg,
       fontFamily: "-apple-system, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif",
       color: C.text,
+      width: "100%",
       maxWidth: 520,
       margin: "0 auto",
       position: "relative",
@@ -289,7 +290,7 @@ export default function TiendaPage() {
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
         padding: "40px 24px",
         textAlign: "center",
-        maxWidth: 520, margin: "0 auto",
+        width: "100%", maxWidth: 520, margin: "0 auto",
       }}>
         {/* Logo */}
         <div style={{
@@ -298,7 +299,7 @@ export default function TiendaPage() {
           boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
           border: "3px solid rgba(255,255,255,0.15)",
         }}>
-          <img src="/logo.png" alt="Sergio's Carnicer\u00eda"
+          <img src="/logo.png" alt="Sergio's Carnicería"
             style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
 
@@ -306,7 +307,7 @@ export default function TiendaPage() {
           color: C.white, fontSize: 28, fontWeight: 800,
           margin: "0 0 6px", letterSpacing: "-0.5px",
         }}>
-          Sergio&apos;s Carnicer\u00eda
+          Sergio&apos;s Carnicería
         </h1>
         <p style={{
           color: C.accentLight, fontSize: 15, margin: "0 0 40px",
@@ -353,7 +354,7 @@ export default function TiendaPage() {
           Ya tengo cuenta
         </button>
         <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 8 }}>
-          Accede a cr\u00e9dito y m\u00e1s opciones de pago
+          Accede a crédito y más opciones de pago
         </div>
 
         {/* Footer */}
@@ -453,8 +454,8 @@ export default function TiendaPage() {
           <SectionLabel icon="👤" text="Tus datos" />
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
             <StyledInput placeholder="Nombre completo *" value={name} onChange={setName} />
-            <StyledInput placeholder="Tel\u00e9fono (WhatsApp) *" value={phone} onChange={setPhone} type="tel" />
-            <StyledInput placeholder="Direcci\u00f3n de entrega *" value={address} onChange={setAddress} />
+            <StyledInput placeholder="Teléfono (WhatsApp) *" value={phone} onChange={setPhone} type="tel" />
+            <StyledInput placeholder="Dirección de entrega *" value={address} onChange={setAddress} />
             <StyledInput placeholder="Notas especiales (opcional)" value={notes} onChange={setNotes} multiline />
           </div>
 
@@ -468,11 +469,11 @@ export default function TiendaPage() {
             style={{ ...inputBaseStyle, marginBottom: 4 }}
           />
           <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>
-            M\u00ednimo 1 hora a partir de ahora para preparar tu pedido
+            Mínimo 1 hora a partir de ahora para preparar tu pedido
           </div>
 
           {/* Pago - Guest = solo Mercado Pago */}
-          <SectionLabel icon="💳" text="M\u00e9todo de pago" />
+          <SectionLabel icon="💳" text="Método de pago" />
           <div style={{
             background: C.card, borderRadius: 14, padding: "16px 18px",
             border: `2px solid ${C.primary}`, marginBottom: 24,
@@ -486,7 +487,7 @@ export default function TiendaPage() {
             </div>
             <div>
               <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>Mercado Pago</div>
-              <div style={{ fontSize: 13, color: C.muted }}>Tarjeta, d\u00e9bito o saldo MP</div>
+              <div style={{ fontSize: 13, color: C.muted }}>Tarjeta, débito o saldo MP</div>
             </div>
             <div style={{ marginLeft: "auto" }}>
               <div style={{
@@ -538,8 +539,8 @@ export default function TiendaPage() {
           {cart.length === 0 ? (
             <div style={{ textAlign: "center", padding: "60px 20px", color: C.muted }}>
               <div style={{ fontSize: 64, marginBottom: 16, opacity: 0.5 }}>🛒</div>
-              <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 4, color: C.text }}>Carrito vac\u00edo</div>
-              <div style={{ fontSize: 14, marginBottom: 20 }}>Agrega productos del cat\u00e1logo</div>
+              <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 4, color: C.text }}>Carrito vacío</div>
+              <div style={{ fontSize: 14, marginBottom: 20 }}>Agrega productos del catálogo</div>
               <button onClick={() => setStep("catalog")} style={{
                 ...btnPrimaryStyle, width: "auto", display: "inline-block", padding: "12px 32px",
               }}>
@@ -629,7 +630,7 @@ export default function TiendaPage() {
               style={{ width: 36, height: 36, borderRadius: 10, objectFit: "cover" }} />
             <div>
               <div style={{ color: C.white, fontSize: 16, fontWeight: 800, letterSpacing: "-0.3px" }}>
-                Sergio&apos;s Carnicer\u00eda
+                Sergio&apos;s Carnicería
               </div>
               <div style={{ color: C.accentLight, fontSize: 11, fontWeight: 500 }}>
                 Cortes frescos a tu puerta
@@ -711,7 +712,7 @@ export default function TiendaPage() {
           <div style={{ textAlign: "center", padding: "60px 20px", color: C.muted }}>
             <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>🔍</div>
             <div style={{ fontSize: 16, fontWeight: 600, color: C.text }}>Sin resultados</div>
-            <div style={{ fontSize: 14 }}>Intenta con otro t\u00e9rmino</div>
+            <div style={{ fontSize: 14 }}>Intenta con otro término</div>
           </div>
         ) : (
           Object.entries(groupedProducts).map(([cat, prods]) => (
@@ -759,7 +760,7 @@ export default function TiendaPage() {
                           padding: "2px 6px", borderRadius: 5,
                           textTransform: "uppercase", letterSpacing: "0.5px",
                         }}>
-                          {saleType === "pieza" ? "pieza" : "x kg"}
+                          {saleType === "pieza" ? "por pieza" : "por kilo"}
                         </div>
                         {inCart && (
                           <div style={{
@@ -837,7 +838,7 @@ export default function TiendaPage() {
           padding: "12px 12px", paddingBottom: "max(12px, env(safe-area-inset-bottom))",
           background: "linear-gradient(transparent 0%, rgba(250,246,240,0.92) 25%)",
           backdropFilter: "blur(8px)",
-          zIndex: 100, maxWidth: 520, margin: "0 auto",
+          zIndex: 100, width: "100%", maxWidth: 520, margin: "0 auto",
         }}>
           <button onClick={() => setStep("cart")} style={{
             width: "100%", padding: "13px 18px", borderRadius: 14,

@@ -1209,7 +1209,7 @@ export default function AdminDashboardPage() {
   .balance .val{font-size:16px;font-weight:900}
   .footer{text-align:center;font-size:9px;color:#999;margin-top:20px;border-top:1px solid #ddd;padding-top:8px}
 </style></head><body>
-  <h1>Sergio's Carnicer\u00eda - Reporte de Utilidades</h1>
+  <h1>Sergio's Carnicería - Reporte de Utilidades</h1>
   <div class="subtitle">${u.current.label} ${new Date().getFullYear()} - Generado el ${new Date().toLocaleDateString("es-MX")}</div>
 
   <div class="grid">
@@ -1265,7 +1265,7 @@ export default function AdminDashboardPage() {
   <table><thead><tr><th>Categoría</th><th style="text-align:right">Monto</th><th style="text-align:right">%</th></tr></thead><tbody>${catRows}</tbody></table>
   ` : ""}
 
-  <div class="footer">Sergio's Carnicer\u00eda - sergioscarniceria.com - Reporte generado autom\u00e1ticamente</div>
+  <div class="footer">Sergio's Carnicería - sergioscarniceria.com - Reporte generado automáticamente</div>
 </body></html>`;
 
     const blob = new Blob([html], { type: "text/html" });
