@@ -884,6 +884,8 @@ export default function CajaPage() {
           status: "cancelado",
           payment_status: "cancelado",
           canceled_at: new Date().toISOString(),
+          cancel_reason: cancelReason.trim(),
+          cancelled_by: emp.name,
         })
         .eq("id", cancelMovement.reference_id);
 
@@ -1418,7 +1420,7 @@ export default function CajaPage() {
       supabaseRef.from("orders").select("id, customer_name, created_at, payment_method").eq("payment_method", "credito").gte("created_at", dayStart).lte("created_at", dayEnd),
       supabaseRef.from("cxc_notes").select("id, customer_name, total_amount, note_number, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       supabaseRef.from("cxc_payments").select("id, customer_name, amount, payment_method, created_at").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
-      supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status").or("status.eq.cancelado,payment_status.eq.cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
+      supabaseRef.from("orders").select("id, customer_name, captured_by, created_at, canceled_at, status, cancel_reason, cancelled_by").or("status.eq.cancelado,payment_status.eq.cancelado").gte("created_at", dayStart).lte("created_at", dayEnd).order("created_at", { ascending: true }),
       // Orders del día con items para top productos, clientes, carniceros, descuentos
       supabaseRef.from("orders").select("id, customer_name, captured_by, discount_amount, edited_at, edited_by, status, order_items(product, kilos, price, quantity, sale_type, prepared_kilos, is_fixed_price_piece)").in("status", ["pendiente", "terminado", "entregado"]).gte("created_at", dayStart).lte("created_at", dayEnd),
       // Tickets editados del día
@@ -1764,16 +1766,19 @@ export default function CajaPage() {
       sectionTitle("TICKETS CANCELADOS (sin cobrar)");
       doc.setFontSize(7); doc.setFont("helvetica", "bold");
       doc.text("Hora", marginL + 2, y);
-      doc.text("Cliente", marginL + 22, y);
-      doc.text("Carnicero", marginL + 72, y);
+      doc.text("Cliente", marginL + 20, y);
+      doc.text("Canceló", marginL + 60, y);
+      doc.text("Motivo", marginL + 90, y);
       y += 4;
       doc.setFont("helvetica", "normal");
       for (const o of dayCancelledOrders) {
         checkPage(5);
-        const hora = mxTime(o.canceled_at || o.created_at);
-        doc.text(hora, marginL + 2, y);
-        doc.text((o.customer_name || "Mostrador").slice(0, 22), marginL + 22, y);
-        doc.text((o.captured_by || "—").slice(0, 15), marginL + 72, y);
+        const oo = o as { canceled_at?: string; created_at?: string; customer_name?: string;
+                          captured_by?: string; cancelled_by?: string; cancel_reason?: string };
+        doc.text(mxTime(oo.canceled_at || oo.created_at), marginL + 2, y);
+        doc.text((oo.customer_name || "Mostrador").slice(0, 20), marginL + 20, y);
+        doc.text((oo.cancelled_by || oo.captured_by || "—").slice(0, 14), marginL + 60, y);
+        doc.text((oo.cancel_reason || "Sin motivo").slice(0, 42), marginL + 90, y);
         y += 4;
       }
       row("Total tickets cancelados", String(dayCancelledOrders.length), true);

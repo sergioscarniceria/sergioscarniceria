@@ -1302,6 +1302,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         status: "cancelado",
         payment_status: "cancelado",
         canceled_at: new Date().toISOString(),
+        // Un ticket cancelado antes de cobrarse no genera movimiento de caja,
+        // asi que el motivo tiene que quedar guardado aqui o se pierde.
+        cancel_reason: cancelReasonText.trim(),
+        cancelled_by: cancellerName,
       })
       .eq("id", selectedTicket.id);
 
