@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { coincideEnAlguno } from "@/lib/search";
 
 // jsPDF desde CDN (mismo enfoque que en /admin/caja)
 function loadJsPDF(): Promise<any> {
@@ -564,22 +565,9 @@ export default function NuevoPedidoPage() {
   }
 
   const searchedCustomers = useMemo(() => {
-    // Normaliza quitando acentos para que "jose" encuentre "José"
-    const norm = (t: string) => (t || "")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    const q = norm(customerSearch.trim());
-    if (!q) return [];
+    if (!customerSearch.trim()) return [];
     return customers
-      .filter((c) => {
-        return (
-          norm(c.name || "").includes(q) ||
-          norm(c.phone || "").includes(q) ||
-          norm(c.email || "").includes(q) ||
-          norm(c.business_name || "").includes(q)
-        );
-      })
+      .filter((c) => coincideEnAlguno([c.name, c.phone, c.email, c.business_name], customerSearch))
       .slice(0, 50);
   }, [customers, customerSearch]);
 

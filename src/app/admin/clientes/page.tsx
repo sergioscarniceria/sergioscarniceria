@@ -6,6 +6,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 import { exportToExcel } from "@/lib/exportExcel";
 import { getAdminSecret } from "@/lib/admin-secret";
 import CustomerCard from "@/components/CustomerCard";
+import { coincideEnAlguno } from "@/lib/search";
 
 type Customer = {
   id: string;
@@ -371,14 +372,9 @@ export default function AdminClientesPage() {
   }
 
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-
-    if (!q) return customers;
-
+    if (!search.trim()) return customers;
     return customers.filter((c) =>
-      `${c.name ?? ""} ${c.phone ?? ""} ${c.email ?? ""} ${c.business_name ?? ""} ${c.address ?? ""}`
-        .toLowerCase()
-        .includes(q)
+      coincideEnAlguno([c.name, c.phone, c.email, c.business_name, c.address], search)
     );
   }, [customers, search]);
 

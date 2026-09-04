@@ -12,6 +12,7 @@ import { smartPrintTicket, smartPrintCreditTicket, openCashDrawer, type TicketDa
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound, roundingDiff } from "@/lib/money";
 import { sendCfd, type CfdItemLine } from "@/lib/cfd-channel";
+import { coincideEnAlguno } from "@/lib/search";
 
 type TabMode = "ticket" | "manual" | "historial";
 type PaymentMethod = "efectivo" | "tarjeta" | "transferencia" | "credito";
@@ -2388,7 +2389,7 @@ if (cashError) {
                                 Mostrador (sin cliente)
                               </button>
                               {customers
-                                .filter((c) => !customerSearch || c.name.toLowerCase().includes(customerSearch.toLowerCase()))
+                                .filter((c) => coincideEnAlguno([c.name], customerSearch))
                                 .slice(0, 15)
                                 .map((c) => (
                                   <button

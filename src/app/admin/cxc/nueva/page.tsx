@@ -5,6 +5,7 @@ import { descontarInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { moneyRound, roundingDiff } from "@/lib/money";
+import { coincideEnAlguno } from "@/lib/search";
 
 type Customer = {
   id: string;
@@ -238,17 +239,10 @@ export default function NuevaNotaCxcPage() {
   }
 
   const searchedCustomers = useMemo(() => {
-    const q = customerSearch.toLowerCase().trim();
-    if (!q) return [];
+    if (!customerSearch.trim()) return [];
     return customers
-      .filter((customer) => {
-        return (
-          (customer.name || "").toLowerCase().includes(q) ||
-          (customer.phone || "").toLowerCase().includes(q) ||
-          (customer.email || "").toLowerCase().includes(q)
-        );
-      })
-      .slice(0, 20);
+      .filter((customer) => coincideEnAlguno([customer.name, customer.phone, customer.email], customerSearch))
+      .slice(0, 50);
   }, [customers, customerSearch]);
 
   const searchedProducts = useMemo(() => {

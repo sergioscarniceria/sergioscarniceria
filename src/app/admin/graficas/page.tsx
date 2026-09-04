@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { normalizarBusqueda as norm, coincide } from "@/lib/search";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
@@ -103,10 +104,7 @@ function etiquetaPeriodo(iso: string, gran: Gran) {
   return `${d} ${MESES[m - 1]}`;
 }
 
-// Normaliza para buscar sin acentos ni mayusculas
-function norm(t: string) {
-  return (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
+
 
 export default function GraficasPage() {
   const supabase = getSupabaseClient();
@@ -243,10 +241,10 @@ export default function GraficasPage() {
 
   // ── Buscador ─────────────────────────────────────────────
   const sugerencias = useMemo(() => {
-    const q = norm(busqueda.trim());
+    const q = norm(busqueda);
     const base = catalogo.filter((c) => !seleccion.includes(c.clave));
     if (!q) return base.slice(0, 12);
-    return base.filter((c) => norm(c.clave).includes(q)).slice(0, 30);
+    return base.filter((c) => coincide(c.clave, busqueda)).slice(0, 30);
   }, [catalogo, busqueda, seleccion]);
 
   function agregar(clave: string) {
