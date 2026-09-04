@@ -36,7 +36,8 @@ type Metrica = "importe" | "cantidad";
 
 type SerieProducto = {
   periodo: string; producto: string; unidad: string;
-  cantidad: number; importe: number; tickets: number;
+  cantidad: number; cantidad_kg: number; cantidad_pza: number;
+  importe: number; tickets: number;
 };
 type SerieCliente = {
   periodo: string; cliente: string; importe: number; tickets: number;
@@ -44,6 +45,7 @@ type SerieCliente = {
 type CatalogoItem = { clave: string; importe: number; tickets: number };
 type TopProducto = {
   producto: string; unidad: string; cantidad: number;
+  cantidad_kg: number; cantidad_pza: number;
   importe: number; tickets: number; pct: number;
 };
 type FilaGrafica = {
@@ -54,7 +56,7 @@ type FilaGrafica = {
 
 type DiaSemana = {
   dow: number; dia: string; tickets: number;
-  importe: number; importe_prom: number;
+  importe: number; importe_prom: number; dias_calendario: number;
 };
 
 function money(n: number) {
@@ -67,6 +69,15 @@ function cantidadFmt(n: number, unidad: string) {
   const v = Number(n || 0);
   if (unidad === "pza") return `${v.toLocaleString("es-MX", { maximumFractionDigits: 0 })} pza`;
   return `${v.toLocaleString("es-MX", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`;
+}
+
+// Un mismo producto puede venderse por kg y por pieza (ej. Rib eye).
+// Sumarlos no significa nada, asi que se muestran por separado.
+function ambasUnidades(kg: number, pza: number) {
+  const partes: string[] = [];
+  if (Number(kg || 0) > 0) partes.push(cantidadFmt(kg, "kg"));
+  if (Number(pza || 0) > 0) partes.push(cantidadFmt(pza, "pza"));
+  return partes.length > 0 ? partes.join(" + ") : "—";
 }
 
 function hoy() {
@@ -176,6 +187,8 @@ export default function GraficasPage() {
             producto: String(r.producto || ""),
             unidad: String(r.unidad || "kg"),
             cantidad: Number(r.cantidad || 0),
+            cantidad_kg: Number(r.cantidad_kg || 0),
+            cantidad_pza: Number(r.cantidad_pza || 0),
             importe: Number(r.importe || 0),
             tickets: Number(r.tickets || 0),
           })));
@@ -205,6 +218,8 @@ export default function GraficasPage() {
           producto: String(r.producto || ""),
           unidad: String(r.unidad || "kg"),
           cantidad: Number(r.cantidad || 0),
+          cantidad_kg: Number(r.cantidad_kg || 0),
+          cantidad_pza: Number(r.cantidad_pza || 0),
           importe: Number(r.importe || 0),
           tickets: Number(r.tickets || 0),
           pct: Number(r.pct || 0),
@@ -216,6 +231,7 @@ export default function GraficasPage() {
           tickets: Number(r.tickets || 0),
           importe: Number(r.importe || 0),
           importe_prom: Number(r.importe_prom || 0),
+          dias_calendario: Number(r.dias_calendario || 0),
         })) : []);
       }
     } finally {
@@ -295,11 +311,14 @@ export default function GraficasPage() {
   // ── Totales del periodo ──────────────────────────────────
   const totales = useMemo(() => {
     if (tab === "productos") {
-      const map = new Map<string, { cantidad: number; importe: number; tickets: number; unidad: string }>();
+      const map = new Map<string, { cantidad: number; cantidad_kg: number; cantidad_pza: number; importe: number; tickets: number; unidad: string }>();
       for (const r of serieProd) {
-        const prev = map.get(r.producto) || { cantidad: 0, importe: 0, tickets: 0, unidad: r.unidad };
+        const prev = map.get(r.producto)
+          || { cantidad: 0, cantidad_kg: 0, cantidad_pza: 0, importe: 0, tickets: 0, unidad: r.unidad };
         map.set(r.producto, {
           cantidad: prev.cantidad + r.cantidad,
+          cantidad_kg: prev.cantidad_kg + r.cantidad_kg,
+          cantidad_pza: prev.cantidad_pza + r.cantidad_pza,
           importe: prev.importe + r.importe,
           tickets: prev.tickets + r.tickets,
           unidad: r.unidad,
@@ -313,7 +332,8 @@ export default function GraficasPage() {
       const prev = map.get(r.cliente) || { importe: 0, tickets: 0 };
       map.set(r.cliente, { importe: prev.importe + r.importe, tickets: prev.tickets + r.tickets });
     }
-    return Array.from(map.entries()).map(([clave, v]) => ({ clave, cantidad: 0, unidad: "", ...v }))
+    return Array.from(map.entries())
+      .map(([clave, v]) => ({ clave, cantidad: 0, cantidad_kg: 0, cantidad_pza: 0, unidad: "", ...v }))
       .sort((a, b) => b.importe - a.importe);
   }, [tab, serieProd, serieCli]);
 
@@ -565,7 +585,7 @@ export default function GraficasPage() {
                 <div style={{ fontSize: 12, color: C.muted, fontWeight: 700, marginBottom: 4 }}>{t.clave}</div>
                 <div style={{ fontSize: 20, fontWeight: 900, color: C.text }}>${money(t.importe)}</div>
                 <div style={{ fontSize: 11.5, color: C.muted, marginTop: 3 }}>
-                  {tab === "productos" && `${cantidadFmt(t.cantidad, t.unidad)} · `}
+                  {tab === "productos" && `${ambasUnidades(t.cantidad_kg, t.cantidad_pza)} · `}
                   {t.tickets} tickets
                 </div>
               </div>
@@ -583,6 +603,7 @@ export default function GraficasPage() {
               {mejorDia && (
                 <div style={{ fontSize: 12.5, color: C.success, fontWeight: 700, marginTop: 3, marginBottom: 10 }}>
                   Su mejor día es el {mejorDia.dia} · ${money(mejorDia.importe)} en total
+                  {mejorDia.dias_calendario > 0 && ` · $${money(mejorDia.importe_prom)} en promedio por ${mejorDia.dia.toLowerCase()}`}
                 </div>
               )}
               {diaSemana.length === 0 ? (
@@ -624,7 +645,7 @@ export default function GraficasPage() {
                           {i + 1}. {p.producto}
                         </div>
                         <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
-                          {cantidadFmt(p.cantidad, p.unidad)} · {p.tickets} tickets · {p.pct}% de su gasto
+                          {ambasUnidades(p.cantidad_kg, p.cantidad_pza)} · {p.tickets} tickets · {p.pct}% de su gasto
                         </div>
                       </div>
                       <div style={{ fontWeight: 800, color: C.success, fontSize: 14, flexShrink: 0 }}>
