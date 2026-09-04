@@ -519,7 +519,7 @@ export default function CajaPage() {
 
   const loadCanjePuntos = useCallback(async () => {
     const { data, error } = await supabase.rpc("puntos_canjeados_rango", {
-      p_from: today, p_to: today,
+      p_from: dateFrom || today, p_to: dateTo || today,
     });
     if (error) { console.log(error); return; }
     const r = Array.isArray(data) ? data[0] : data;
@@ -528,7 +528,7 @@ export default function CajaPage() {
       puntos: Number(r?.puntos || 0),
       pesos: Number(r?.pesos || 0),
     });
-  }, [supabase, today]);
+  }, [supabase, today, dateFrom, dateTo]);
 
   const loadExpenses = useCallback(async () => {
     try {
@@ -2709,16 +2709,16 @@ export default function CajaPage() {
               <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
               <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
               <SummaryRow label="(-) Gastos del día" value={`-$${money(stats.totalGastos)}`} color={C.danger} />
-              {canjePuntos.pesos > 0 && (
-                <SummaryRow
-                  label={`⭐ Canje de puntos (${canjePuntos.canjes})`}
-                  value={`-$${money(canjePuntos.pesos)}`}
-                  color={C.info}
-                />
-              )}
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>
+              {canjePuntos.pesos > 0 && (
+                <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
+                  ⭐ Informativo: hoy se canjearon {canjePuntos.canjes} vez(ces) por
+                  {" "}${money(canjePuntos.pesos)} en puntos. Ese descuento ya viene
+                  restado en los cobros, no se resta otra vez aquí.
+                </div>
+              )}
               <SummaryRow label="Efectivo contado" value={`$${money(reconteoDenomTotal)}`} />
               <SummaryRow
                 label="Diferencia"
@@ -2807,16 +2807,16 @@ export default function CajaPage() {
               <SummaryRow label="Fondo inicial" value={`$${money(stats.fondoInicial)}`} />
               <SummaryRow label="(+) Ingresos efectivo" value={`$${money(stats.totalEfectivoIngreso)}`} />
               <SummaryRow label="(-) Gastos del día" value={`-$${money(stats.totalGastos)}`} color={C.danger} />
-              {canjePuntos.pesos > 0 && (
-                <SummaryRow
-                  label={`⭐ Canje de puntos (${canjePuntos.canjes})`}
-                  value={`-$${money(canjePuntos.pesos)}`}
-                  color={C.info}
-                />
-              )}
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>
+              {canjePuntos.pesos > 0 && (
+                <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
+                  ⭐ Informativo: hoy se canjearon {canjePuntos.canjes} vez(ces) por
+                  {" "}${money(canjePuntos.pesos)} en puntos. Ese descuento ya viene
+                  restado en los cobros, no se resta otra vez aquí.
+                </div>
+              )}
               <SummaryRow label="Efectivo contado" value={`$${money(Number(countedCash || 0))}`} />
               <SummaryRow
                 label="Diferencia"

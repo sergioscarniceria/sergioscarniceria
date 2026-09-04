@@ -303,7 +303,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       total,
       customerName: selectedTicket.customer_name || undefined,
     });
-  }, [selectedTicket?.id, extraTickets.length, discountMode, discountValue]);
+  }, [selectedTicket?.id, extraTickets.length, discountMode, discountValue, puntosACanjear]);
 
   // Saldo de puntos del cliente del ticket seleccionado
   useEffect(() => {
@@ -696,6 +696,16 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
    * Si falla, devuelve null y el cobro se detiene: nunca se descuenta
    * del ticket sin haber restado los puntos.
    */
+  /** Devuelve los puntos si el cobro se cayó después de canjear */
+  async function revertirCanje(orderId: string) {
+    if (puntosACanjear <= 0) return;
+    try {
+      await supabase.rpc("revertir_canje", { p_order_id: orderId });
+    } catch (e) {
+      console.log("No se pudo revertir el canje:", e);
+    }
+  }
+
   async function ejecutarCanje(orderId: string): Promise<number | null> {
     if (puntosACanjear <= 0 || !selectedTicket?.customer_id) return 0;
 
@@ -850,6 +860,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       if (error) {
         console.log(error);
         alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+        // El canje ya restó puntos: devolverlos para que el cliente no
+        // se quede sin puntos y sin descuento.
+        await revertirCanje(selectedTicket.id);
         setSaving(false);
         return;
       }
@@ -1015,21 +1028,23 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
 
-    // El canje va primero: si falla, no se cobra
-    const canjeMixto = await ejecutarCanje(selectedTicket.id);
-    if (canjeMixto === null) return;
     const mEf = Number(mixedEfectivo || 0);
     const mTa = Number(mixedTarjeta || 0);
     const mTr = Number(mixedTransferencia || 0);
     const mixedSum = mEf + mTa + mTr;
     const finalTotal = combinedFinalTotal();
 
+    // Validar ANTES de tocar los puntos: si los montos no cuadran la cajera
+    // corrige y vuelve a picar, y no queremos restar el saldo dos veces.
     if (Math.abs(mixedSum - finalTotal) > 1) {
       alert(`La suma de los métodos ($${mixedSum.toLocaleString("es-MX")}) no coincide con el total ($${Math.ceil(finalTotal).toLocaleString("es-MX")})`);
       return;
     }
 
     setSaving(true);
+
+    const canjeMixto = await ejecutarCanje(selectedTicket.id);
+    if (canjeMixto === null) { setSaving(false); return; }
     const allTickets = allSelectedTickets();
     const subtotal = combinedTotal();
     const descuento = calcDiscount(subtotal);
@@ -1053,6 +1068,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         cashier_name: cashierName || null,
       };
 
+      if (puntosACanjear > 0 && ticket.id === selectedTicket.id) {
+        orderUpdate.loyalty_points_redeemed = puntosACanjear;
+      }
+
       // Distribuir descuento manual proporcionalmente entre tickets del lote
       if (descuento > 0) {
         const tTotalForDisc = ticketTotal(ticket);
@@ -1065,7 +1084,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
 
       if (ticket.id === selectedTicket.id) {
-        const noteParts = [ticket.notes || "", descuento > 0 ? (discountMode === "percent" ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}` : `Descuento -$${Math.ceil(descuento)}`) : "", mixedDetail, groupNote].filter(Boolean);
+        const canjeNota = puntosACanjear > 0
+          ? `Canje ${puntosACanjear} pts = -$${Math.ceil(descuentoPorPuntos())}`
+          : "";
+        const noteParts = [ticket.notes || "", canjeNota, descuento > 0 ? (discountMode === "percent" ? `Descuento ${discountValue}% = -$${Math.ceil(descuento)}` : `Descuento -$${Math.ceil(descuento)}`) : "", mixedDetail, groupNote].filter(Boolean);
         orderUpdate.notes = noteParts.join(" | ");
       } else if (groupNote || mixedDetail) {
         const existing = ticket.notes || "";
@@ -1075,6 +1097,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       const { error } = await supabase.from("orders").update(orderUpdate).eq("id", ticket.id);
       if (error) {
         alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+        // El canje ya restó puntos: devolverlos para que el cliente no
+        // se quede sin puntos y sin descuento.
+        await revertirCanje(selectedTicket.id);
         setSaving(false);
         return;
       }
@@ -1141,7 +1166,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       return cust.customer_type === "mayoreo" || Number(cust.discount_percent || 0) > 0;
     })();
 
-    if (descuento <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
+    if (descuento <= 0 && puntosACanjear <= 0 && !clienteConDescuento && selectedTicket.customer_id && selectedTicket.customer_name !== "MOSTRADOR") {
       // Excluir del calculo los productos marcados como "no dan puntos"
       const baseParaPuntos = await (async () => {
         const nombres = (selectedTicket.order_items || []).map((it) => it.product).filter(Boolean);
@@ -1495,6 +1520,17 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   async function sendTicketToCredit() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
+
+    // El canje solo aplica cuando el cliente paga. Si se manda a crédito,
+    // la nota se genera SIN ese descuento; mejor avisar que cobrarle de más.
+    if (puntosACanjear > 0) {
+      alert(
+        "No se puede mandar a crédito con un canje de puntos aplicado.\n\n" +
+        "Los puntos se canjean al momento de pagar. Quita el canje y vuelve a intentar, " +
+        "o cóbralo de contado."
+      );
+      return;
+    }
 
     if (!selectedTicket.customer_id) {
       alert("Este ticket no tiene cliente ligado");
