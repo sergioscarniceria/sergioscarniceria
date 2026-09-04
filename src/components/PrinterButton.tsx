@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPrinter } from "@/lib/printer";
+import { getPrinter, anchoTicket } from "@/lib/printer";
 
 /**
  * Botón flotante para conectar/desconectar la impresora térmica.
@@ -11,11 +11,14 @@ import { getPrinter } from "@/lib/printer";
 export default function PrinterButton() {
   const [status, setStatus] = useState<string>("disconnected");
   const [supported, setSupported] = useState(true);
+  const [ancho, setAncho] = useState(42);
+  const [showAncho, setShowAncho] = useState(false);
 
   useEffect(() => {
     const printer = getPrinter();
     setSupported(printer.isSupported);
     setStatus(printer.status);
+    setAncho(anchoTicket());
 
     // Auto-reconectar si ya tenía permiso
     if (printer.isSupported && !printer.isConnected) {
@@ -38,6 +41,15 @@ export default function PrinterButton() {
     setStatus(printer.status);
   }
 
+  /**
+   * El ancho del papel en caracteres. Si el ticket sale cortado de los lados,
+   * hay que bajarlo; si sale muy angosto, subirlo.
+   */
+  function guardarAncho(valor: number) {
+    try { localStorage.setItem("ancho_ticket", String(valor)); } catch { /* sin storage */ }
+    setAncho(valor);
+  }
+
   if (!supported) return null;
 
   const colors: Record<string, { bg: string; text: string; icon: string }> = {
@@ -58,14 +70,47 @@ export default function PrinterButton() {
   };
 
   return (
+    <div style={{ position: "fixed", bottom: 20, left: 20, zIndex: 900 }}>
+      {showAncho && (
+        <div style={{
+          marginBottom: 10, padding: 14, borderRadius: 14, background: "white",
+          border: "1px solid rgba(92,27,17,0.14)", boxShadow: "0 8px 24px rgba(0,0,0,0.14)",
+          width: 250,
+        }}>
+          <div style={{ fontWeight: 800, fontSize: 13.5, color: "#3b1c16", marginBottom: 4 }}>
+            Ancho del ticket
+          </div>
+          <div style={{ fontSize: 11.5, color: "#7a5a52", marginBottom: 10, lineHeight: 1.45 }}>
+            Si el ticket sale <b>cortado de los lados</b>, baja el número.
+            Si sale muy angosto, súbelo. Imprime uno de prueba después de cambiarlo.
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[32, 40, 42, 48].map((v) => (
+              <button
+                key={v}
+                onClick={() => guardarAncho(v)}
+                style={{
+                  flex: 1, minWidth: 52, padding: "9px 0", borderRadius: 9, cursor: "pointer",
+                  border: `1.5px solid ${ancho === v ? "#7b2218" : "rgba(92,27,17,0.14)"}`,
+                  background: ancho === v ? "#7b2218" : "white",
+                  color: ancho === v ? "white" : "#3b1c16",
+                  fontWeight: 800, fontSize: 13,
+                }}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "#7a5a52", marginTop: 8 }}>
+            80 mm normalmente son 42 o 48 · 58 mm son 32
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
     <button
       onClick={togglePrinter}
       style={{
-        position: "fixed",
-        bottom: 20,
-        left: 20,
-
-        zIndex: 900,
         display: "flex",
         alignItems: "center",
         gap: 8,
@@ -85,5 +130,19 @@ export default function PrinterButton() {
       <span style={{ fontSize: 18 }}>{c.icon}</span>
       {labels[status]}
     </button>
+
+        <button
+          onClick={() => setShowAncho((v) => !v)}
+          title="Ajustar el ancho del ticket"
+          style={{
+            width: 38, height: 38, borderRadius: 50, border: "none",
+            background: c.bg, color: c.text, fontSize: 16, cursor: "pointer",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.1)", fontWeight: 800,
+          }}
+        >
+          ⚙
+        </button>
+      </div>
+    </div>
   );
 }

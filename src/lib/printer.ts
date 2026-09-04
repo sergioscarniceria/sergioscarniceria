@@ -46,23 +46,85 @@ function textToBytes(text: string): number[] {
   return Array.from(encoder.encode(text));
 }
 
-function line(text: string): number[] {
-  return [...textToBytes(text), LF];
+/**
+ * Ancho del papel en caracteres.
+ *
+ * Una Epson de 80mm da 48 columnas con Font A, pero si la impresora quedó
+ * configurada en 58mm o con otra fuente, son 42 o hasta 32, y todo lo que
+ * pase de ahí se IMPRIME CORTADO DE LOS LADOS.
+ *
+ * Se puede ajustar sin tocar código desde la consola del navegador:
+ *   localStorage.setItem("ancho_ticket", "42")
+ */
+const ANCHO_POR_DEFECTO = 42;
+
+export function anchoTicket(): number {
+  try {
+    const guardado = Number(localStorage.getItem("ancho_ticket"));
+    if (guardado >= 24 && guardado <= 64) return Math.floor(guardado);
+  } catch {
+    // sin localStorage (servidor): usar el default
+  }
+  return ANCHO_POR_DEFECTO;
 }
 
-function separatorLine(char = "-", width = 48): number[] {
+/** Corta un texto para que nunca se salga del ancho del papel */
+function recortar(text: string, width = anchoTicket()): string {
+  const t = String(text ?? "");
+  return t.length <= width ? t : t.slice(0, width);
+}
+
+function line(text: string): number[] {
+  return [...textToBytes(recortar(text)), LF];
+}
+
+/**
+ * Texto largo repartido en varios renglones sin cortar palabras a la mitad.
+ * Se usa para nombres de producto y párrafos del pagaré.
+ */
+function wrappedLines(text: string, width = anchoTicket(), sangria = ""): number[] {
+  const b: number[] = [];
+  const palabras = String(text ?? "").split(/\s+/).filter(Boolean);
+  if (palabras.length === 0) return line("");
+
+  let actual = "";
+  for (const palabra of palabras) {
+    const cabe = actual ? `${actual} ${palabra}` : palabra;
+    if (cabe.length <= width) {
+      actual = cabe;
+      continue;
+    }
+    if (actual) b.push(...line(actual));
+    // Una sola palabra más larga que el papel: partirla
+    let resto = palabra;
+    while (resto.length > width) {
+      b.push(...line(resto.slice(0, width)));
+      resto = resto.slice(width);
+    }
+    actual = sangria + resto;
+  }
+  if (actual) b.push(...line(actual));
+  return b;
+}
+
+function separatorLine(char = "-", width = anchoTicket()): number[] {
   return line(char.repeat(width));
 }
 
-function twoColumns(left: string, right: string, width = 48): number[] {
-  const space = width - left.length - right.length;
-  if (space < 1) return line(left.slice(0, width - right.length - 1) + " " + right);
-  return line(left + " ".repeat(space) + right);
+function twoColumns(left: string, right: string, width = anchoTicket()): number[] {
+  const der = String(right ?? "");
+  const space = width - left.length - der.length;
+  if (space < 1) {
+    const maxIzq = Math.max(0, width - der.length - 1);
+    return line(left.slice(0, maxIzq) + " " + der);
+  }
+  return line(left + " ".repeat(space) + der);
 }
 
-function padCenter(text: string, width = 48): string {
-  const pad = Math.max(0, Math.floor((width - text.length) / 2));
-  return " ".repeat(pad) + text;
+function padCenter(text: string, width = anchoTicket()): string {
+  const t = recortar(text, width);
+  const pad = Math.max(0, Math.floor((width - t.length) / 2));
+  return " ".repeat(pad) + t;
 }
 
 // ============ QR Code ESC/POS ============
@@ -333,7 +395,7 @@ export function buildTicketBytes(ticket: TicketData): number[] {
   // Items
   for (const item of ticket.items) {
     const total = itemTotal(item);
-    b.push(...line(item.product));
+    b.push(...wrappedLines(item.product));
 
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       const qty = Number(item.quantity) || 0;
@@ -774,7 +836,7 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
 
   for (const item of ticket.items) {
     const total = itemTotal(item);
-    b.push(...line(item.product));
+    b.push(...wrappedLines(item.product));
     if (item.sale_type === "pieza" && item.is_fixed_price_piece) {
       const qty = Number(item.quantity) || 0;
       const price = Number(item.price) || 0;
@@ -813,8 +875,7 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
   b.push(...separatorLine("="));
   b.push(...CMD.ALIGN_LEFT);
   b.push(...line(""));
-  b.push(...line(`Debo y pagare incondicionalmente`));
-  b.push(...line(`a la orden de:`));
+  b.push(...wrappedLines("Debo y pagare incondicionalmente a la orden de:"));
   b.push(...line(""));
   b.push(...CMD.BOLD_ON);
   b.push(...line("SERGIO VEGA MARIN"));
@@ -827,8 +888,7 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
   b.push(...CMD.NORMAL_SIZE);
   b.push(...CMD.BOLD_OFF);
   b.push(...line(""));
-  b.push(...line(`Por concepto de: Compra de productos`));
-  b.push(...line(`carnicos a credito.`));
+  b.push(...wrappedLines("Por concepto de: Compra de productos carnicos a credito."));
   b.push(...line(""));
   b.push(...twoColumns("Fecha:", `${dateStr}`));
   if (ticket.dueDate) {
@@ -839,7 +899,7 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
   b.push(...line(""));
   b.push(...CMD.ALIGN_CENTER);
   b.push(...line(""));
-  b.push(...line("________________________________"));
+  b.push(...line("_".repeat(Math.min(32, anchoTicket()))));
   b.push(...CMD.BOLD_ON);
   b.push(...line("Firma del deudor"));
   b.push(...CMD.BOLD_OFF);
