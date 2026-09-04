@@ -12,6 +12,7 @@ type Product = {
   price: number | null;
   fixed_piece_price?: number | null;
   is_active?: boolean | null;
+  visible_online?: boolean | null;
   is_excluded_from_points?: boolean | null;
   is_excluded_from_discount?: boolean | null;
   category?: string | null;
@@ -247,6 +248,27 @@ const [recommendSearch, setRecommendSearch] = useState("");
       await loadProducts();
     }
     setSaving(false);
+  }
+
+  /**
+   * Oculta o muestra el producto en la tienda en linea.
+   * Sigue disponible en mostrador, pedidos por telefono y CxC.
+   */
+  async function toggleVisibleOnline(product: Product) {
+    const nextValue = !(product.visible_online ?? true);
+
+    const { error } = await supabase
+      .from("products")
+      .update({ visible_online: nextValue })
+      .eq("id", product.id);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo cambiar la visibilidad en línea");
+      return;
+    }
+
+    await loadProducts();
   }
 
   async function toggleActive(product: Product) {
@@ -659,6 +681,18 @@ const [recommendSearch, setRecommendSearch] = useState("");
                           ? "Sin descuento"
                           : "Con descuento"}
                       </span>
+
+                      {(product.visible_online ?? true) === false && (
+                        <span
+                          style={{
+                            ...statusBadgeStyle,
+                            background: "rgba(180,35,24,0.10)",
+                            color: COLORS.danger,
+                          }}
+                        >
+                          Oculto en línea
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -697,6 +731,19 @@ const [recommendSearch, setRecommendSearch] = useState("");
                       {product.is_excluded_from_discount
                         ? "Permitir descuento"
                         : "Quitar descuento"}
+                    </button>
+                    <button
+                      onClick={() => toggleVisibleOnline(product)}
+                      style={{
+                        ...discountButtonStyle,
+                        background: (product.visible_online ?? true)
+                          ? "rgba(31,122,77,0.10)"
+                          : "rgba(180,35,24,0.10)",
+                        color: (product.visible_online ?? true) ? COLORS.success : COLORS.danger,
+                      }}
+                      title="Controla si el producto aparece en la tienda en línea. No afecta mostrador ni pedidos por teléfono."
+                    >
+                      {(product.visible_online ?? true) ? "Visible en línea" : "Oculto en línea"}
                     </button>
                     <button
                       onClick={() => togglePoints(product)}

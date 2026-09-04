@@ -587,6 +587,7 @@ export default function ClientePage() {
       .from("products")
       .select("*")
       .eq("is_active", true)
+      .eq("visible_online", true)
       .order("name", { ascending: true });
 
     setProducts((data as Product[]) || []);

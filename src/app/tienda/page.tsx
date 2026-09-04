@@ -107,6 +107,8 @@ export default function TiendaPage() {
         .from("products")
         .select("id, name, price, category, sale_type, fixed_piece_price, is_active, image_url")
         .eq("is_active", true)
+        // Los precios de mayoreo, canal y ganado en pie no se muestran al publico
+        .eq("visible_online", true)
         .order("category")
         .order("name");
       setProducts(data || []);
