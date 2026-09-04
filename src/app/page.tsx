@@ -30,6 +30,7 @@ const moduleCategories = {
     roles: ["admin"],
     items: [
       { title: "Dashboard ventas", href: "/admin/dashboard", desc: "Resumen del negocio" },
+      { title: "Gráficas", href: "/admin/graficas", desc: "Comportamiento de productos y clientes en el tiempo" },
       { title: "Historial clientes", href: "/admin/historial-clientes", desc: "Cuanto ha comprado cada cliente" },
       { title: "Programa de puntos", href: "/admin/puntos", desc: "Puntos por cliente y canje" },
       { title: "Analisis por categoria", href: "/admin/categorias", desc: "Utilidad por linea + recuperacion de inversion" },
