@@ -91,6 +91,7 @@ const jsonLd = {
     longitude: -99.8990919,
   },
   telephone: "+524411153314",
+  email: "contacto@sergioscarniceria.com",
   sameAs: [
     "https://www.instagram.com/sergioscarniceria",
     "https://www.facebook.com/share/1RS83jZX6D/",
