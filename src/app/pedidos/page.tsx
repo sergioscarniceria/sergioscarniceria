@@ -91,6 +91,8 @@ export default function PedidosPage() {
 const [filter, setFilter] = useState("todos");
 const [search, setSearch] = useState("");
 const [changingId, setChangingId] = useState<string | null>(null);
+const [editingDateId, setEditingDateId] = useState<string | null>(null);
+const [dateDraft, setDateDraft] = useState<string>("");
 
   async function loadOrders() {
     const supabase = getSupabaseClient();
@@ -226,6 +228,68 @@ const [changingId, setChangingId] = useState<string | null>(null);
     }
 
     setChangingId(null);
+    loadOrders();
+  }
+
+  function startEditDate(o: Order) {
+    setEditingDateId(o.id);
+    setDateDraft(normalizeDateOnly(o.delivery_date) || getTodayDateInput());
+  }
+
+  function cancelEditDate() {
+    setEditingDateId(null);
+    setDateDraft("");
+  }
+
+  async function saveDeliveryDate(o: Order) {
+    if (!dateDraft) {
+      alert("Elige una fecha.");
+      return;
+    }
+
+    const anterior = normalizeDateOnly(o.delivery_date);
+    if (anterior === dateDraft) {
+      cancelEditDate();
+      return;
+    }
+
+    if (o.delivery_status === "entregado") {
+      alert("Este pedido ya fue entregado. No se puede cambiar la fecha.");
+      return;
+    }
+
+    const ok = confirm(
+      `Cambiar la fecha de entrega de ${o.customer_name}\n\n` +
+        `De: ${anterior ? formatDeliveryDate(anterior) : "Sin fecha"}\n` +
+        `A:  ${formatDeliveryDate(dateDraft)}\n\n` +
+        `Esto NO cambia el precio ni el pago del pedido.`
+    );
+    if (!ok) return;
+
+    setChangingId(o.id);
+    const supabase = getSupabaseClient();
+
+    const notaCambio =
+      `[Fecha cambiada ${new Date().toLocaleDateString("es-MX")}: ` +
+      `${anterior ? formatDeliveryDate(anterior) : "sin fecha"} → ${formatDeliveryDate(dateDraft)}]`;
+
+    const { error } = await supabase
+      .from("orders")
+      .update({
+        delivery_date: dateDraft,
+        notes: o.notes ? `${o.notes} ${notaCambio}` : notaCambio,
+      })
+      .eq("id", o.id);
+
+    setChangingId(null);
+
+    if (error) {
+      console.log(error);
+      alert("No se pudo cambiar la fecha: " + error.message);
+      return;
+    }
+
+    cancelEditDate();
     loadOrders();
   }
 
@@ -385,13 +449,95 @@ const [changingId, setChangingId] = useState<string | null>(null);
         </div>
 
         <div style={metaGridStyle}>
-          {o.delivery_date ? (
-            <div style={metaPillStyle}>
-              Entrega: <b>{formatDeliveryDate(o.delivery_date)}</b>
+          {editingDateId === o.id ? (
+            <div
+              style={{
+                ...metaPillStyle,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+                background: "rgba(53,92,125,0.10)",
+              }}
+            >
+              <input
+                type="date"
+                value={dateDraft}
+                onChange={(e) => setDateDraft(e.target.value)}
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: 10,
+                  border: `1px solid ${COLORS.border}`,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: COLORS.text,
+                  background: "white",
+                }}
+              />
+              <button
+                onClick={() => saveDeliveryDate(o)}
+                disabled={changingId === o.id}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "none",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  background: COLORS.primary,
+                  color: "white",
+                  cursor: changingId === o.id ? "not-allowed" : "pointer",
+                  opacity: changingId === o.id ? 0.6 : 1,
+                }}
+              >
+                {changingId === o.id ? "Guardando..." : "Guardar"}
+              </button>
+              <button
+                onClick={cancelEditDate}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${COLORS.border}`,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  background: "white",
+                  color: COLORS.muted,
+                  cursor: "pointer",
+                }}
+              >
+                Cancelar
+              </button>
             </div>
           ) : (
-            <div style={metaPillStyle}>
-              Entrega: <b>Hoy</b>
+            <div
+              style={{
+                ...metaPillStyle,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <span>
+                Entrega: <b>{o.delivery_date ? formatDeliveryDate(o.delivery_date) : "Hoy"}</b>
+              </span>
+              {o.delivery_status !== "entregado" && (
+                <button
+                  onClick={() => startEditDate(o)}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    border: "none",
+                    fontWeight: 800,
+                    fontSize: 12,
+                    background: "rgba(53,92,125,0.14)",
+                    color: COLORS.info,
+                    cursor: "pointer",
+                  }}
+                  title="Cambiar la fecha de entrega de este pedido"
+                >
+                  📅 Cambiar fecha
+                </button>
+              )}
             </div>
           )}
 
