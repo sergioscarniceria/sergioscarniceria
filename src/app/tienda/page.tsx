@@ -361,9 +361,16 @@ export default function TiendaPage() {
 
         {/* Footer */}
         <div style={{
-          marginTop: 50, color: "rgba(255,255,255,0.3)", fontSize: 12,
+          marginTop: 50, color: "rgba(255,255,255,0.3)", fontSize: 12, lineHeight: 1.8,
         }}>
           sergioscarniceria.com
+          <br />
+          <a
+            href="mailto:contacto@sergioscarniceria.com"
+            style={{ color: "rgba(255,255,255,0.45)", textDecoration: "none" }}
+          >
+            contacto@sergioscarniceria.com
+          </a>
         </div>
       </div>
     );

@@ -127,6 +127,8 @@ const socialLinks = [
   { title: "WhatsApp", subtitle: "+52 441 118 5767", href: "https://wa.me/524411185767", color: "#25D366" },
   { title: "Instagram", subtitle: "@sergioscarniceria", href: "https://www.instagram.com/sergioscarniceria?igsh=OGRycjY4bGNpdmk2", color: "#E1306C" },
   { title: "Facebook", subtitle: "Sergios Carnicería", href: "https://www.facebook.com/share/1RS83jZX6D/?mibextid=wwXIfr", color: "#1877F2" },
+  { title: "Correo", subtitle: "contacto@sergioscarniceria.com", href: "mailto:contacto@sergioscarniceria.com", color: "#7b2218" },
+  { title: "Cotizaciones", subtitle: "cotizaciones@sergioscarniceria.com", href: "mailto:cotizaciones@sergioscarniceria.com", color: "#a66a10" },
 ];
 
 // ─── Scroll reveal hook ───
@@ -553,15 +555,19 @@ export default function HomePage() {
               <p style={{ color: C.muted, fontSize: 17 }}>Escríbenos por cualquier canal</p>
             </div>
 
-            <div className="social-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+            <div className="social-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
               {socialLinks.map((s, i) => (
-                <a key={i} href={s.href} target="_blank" rel="noreferrer" className="social-card"
+                <a
+                  key={i}
+                  href={s.href}
+                  {...(s.href.startsWith("mailto:") ? {} : { target: "_blank", rel: "noreferrer" })}
+                  className="social-card"
                   style={{ display: "block", padding: 24, borderRadius: 22, background: C.cardStrong, border: `1px solid ${C.border}`, textDecoration: "none", boxShadow: "0 8px 30px rgba(91,25,15,0.05)", backdropFilter: "blur(10px)" }}>
                   <div style={{ width: 44, height: 44, borderRadius: 14, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
                     <div style={{ width: 12, height: 12, borderRadius: "50%", background: s.color }} />
                   </div>
                   <div style={{ fontWeight: 800, color: C.text, fontSize: 17, marginBottom: 4 }}>{s.title}</div>
-                  <div style={{ color: C.muted, fontSize: 14 }}>{s.subtitle}</div>
+                  <div style={{ color: C.muted, fontSize: 14, wordBreak: "break-word", overflowWrap: "anywhere" }}>{s.subtitle}</div>
                 </a>
               ))}
             </div>

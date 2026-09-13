@@ -647,6 +647,8 @@ export default function NuevoPedidoPage() {
       doc.text("Pedidos: 441 118 5767  |  441 115 3314", pageW / 2, y, { align: "center" });
       y += 4;
       doc.text("sergioscarniceria.com  |  IG: @sergioscarniceria", pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.text("cotizaciones@sergioscarniceria.com", pageW / 2, y, { align: "center" });
       y += 5;
       const today = new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
       doc.setFontSize(9);
@@ -782,6 +784,8 @@ export default function NuevoPedidoPage() {
       doc.setFontSize(8);
       doc.setTextColor(120, 120, 120);
       doc.text("sergioscarniceria.com   |   IG @sergioscarniceria", pageW / 2, y, { align: "center" });
+      y += 4;
+      doc.text("Cotizaciones: cotizaciones@sergioscarniceria.com", pageW / 2, y, { align: "center" });
 
       const cashierSafe = priceListCashier.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       const fname = `lista-precios-${cashierSafe || "cajera"}-${new Date().toISOString().slice(0, 10)}.pdf`;

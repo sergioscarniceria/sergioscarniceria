@@ -92,6 +92,24 @@ const jsonLd = {
   },
   telephone: "+524411153314",
   email: "contacto@sergioscarniceria.com",
+  contactPoint: [
+    {
+      "@type": "ContactPoint",
+      contactType: "customer service",
+      email: "contacto@sergioscarniceria.com",
+      telephone: "+524411153314",
+      areaServed: "MX",
+      availableLanguage: "Spanish",
+    },
+    {
+      "@type": "ContactPoint",
+      contactType: "sales",
+      email: "cotizaciones@sergioscarniceria.com",
+      telephone: "+524411185767",
+      areaServed: "MX",
+      availableLanguage: "Spanish",
+    },
+  ],
   sameAs: [
     "https://www.instagram.com/sergioscarniceria",
     "https://www.facebook.com/share/1RS83jZX6D/",
