@@ -23,7 +23,8 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://sergioscarniceria.com"),
   alternates: { canonical: "/" },
   title: {
-    default: "Sergio's Carnicería | Carnes de calidad en Ezequiel Montes, Qro.",
+    default:
+      "Carnicería en Ezequiel Montes | Sergio's Carnicería — Carne para asar y cortes premium",
     template: "%s | Sergio's Carnicería",
   },
   icons: {
@@ -31,16 +32,20 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   description:
-    "Cortes de carne premium, marinados y productos frescos con entrega a domicilio. Pide en línea o visita nuestra sucursal en Ezequiel Montes, Querétaro.",
+    "Carnicería en Ezequiel Montes, Querétaro con más de 50 años. Arrachera, rib eye, carne para asar, res, cerdo, pollo y marinados. Pedidos en línea, entrega a domicilio y venta a mayoreo para restaurantes y eventos.",
   keywords: [
-    "carnicería",
-    "carnes",
+    "carnicería Ezequiel Montes",
+    "carnicería Querétaro",
+    "carne para asar Ezequiel Montes",
+    "arrachera",
+    "rib eye",
     "cortes premium",
-    "marinados",
-    "Ezequiel Montes",
-    "Querétaro",
-    "pedidos en línea",
-    "entrega a domicilio",
+    "carne marinada",
+    "carne al mayoreo",
+    "carnicería a domicilio",
+    "res cerdo pollo",
+    "Tequisquiapan",
+    "Bernal",
   ],
   openGraph: {
     title: "Sergio's Carnicería | Carnes de calidad en Ezequiel Montes, Qro.",
@@ -116,6 +121,32 @@ const jsonLd = {
   ],
   servesCuisine: "Carnicería mexicana",
   priceRange: "$$",
+  areaServed: [
+    { "@type": "City", name: "Ezequiel Montes" },
+    { "@type": "City", name: "Tequisquiapan" },
+    { "@type": "City", name: "Bernal" },
+    { "@type": "City", name: "Cadereyta de Montes" },
+    { "@type": "State", name: "Querétaro" },
+  ],
+  hasOfferCatalog: {
+    "@type": "OfferCatalog",
+    name: "Catálogo de carnes",
+    itemListElement: [
+      "Cortes de res",
+      "Cortes de cerdo",
+      "Pollo",
+      "Carne marinada y preparada",
+      "Carne para asar",
+      "Arrachera",
+      "Rib eye",
+      "Mariscos",
+      "Carnes frías y abarrotes",
+      "Venta a mayoreo para restaurantes y eventos",
+    ].map((nombre) => ({
+      "@type": "Offer",
+      itemOffered: { "@type": "Product", name: nombre },
+    })),
+  },
   openingHoursSpecification: [
     {
       "@type": "OpeningHoursSpecification",
