@@ -600,6 +600,130 @@ export default function CajaPage() {
     setDesgloseLoading(false);
   }
 
+  /**
+   * Reimprime el comprobante de un abono a Cuentas por Cobrar.
+   *
+   * Reconstruye el recibo desde `cxc_payments`, incluyendo el desglose de
+   * notas guardado en `applied_notes`. Va marcado como COPIA para que no se
+   * confunda con el original y nadie lo cobre dos veces.
+   */
+  async function reimprimirAbonoCxC(m: Movement) {
+    const { data: pago, error } = await supabase
+      .from("cxc_payments")
+      .select("id, customer_id, customer_name, payment_date, amount, payment_method, reference, notes, applied_notes, created_at")
+      .eq("id", m.reference_id)
+      .single();
+
+    if (error || !pago) {
+      alert("No se encontró el registro del abono en Cuentas por Cobrar.");
+      return;
+    }
+
+    // Saldo actual del cliente, para que el recibo diga la verdad de hoy
+    let saldoActual: number | null = null;
+    if (pago.customer_id) {
+      const { data: notas } = await supabase
+        .from("cxc_notes")
+        .select("balance_due")
+        .eq("customer_id", pago.customer_id);
+      if (notas) {
+        saldoActual = notas.reduce(
+          (acc: number, n: { balance_due: number | null }) => acc + Number(n.balance_due || 0),
+          0
+        );
+      }
+    }
+
+    const metodos: Record<string, string> = {
+      efectivo: "Efectivo",
+      tarjeta: "Tarjeta",
+      transferencia: "Transferencia",
+    };
+
+    const aplicadas = Array.isArray(pago.applied_notes)
+      ? (pago.applied_notes as { noteNumber: string; applied: number; newBalance: number }[])
+      : [];
+
+    const filas = aplicadas
+      .map(
+        (d) =>
+          `<tr>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc">${d.noteNumber}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${Number(d.applied).toFixed(2)}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${Number(d.newBalance).toFixed(2)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const folio = `AB-${String(pago.id).slice(0, 6).toUpperCase()}`;
+    const fechaPago = pago.payment_date
+      ? new Date(`${pago.payment_date}T12:00:00`).toLocaleDateString("es-MX")
+      : new Date(pago.created_at).toLocaleDateString("es-MX");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>${folio}</title>
+      <style>
+        @page { margin: 0; }
+        body { font-family: 'Courier New', monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 8px; font-weight: 700; }
+        h2 { text-align: center; margin: 4px 0; font-size: 15px; }
+        .center { text-align: center; }
+        .copia { text-align:center; border:2px solid #000; padding:3px; margin:6px 0; font-size:13px; letter-spacing:1px; }
+        .line { border-top: 1px dashed #000; margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 2px 6px; font-size: 11px; border-bottom: 1px solid #000; }
+        th:nth-child(2), th:nth-child(3) { text-align: right; }
+        .total-row { font-weight: 900; font-size: 14px; }
+      </style></head><body>
+      <h2>SERGIO'S CARNICERÍA</h2>
+      <p class="center" style="margin:2px 0">RECIBO DE ABONO</p>
+      <p class="center" style="margin:2px 0;font-size:10px">H. Colegio Militar No. 122, Ezequiel Montes, Qro.</p>
+      <div class="copia">** COPIA / REIMPRESIÓN **</div>
+      <div class="line"></div>
+      <p><strong>Folio:</strong> ${folio}</p>
+      <p><strong>Cliente:</strong> ${pago.customer_name || "---"}</p>
+      <p><strong>Fecha del pago:</strong> ${fechaPago}</p>
+      <p><strong>Método:</strong> ${metodos[pago.payment_method] || pago.payment_method || "---"}</p>
+      ${pago.reference ? `<p><strong>Referencia:</strong> ${pago.reference}</p>` : ""}
+      <p class="total-row"><strong>Abono:</strong> $${Number(pago.amount || 0).toFixed(2)}</p>
+      <div class="line"></div>
+      ${
+        filas
+          ? `<p style="font-size:11px;margin-bottom:2px"><strong>Aplicado a:</strong></p>
+             <table>
+               <tr><th>Nota</th><th>Abonado</th><th>Resta</th></tr>
+               ${filas}
+             </table>
+             <div class="line"></div>`
+          : ""
+      }
+      ${
+        saldoActual !== null
+          ? `<p class="total-row center">SALDO ACTUAL: $${saldoActual.toFixed(2)}</p>
+             <p class="center" style="font-size:9px">(saldo al día de hoy, no al día del pago)</p>
+             <div class="line"></div>`
+          : ""
+      }
+      ${pago.notes ? `<p style="font-size:10px">Nota: ${pago.notes}</p>` : ""}
+      <p class="center" style="font-size:10px;margin-top:6px">Reimpreso el ${new Date().toLocaleString("es-MX")}</p>
+      <p class="center" style="font-size:10px">sergioscarniceria.com</p>
+      <p class="center" style="font-size:11px;margin-top:4px">¡Gracias por su pago!</p>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=320,height=600");
+    if (!win) {
+      alert(
+        "El navegador bloqueó la ventana del recibo.\n\n" +
+        "Permite las ventanas emergentes para sergioscarniceria.com y vuelve a intentar."
+      );
+      return;
+    }
+
+    win.document.write(html);
+    win.document.close();
+    win.addEventListener("afterprint", () => win.close());
+    setTimeout(() => win.print(), 300);
+  }
+
   async function reimprimirTicket(m: Movement) {
     if (!m.reference_id) {
       alert("Este movimiento no tiene ticket asociado");
@@ -607,6 +731,15 @@ export default function CajaPage() {
     }
     setReprintingId(m.id);
     try {
+      // Un cobro de CxC NO vive en la tabla `orders`: su reference_id apunta
+      // a `cxc_payments`. Por eso antes siempre decía "No se encontró el
+      // ticket original" y no había forma de darle comprobante al cliente.
+      if (m.type === "cxc_pago") {
+        await reimprimirAbonoCxC(m);
+        setReprintingId(null);
+        return;
+      }
+
       const { data: order, error } = await supabase
         .from("orders")
         .select("id, customer_name, captured_by, butcher_name, discount_amount, rounding_amount, notes, payment_method, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")

@@ -1,5 +1,7 @@
 
-import { itemSubtotal } from "@/lib/itemSubtotal";/**
+import { itemSubtotal } from "@/lib/itemSubtotal";
+import QRCode from "qrcode";
+/**
  * Servicio de impresión ESC/POS para Epson T20iv-l
  * Usa WebUSB API para comunicación directa desde Chrome en Windows
  * Sin necesidad de instalar software adicional
@@ -650,7 +652,28 @@ export async function openCashDrawer(): Promise<boolean> {
 
 // ============ Fallback: browser print ============
 
-export function browserPrintTicket(ticket: TicketData): void {
+/**
+ * Genera el QR EN LA MÁQUINA, sin pedirle nada a internet.
+ *
+ * Antes se usaba api.qrserver.com. Si ese servicio tardaba o el internet
+ * de la carnicería fallaba, el ticket salía SIN QR y la cajera no podía
+ * escanearlo. Por eso el problema aparecía "a veces": dependía de la red.
+ * Devuelve un data URL que ya viene incrustado en el HTML.
+ */
+async function qrDataUrl(data: string): Promise<string> {
+  try {
+    return await QRCode.toDataURL(data, {
+      width: 240,
+      margin: 1,
+      errorCorrectionLevel: "M",
+      color: { dark: "#000000", light: "#FFFFFF" },
+    });
+  } catch {
+    return "";
+  }
+}
+
+export async function browserPrintTicket(ticket: TicketData): Promise<void> {
   const now = new Date();
   const dateStr = now.toLocaleDateString("es-MX");
   const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -668,8 +691,9 @@ export function browserPrintTicket(ticket: TicketData): void {
     itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;
   }
 
-  const qrHtml = ticket.qrData
-    ? `<div style="text-align:center;margin:8px 0"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(ticket.qrData)}" style="width:120px;height:120px"/></div>`
+  const qrSrc = ticket.qrData ? await qrDataUrl(ticket.qrData) : "";
+  const qrHtml = qrSrc
+    ? `<div style="text-align:center;margin:8px 0"><img src="${qrSrc}" style="width:120px;height:120px"/></div>`
     : "";
 
   const discountHtml = ticket.discount && ticket.discount > 0
@@ -726,35 +750,56 @@ export function browserPrintTicket(ticket: TicketData): void {
 </body></html>`;
 
   const win = window.open("", "_blank", "width=350,height=600");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    // Cerrar ventana automáticamente después de imprimir
-    win.addEventListener("afterprint", () => win.close());
-    // Esperar a que carguen las imágenes (logo + QR) antes de imprimir
-    const images = win.document.querySelectorAll("img");
-    if (images.length > 0) {
-      let loaded = 0;
-      const tryPrint = () => {
-        loaded++;
-        if (loaded >= images.length) {
-          setTimeout(() => win.print(), 200);
-        }
-      };
-      images.forEach((img: HTMLImageElement) => {
-        if (img.complete) {
-          tryPrint();
-        } else {
-          img.onload = tryPrint;
-          img.onerror = tryPrint;
-        }
-      });
-      // Fallback: imprimir después de 3s si las imágenes no cargan
-      setTimeout(() => win.print(), 3000);
-    } else {
-      setTimeout(() => win.print(), 400);
-    }
+
+  if (!win) {
+    // El navegador bloqueó la ventana. Antes esto fallaba en silencio y el
+    // ticket simplemente no salía, sin que nadie se enterara.
+    alert(
+      "El navegador bloqueó la ventana de impresión.\n\n" +
+      "Permite las ventanas emergentes para sergioscarniceria.com " +
+      "(el icono de la barra de direcciones) y vuelve a intentar."
+    );
+    return;
   }
+
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener("afterprint", () => win.close());
+
+  // Imprimir UNA sola vez, ya que cargaron las imágenes.
+  // Antes había un setTimeout de 3s que disparaba win.print() SIEMPRE,
+  // aunque las imágenes aún no estuvieran listas: de ahí salían los
+  // tickets sin QR.
+  let yaImprimio = false;
+  const imprimirUnaVez = () => {
+    if (yaImprimio) return;
+    yaImprimio = true;
+    win.print();
+  };
+
+  const images = Array.from(win.document.querySelectorAll("img"));
+  if (images.length === 0) {
+    setTimeout(imprimirUnaVez, 300);
+    return;
+  }
+
+  let pendientes = images.length;
+  const unaMenos = () => {
+    pendientes--;
+    if (pendientes <= 0) setTimeout(imprimirUnaVez, 150);
+  };
+
+  images.forEach((img: HTMLImageElement) => {
+    if (img.complete) unaMenos();
+    else {
+      img.onload = unaMenos;
+      img.onerror = unaMenos;
+    }
+  });
+
+  // Red de seguridad por si una imagen nunca resuelve. Como el QR ahora
+  // es un data URL local, esto casi nunca debería dispararse.
+  setTimeout(imprimirUnaVez, 5000);
 }
 
 // ============ Smart print: ESC/POS si hay impresora, si no browser ============
@@ -957,7 +1002,7 @@ async function printCreditTicketESCPOS(ticket: TicketData): Promise<boolean> {
 /**
  * Fallback browser: imprime ticket de crédito con pagaré integrado (2 copias en una página).
  */
-function browserPrintCreditTicket(ticket: TicketData): void {
+async function browserPrintCreditTicket(ticket: TicketData): Promise<void> {
   const now = new Date();
   const dateStr = now.toLocaleDateString("es-MX");
   const timeStr = now.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
@@ -975,8 +1020,9 @@ function browserPrintCreditTicket(ticket: TicketData): void {
     itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;
   }
 
-  const qrHtml = ticket.qrData
-    ? `<div style="text-align:center;margin:6px 0"><img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(ticket.qrData)}" style="width:100px;height:100px"/></div>`
+  const qrSrcCredito = ticket.qrData ? await qrDataUrl(ticket.qrData) : "";
+  const qrHtml = qrSrcCredito
+    ? `<div style="text-align:center;margin:6px 0"><img src="${qrSrcCredito}" style="width:100px;height:100px"/></div>`
     : "";
 
   function copyBlock(label: string) {
@@ -1055,33 +1101,48 @@ function browserPrintCreditTicket(ticket: TicketData): void {
 </body></html>`;
 
   const win = window.open("", "_blank", "width=350,height=800");
-  if (win) {
-    win.document.write(html);
-    win.document.close();
-    // Cerrar ventana automáticamente después de imprimir
-    win.addEventListener("afterprint", () => win.close());
-    const images = win.document.querySelectorAll("img");
-    if (images.length > 0) {
-      let loaded = 0;
-      const tryPrint = () => {
-        loaded++;
-        if (loaded >= images.length) {
-          setTimeout(() => win.print(), 200);
-        }
-      };
-      images.forEach((img: HTMLImageElement) => {
-        if (img.complete) {
-          tryPrint();
-        } else {
-          img.onload = tryPrint;
-          img.onerror = tryPrint;
-        }
-      });
-      setTimeout(() => win.print(), 3000);
-    } else {
-      setTimeout(() => win.print(), 400);
-    }
+
+  if (!win) {
+    alert(
+      "El navegador bloqueó la ventana de impresión.\n\n" +
+      "Permite las ventanas emergentes para sergioscarniceria.com " +
+      "(el icono de la barra de direcciones) y vuelve a intentar."
+    );
+    return;
   }
+
+  win.document.write(html);
+  win.document.close();
+  win.addEventListener("afterprint", () => win.close());
+
+  let yaImprimio = false;
+  const imprimirUnaVez = () => {
+    if (yaImprimio) return;
+    yaImprimio = true;
+    win.print();
+  };
+
+  const images = Array.from(win.document.querySelectorAll("img"));
+  if (images.length === 0) {
+    setTimeout(imprimirUnaVez, 300);
+    return;
+  }
+
+  let pendientes = images.length;
+  const unaMenos = () => {
+    pendientes--;
+    if (pendientes <= 0) setTimeout(imprimirUnaVez, 150);
+  };
+
+  images.forEach((img: HTMLImageElement) => {
+    if (img.complete) unaMenos();
+    else {
+      img.onload = unaMenos;
+      img.onerror = unaMenos;
+    }
+  });
+
+  setTimeout(imprimirUnaVez, 5000);
 }
 
 /**

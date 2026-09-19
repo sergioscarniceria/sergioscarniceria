@@ -235,7 +235,17 @@ export default function NuevoPagoCxcPage() {
     if (win) {
       win.document.write(html);
       win.document.close();
+      return;
     }
+
+    // El navegador bloqueó la ventana emergente. Antes esto fallaba en
+    // silencio: el abono quedaba registrado y el cliente se iba sin recibo.
+    alert(
+      "El navegador bloqueó la ventana del recibo.\n\n" +
+      "El abono SÍ quedó registrado. Para imprimirlo:\n" +
+      "1. Permite ventanas emergentes (icono en la barra de direcciones)\n" +
+      "2. O reimprímelo desde Caja → Movimientos → Reimprimir"
+    );
   }
 
   async function savePaymentBase() {
@@ -301,8 +311,13 @@ export default function NuevoPagoCxcPage() {
     ]);
 
     if (cashMovementError) {
+      // El pago YA quedó guardado. Antes aquí había un return que se comía
+      // la impresión del recibo: el cliente pagaba y se iba sin comprobante.
       console.log("El pago se guardó, pero falló el movimiento de caja:", cashMovementError);
-      return;
+      alert(
+        "El pago se guardó, pero no se registró en caja.\n\n" +
+        "Avísale a Sergio para que lo revise. El recibo sí se va a imprimir."
+      );
     }
 
     let remaining = paymentAmount;
@@ -337,8 +352,14 @@ export default function NuevoPagoCxcPage() {
         .eq("id", note.id);
 
       if (updateError) {
+        // Igual que arriba: no cortamos el flujo, porque el dinero ya entró
+        // y el cliente necesita su comprobante en la mano.
         console.log("El pago se guardó, pero falló la aplicación a las notas:", updateError);
-        return;
+        alert(
+          `El pago se guardó, pero no se pudo aplicar a la nota ${note.note_number || note.id.slice(0, 8)}.\n\n` +
+          "Avísale a Sergio. El recibo sí se va a imprimir."
+        );
+        break;
       }
 
       remaining = Number((remaining - amountApplied).toFixed(2));

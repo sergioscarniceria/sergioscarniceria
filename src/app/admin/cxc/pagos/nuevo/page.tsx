@@ -169,6 +169,86 @@ export default function NuevoPagoCxcPage() {
     return openNotes.reduce((acc, note) => acc + Number(note.balance_due || 0), 0);
   }, [openNotes]);
 
+  /**
+   * Imprime el recibo del abono.
+   * Mismo formato que /cxc/pagos/nuevo, para que el cliente reciba
+   * exactamente el mismo comprobante sin importar por qué menú se capturó.
+   */
+  function printAbonoTicket(info: {
+    customerName: string;
+    paymentDate: string;
+    paymentAmount: number;
+    paymentMethod: string;
+    appliedDetails: { noteNumber: string; applied: number; newBalance: number }[];
+    newTotalBalance: number;
+  }) {
+    const methodLabel: Record<string, string> = {
+      efectivo: "Efectivo",
+      tarjeta: "Tarjeta",
+      transferencia: "Transferencia",
+    };
+
+    const rows = info.appliedDetails
+      .map(
+        (d) =>
+          `<tr>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc">${d.noteNumber}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${d.applied.toFixed(2)}</td>
+            <td style="padding:2px 6px;border-bottom:1px dashed #ccc;text-align:right">$${d.newBalance.toFixed(2)}</td>
+          </tr>`
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+      <title>Recibo de Abono</title>
+      <style>
+        @page { margin: 0; }
+        body { font-family: monospace; font-size: 12px; width: 280px; margin: 0 auto; padding: 8px; }
+        h2 { text-align: center; margin: 4px 0; font-size: 14px; }
+        .center { text-align: center; }
+        .line { border-top: 1px dashed #000; margin: 6px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 2px 6px; font-size: 11px; border-bottom: 1px solid #000; }
+        th:nth-child(2), th:nth-child(3) { text-align: right; }
+        .total-row { font-weight: bold; font-size: 13px; }
+      </style></head><body>
+      <h2>SERGIO'S CARNICERÍA</h2>
+      <p class="center" style="margin:2px 0">RECIBO DE ABONO</p>
+      <p class="center" style="margin:2px 0;font-size:10px">H. Colegio Militar No. 122, Ezequiel Montes, Qro.</p>
+      <div class="line"></div>
+      <p><strong>Cliente:</strong> ${info.customerName}</p>
+      <p><strong>Fecha:</strong> ${info.paymentDate}</p>
+      <p><strong>Método:</strong> ${methodLabel[info.paymentMethod] || info.paymentMethod}</p>
+      <p class="total-row"><strong>Abono:</strong> $${info.paymentAmount.toFixed(2)}</p>
+      <div class="line"></div>
+      <p style="font-size:11px;margin-bottom:2px"><strong>Aplicado a:</strong></p>
+      <table>
+        <tr><th>Nota</th><th>Abonado</th><th>Resta</th></tr>
+        ${rows}
+      </table>
+      <div class="line"></div>
+      <p class="total-row center">SALDO RESTANTE: $${info.newTotalBalance.toFixed(2)}</p>
+      <div class="line"></div>
+      <p class="center" style="font-size:10px;margin-top:8px">sergioscarniceria.com</p>
+      <p class="center" style="font-size:11px">¡Gracias por su pago!</p>
+      <script>window.onload=function(){window.print();setTimeout(function(){window.close()},600);}</script>
+    </body></html>`;
+
+    const win = window.open("", "_blank", "width=320,height=600");
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      return;
+    }
+
+    alert(
+      "El navegador bloqueó la ventana del recibo.\n\n" +
+      "El abono SÍ quedó registrado. Para imprimirlo:\n" +
+      "1. Permite ventanas emergentes (icono en la barra de direcciones)\n" +
+      "2. O reimprímelo desde Caja → Movimientos → Reimprimir"
+    );
+  }
+
   async function savePaymentBase() {
   if (!selectedCustomer) {
     alert("Selecciona un cliente");
@@ -234,10 +314,13 @@ export default function NuevoPagoCxcPage() {
   ]);
 
 if (cashMovementError) {
+  // Avisamos, pero NO cortamos: el dinero ya entró y el cliente necesita
+  // su recibo impreso, que es su única prueba de que pagó.
   console.log(cashMovementError);
-  alert("El pago se guardó, pero falló el movimiento de caja");
-  setSaving(false);
-  return;
+  alert(
+    "El pago se guardó, pero no se registró en caja.\n\n" +
+    "Avísale a Sergio para que lo revise. El recibo sí se va a imprimir."
+  );
 }
 
   let remaining = paymentAmount;
@@ -268,9 +351,11 @@ if (cashMovementError) {
 
     if (updateError) {
       console.log(updateError);
-      alert("El pago se guardó, pero falló la aplicación a las notas");
-      setSaving(false);
-      return;
+      alert(
+        `El pago se guardó, pero no se pudo aplicar a la nota ${note.note_number || note.id.slice(0, 8)}.\n\n` +
+        "Avísale a Sergio. El recibo sí se va a imprimir."
+      );
+      break;
     }
 
     remaining = Number((remaining - amountApplied).toFixed(2));
@@ -283,6 +368,26 @@ if (cashMovementError) {
       .update({ applied_notes: appliedDetails })
       .eq("id", paymentData.id);
   }
+
+  // Imprimir el recibo del abono.
+  // Esta página NO imprimía nada: el abono quedaba registrado y el cliente
+  // se iba sin comprobante. Por eso parecía que "a veces" no imprimía —
+  // en realidad dependía de si la cajera entraba por /cxc o por /admin/cxc.
+  const saldoRestante = openNotes.reduce((acc, n) => {
+    const aplicada = appliedDetails.find(
+      (d) => d.noteNumber === (n.note_number || n.id.slice(0, 8))
+    );
+    return acc + (aplicada ? aplicada.newBalance : Number(n.balance_due || 0));
+  }, 0);
+
+  printAbonoTicket({
+    customerName: selectedCustomer.name,
+    paymentDate,
+    paymentAmount,
+    paymentMethod,
+    appliedDetails,
+    newTotalBalance: saldoRestante,
+  });
 
   alert("Pago registrado y aplicado correctamente");
 
