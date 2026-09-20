@@ -131,6 +131,65 @@ const socialLinks = [
   { title: "Cotizaciones", subtitle: "cotizaciones@sergioscarniceria.com", href: "mailto:cotizaciones@sergioscarniceria.com", color: "#a66a10" },
 ];
 
+/**
+ * Qué se promociona en la portada.
+ *
+ * OJO: NO están ordenados por volumen de venta, sino por UTILIDAD.
+ * Sergio fue claro: la barbacoa es lo que más vende pero lo que menos
+ * le deja, así que no encabeza la página. Aquí van los preparados y
+ * marinados (donde se cobra el trabajo, no solo la carne), los cortes
+ * finos de ticket alto y el carbón, que es el complemento con mejor
+ * margen de los que sí tienen costo capturado.
+ *
+ * Los nombres deben coincidir EXACTO con la columna `name` de `products`
+ * — la BD guarda el nombre, no el id, así que un typo deja el hueco vacío.
+ * Todos los de esta lista tienen foto verificada.
+ */
+const PRODUCTOS_ESTRELLA = [
+  "Arrachera",
+  "Rib eye",
+  "Cecina",
+  "Diezmillo Marinado",
+  "Pastor",
+  "Longaniza",
+  "Hamburguesa",
+  "carbon",
+];
+
+/**
+ * Nombres bonitos solo para mostrar en la web.
+ * NO se renombra en la base de datos: `order_items` guarda el nombre
+ * del producto, así que cambiarlo rompería reportes e inventario.
+ */
+const NOMBRE_PUBLICO: Record<string, string> = {
+  carbon: "Carbón",
+  "Rib eye": "Rib Eye",
+  Pastor: "Pastor adobado",
+  Hamburguesa: "Hamburguesa de res",
+};
+
+/** Frase corta que acompaña a cada producto, para antojar. */
+const ANTOJO: Record<string, string> = {
+  Arrachera: "Suave y jugosa, la reina de la parrilla",
+  "Rib eye": "Nuestro corte más fino, marmoleado",
+  Cecina: "Delgada y salada, lista para el comal",
+  "Diezmillo Marinado": "Ya marinado, solo lo pones al fuego",
+  Pastor: "Adobado en casa, para tus tacos",
+  Longaniza: "Receta de la casa, desde 1976",
+  Hamburguesa: "Carne molida prensada, gruesa",
+  carbon: "Para que no te falte nada",
+};
+
+type Destacado = {
+  id: string;
+  name: string;
+  price: number | null;
+  image_url: string | null;
+  sale_type: string | null;
+  fixed_piece_price: number | null;
+  category: string | null;
+};
+
 // ─── Scroll reveal hook ───
 function useReveal() {
   const ref = useRef<HTMLDivElement>(null);
@@ -139,12 +198,33 @@ function useReveal() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // Si el navegador no soporta IntersectionObserver, mostrar todo de una
+    // vez. Antes la sección se quedaba invisible para siempre.
+    if (typeof IntersectionObserver === "undefined") {
+      setVisible(true);
+      return;
+    }
+
+    // Si la sección ya está en pantalla al cargar (o el usuario entró con la
+    // página a medio scroll), mostrarla sin esperar.
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight && rect.bottom > 0) {
+      setVisible(true);
+      return;
+    }
+
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) { setVisible(true); observer.disconnect(); } },
-      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
+      { threshold: 0, rootMargin: "0px 0px 200px 0px" }
     );
     observer.observe(el);
-    return () => observer.disconnect();
+
+    // Red de seguridad: si por lo que sea el observer nunca dispara, a los
+    // 2 segundos se muestra igual. Más vale sin animación que en blanco.
+    const rescate = setTimeout(() => setVisible(true), 2000);
+
+    return () => { observer.disconnect(); clearTimeout(rescate); };
   }, []);
 
   return { ref, visible };
@@ -286,6 +366,7 @@ export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [customerCount, setCustomerCount] = useState(5250);
   const [productCount, setProductCount] = useState(134);
+  const [destacados, setDestacados] = useState<Destacado[]>([]);
 
   useEffect(() => {
     const role = typeof window !== "undefined" ? sessionStorage.getItem("pin_role") : null;
@@ -293,6 +374,38 @@ export default function HomePage() {
     // Conteos estáticos para no saturar Supabase con tráfico público
     setCustomerCount(5300);
     setProductCount(120);
+  }, []);
+
+  // Precios en vivo de los productos más vendidos.
+  // Se leen de la misma tabla que usa el mostrador, así que la página
+  // nunca muestra un precio viejo: si Sergio lo cambia en admin, cambia aquí.
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarDestacados() {
+      try {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+          .from("products")
+          .select("id, name, price, image_url, sale_type, fixed_piece_price, category")
+          .in("name", PRODUCTOS_ESTRELLA)
+          .eq("is_active", true);
+
+        if (error || !data || cancelado) return;
+
+        // Respetar el orden de PRODUCTOS_ESTRELLA (van de más a menos vendido)
+        const ordenados = PRODUCTOS_ESTRELLA
+          .map((nombre) => data.find((p) => p.name === nombre))
+          .filter(Boolean) as Destacado[];
+
+        setDestacados(ordenados);
+      } catch {
+        // Si falla, la sección simplemente no se muestra. Nunca rompe la página.
+      }
+    }
+
+    cargarDestacados();
+    return () => { cancelado = true; };
   }, []);
 
   useEffect(() => {
@@ -320,6 +433,8 @@ export default function HomePage() {
           .recipe-scroll > div { scroll-snap-align: center; min-width: 300px; }
           .social-grid { grid-template-columns: 1fr 1fr !important; }
           .stats-row { flex-direction: column !important; }
+          .prod-grid { grid-template-columns: 1fr 1fr !important; gap: 14px !important; }
+          .mayoreo-grid { grid-template-columns: 1fr !important; gap: 24px !important; }
         }
         @media (min-width: 701px) {
           .nav-desktop { display: flex !important; }
@@ -485,6 +600,175 @@ export default function HomePage() {
           </div>
         </Section>
 
+        {/* ─── NUESTROS CORTES (precios en vivo desde la BD) ─── */}
+        {destacados.length > 0 && (
+          <Section id="productos">
+            <div style={{ marginBottom: 80 }}>
+              <div style={{ textAlign: "center", marginBottom: 40 }}>
+                <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 999, background: "rgba(123,34,24,0.08)", color: C.primary, fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 12 }}>
+                  Lo que más piden
+                </div>
+                <h2 style={{ fontSize: 38, fontWeight: 800, color: C.text, lineHeight: 1.15, marginBottom: 10 }}>
+                  Nuestros cortes
+                </h2>
+                <p style={{ color: C.muted, fontSize: 17, maxWidth: 560, margin: "0 auto" }}>
+                  Precios de hoy, actualizados al momento. Cortamos al gusto y al peso que pidas.
+                </p>
+              </div>
+
+              <div
+                className="prod-grid"
+                style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}
+              >
+                {destacados.map((p, i) => {
+                  const porPieza = p.sale_type === "pieza";
+                  const precio = porPieza
+                    ? Number(p.fixed_piece_price || p.price || 0)
+                    : Number(p.price || 0);
+                  const unidad = porPieza ? "pieza" : "kg";
+                  const esEstrella = i === 0;
+
+                  return (
+                    <a
+                      key={p.id}
+                      href="/tienda"
+                      className="prod-card"
+                      style={{
+                        display: "block",
+                        borderRadius: 22,
+                        overflow: "hidden",
+                        background: C.cardStrong,
+                        border: esEstrella ? `2px solid ${C.primary}` : `1px solid ${C.border}`,
+                        textDecoration: "none",
+                        boxShadow: "0 8px 30px rgba(91,25,15,0.06)",
+                        position: "relative",
+                      }}
+                    >
+                      {esEstrella && (
+                        <div style={{
+                          position: "absolute", top: 12, left: 12, zIndex: 2,
+                          background: C.primary, color: "white", fontSize: 11,
+                          fontWeight: 800, padding: "5px 11px", borderRadius: 999,
+                          letterSpacing: 0.4, textTransform: "uppercase",
+                        }}>
+                          Favorito de la casa
+                        </div>
+                      )}
+
+                      <div style={{ width: "100%", aspectRatio: "4 / 3", background: "#e8ded3", overflow: "hidden" }}>
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            loading="lazy"
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          />
+                        ) : (
+                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: C.muted, fontSize: 13, fontWeight: 700 }}>
+                            {p.name}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ padding: "16px 18px 18px" }}>
+                        <div style={{ fontWeight: 800, color: C.text, fontSize: 17, marginBottom: 3 }}>
+                          {NOMBRE_PUBLICO[p.name] || p.name}
+                        </div>
+                        {ANTOJO[p.name] && (
+                          <div style={{ fontSize: 13, color: C.muted, marginBottom: 8, lineHeight: 1.4 }}>
+                            {ANTOJO[p.name]}
+                          </div>
+                        )}
+                        {precio > 0 ? (
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                            <span style={{ fontSize: 24, fontWeight: 900, color: C.primary }}>
+                              ${precio.toLocaleString("es-MX")}
+                            </span>
+                            <span style={{ fontSize: 14, color: C.muted, fontWeight: 600 }}>/ {unidad}</span>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 14, color: C.muted, fontWeight: 700 }}>
+                            Consultar precio
+                          </div>
+                        )}
+                      </div>
+                    </a>
+                  );
+                })}
+              </div>
+
+              <div style={{ textAlign: "center", marginTop: 34 }}>
+                <a href="/tienda" className="cta-btn" style={{
+                  display: "inline-block", padding: "16px 36px", borderRadius: 16,
+                  background: C.primary, color: "white", textDecoration: "none",
+                  fontWeight: 800, fontSize: 16, boxShadow: "0 10px 30px rgba(123,34,24,0.25)",
+                }}>
+                  Ver catálogo completo y pedir
+                </a>
+                <p style={{ color: C.muted, fontSize: 14, marginTop: 12 }}>
+                  Más de 120 productos. Pide hoy y recógelo listo.
+                </p>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* ─── EVENTOS Y MAYOREO ─── */}
+        <Section id="mayoreo">
+          <div style={{ marginBottom: 80 }}>
+            <div style={{
+              borderRadius: 28,
+              background: `linear-gradient(135deg, ${C.primaryDark} 0%, ${C.primary} 100%)`,
+              padding: "48px 40px",
+              color: "white",
+              boxShadow: "0 20px 60px rgba(91,25,15,0.25)",
+            }}>
+              <div className="mayoreo-grid" style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 36, alignItems: "center" }}>
+                <div>
+                  <div style={{ display: "inline-block", padding: "6px 14px", borderRadius: 999, background: "rgba(255,255,255,0.18)", fontSize: 12, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 14 }}>
+                    Eventos y mayoreo
+                  </div>
+                  <h2 style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.15, marginBottom: 14 }}>
+                    ¿Taquiza, boda o restaurante?
+                  </h2>
+                  <p style={{ fontSize: 16, lineHeight: 1.7, opacity: 0.93, marginBottom: 10 }}>
+                    Surtimos eventos y negocios con precio especial por volumen. Te decimos cuántos
+                    kilos necesitas según tus invitados, lo dejamos porcionado y listo para servir.
+                  </p>
+                  <p style={{ fontSize: 15, lineHeight: 1.7, opacity: 0.85 }}>
+                    Cortes para parrilla, carne preparada para taquiza, barbacoa por kilo y
+                    abasto fijo para cocinas. Cotización el mismo día.
+                  </p>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <a href="https://wa.me/524411185767?text=Hola%2C%20quiero%20cotizar%20carne%20para%20un%20evento"
+                    target="_blank" rel="noreferrer" className="cta-btn"
+                    style={{
+                      display: "block", textAlign: "center", padding: "16px 24px", borderRadius: 16,
+                      background: "white", color: C.primaryDark, textDecoration: "none",
+                      fontWeight: 800, fontSize: 16,
+                    }}>
+                    Cotizar por WhatsApp
+                  </a>
+                  <a href="mailto:cotizaciones@sergioscarniceria.com?subject=Cotizaci%C3%B3n%20para%20evento"
+                    className="cta-btn"
+                    style={{
+                      display: "block", textAlign: "center", padding: "16px 24px", borderRadius: 16,
+                      background: "rgba(255,255,255,0.14)", color: "white", textDecoration: "none",
+                      fontWeight: 700, fontSize: 15, border: "1.5px solid rgba(255,255,255,0.35)",
+                    }}>
+                    Pedir cotización por correo
+                  </a>
+                  <p style={{ fontSize: 13, opacity: 0.8, textAlign: "center", marginTop: 4 }}>
+                    Atendemos Ezequiel Montes, Tequisquiapan, Bernal y Cadereyta
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Section>
+
         {/* ─── RECETARIO ─── */}
         <Section id="recetario">
           <div style={{ marginBottom: 80 }}>
@@ -623,16 +907,20 @@ export default function HomePage() {
           </div>
         </Section>
 
-        {/* ─── CENTRO DE OPERACIONES ─── */}
+        {/* ─── CENTRO DE OPERACIONES (solo personal) ───
+            Antes era un botón rojo grande a media página: el cliente que
+            entraba a comprar carne veía un acceso al sistema interno.
+            Ahora es un enlace discreto, del tamaño del texto legal. */}
         <Section>
           <div style={{ textAlign: "center", padding: "20px 0 40px" }}>
             <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-              <button onClick={() => setShowOps(!showOps)} className="cta-btn" style={{
-                padding: "12px 28px", borderRadius: 14, border: "none",
-                background: showOps ? C.primaryDark : C.primary,
-                color: "white", cursor: "pointer", fontWeight: 700, fontSize: 14,
+              <button onClick={() => setShowOps(!showOps)} style={{
+                padding: "8px 14px", borderRadius: 10, border: "none",
+                background: "transparent",
+                color: C.muted, cursor: "pointer", fontWeight: 600, fontSize: 12,
+                opacity: showOps ? 1 : 0.55, textDecoration: "underline",
               }}>
-                {showOps ? "Cerrar panel" : "Centro de operaciones"}
+                {showOps ? "Cerrar panel" : "Acceso personal"}
               </button>
             </div>
 
