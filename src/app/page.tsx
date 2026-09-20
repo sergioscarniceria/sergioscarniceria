@@ -525,6 +525,24 @@ export default function HomePage() {
             atención de primera y la frescura que tu mesa merece.
           </p>
 
+          {/* Dato comprobable: ~771 kg despachados al día (60 días medidos).
+              A unos 3 kg por familia son ~257, sin contar a quienes comen
+              nuestra carne en los restaurantes que surtimos. */}
+          <div style={{
+            display: "inline-flex", alignItems: "center", gap: 10,
+            padding: "10px 20px", borderRadius: 999,
+            background: "rgba(123,34,24,0.07)",
+            border: `1px solid rgba(123,34,24,0.12)`,
+            marginBottom: 30, flexWrap: "wrap", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 15, color: C.primary, fontWeight: 800 }}>
+              +250 familias
+            </span>
+            <span style={{ fontSize: 15, color: C.muted, fontWeight: 600 }}>
+              comen nuestra carne cada día, los 365 días del año
+            </span>
+          </div>
+
           <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
             <Link href="/tienda" className="cta-btn" style={{
               padding: "16px 40px", borderRadius: 16, border: "none",
