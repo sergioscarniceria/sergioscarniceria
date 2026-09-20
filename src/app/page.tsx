@@ -364,16 +364,18 @@ export default function HomePage() {
   const [empRole, setEmpRole] = useState<string | null>(null);
   const [empName, setEmpName] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [customerCount, setCustomerCount] = useState(5250);
-  const [productCount, setProductCount] = useState(134);
+  const [customerCount, setCustomerCount] = useState(1580000);
+  const [productCount, setProductCount] = useState(168);
   const [destacados, setDestacados] = useState<Destacado[]>([]);
 
   useEffect(() => {
     const role = typeof window !== "undefined" ? sessionStorage.getItem("pin_role") : null;
     if (role) setEmpRole(role);
-    // Conteos estáticos para no saturar Supabase con tráfico público
-    setCustomerCount(5300);
-    setProductCount(120);
+    // Conteos estáticos para no saturar Supabase con tráfico público.
+    // Productos: 168 activos, verificado en la tabla `products` (sep 2026).
+    // Clientes: acumulado histórico de los 50 años, cifra que definió Sergio.
+    setCustomerCount(1580000);
+    setProductCount(168);
   }, []);
 
   // Precios en vivo de los productos más vendidos.
@@ -706,7 +708,7 @@ export default function HomePage() {
                   Ver catálogo completo y pedir
                 </a>
                 <p style={{ color: C.muted, fontSize: 14, marginTop: 12 }}>
-                  Más de 120 productos. Pide hoy y recógelo listo.
+                  Más de 160 productos. Pide hoy y recógelo listo.
                 </p>
               </div>
             </div>
