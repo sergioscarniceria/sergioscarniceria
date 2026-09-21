@@ -381,6 +381,7 @@ export default function AdminCxcPage() {
             <Link href="/pedidos" style={secondaryButtonStyle}>Pedidos</Link>
             <Link href="/admin/cxc/nueva" style={primaryButtonStyle}>+ Nueva nota</Link>
             <Link href="/admin/cxc/pagos" style={secondaryActionButtonStyle}>Registrar pago</Link>
+            <Link href="/cxc/historial" style={secondaryActionButtonStyle}>Historial</Link>
             <button onClick={loadRecentPayments} style={secondaryActionButtonStyle}>Últimos movimientos</button>
             <Link href="/admin/caja" style={secondaryButtonStyle}>Caja</Link>
           </div>
