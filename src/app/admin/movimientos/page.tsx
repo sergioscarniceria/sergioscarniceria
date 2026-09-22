@@ -14,6 +14,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { itemSubtotal } from "@/lib/itemSubtotal";
 
 const C = {
   bg: "#f7f1e8",
@@ -80,6 +81,8 @@ type Evento = {
   quien: string | null;
   monto: number | null;
   tono?: "normal" | "alerta";
+  /** Leyenda chica bajo el monto: "Por pesar", "Cancelado", etc. */
+  notaMonto?: string | null;
 };
 
 const METODOS: Record<string, string> = {
@@ -116,11 +119,14 @@ export default function MovimientosTotalesPage() {
         supabase.from("cash_openings")
           .select("id, initial_amount, created_at, notes")
           .eq("opening_date", dia),
+        // Se traen los renglones del ticket para poder mostrar su total.
+        // Se usa itemSubtotal (la función canónica) para que respete los
+        // productos por pieza con precio fijo y nunca salga en $0.
         supabase.from("orders")
-          .select("id, customer_name, created_at, butcher_name, captured_by, source, status, payment_status")
+          .select("id, customer_name, created_at, butcher_name, captured_by, source, status, payment_status, discount_amount, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cash_movements")
-          .select("id, type, source, amount, payment_method, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by")
+          .select("id, type, source, amount, payment_method, reference_id, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cxc_notes")
           .select("id, customer_name, note_number, total_amount, created_at")
@@ -178,6 +184,10 @@ export default function MovimientosTotalesPage() {
         });
       }
 
+      // Índice de tickets: sirve para ponerle total a cada ticket Y para que
+      // el cobro de más abajo pueda decir a QUÉ ticket correspondió.
+      const ticketsPorId = new Map<string, { folio: string; cliente: string; total: number; porPesar: boolean }>();
+
       for (const o of ordenes.data || []) {
         const origen = o.source === "mostrador" ? "Mostrador"
           : o.source === "caja_manual" ? "Captura manual en caja"
@@ -185,30 +195,84 @@ export default function MovimientosTotalesPage() {
           : o.source === "telefono" ? "Teléfono"
           : o.source === "app_cliente" || o.source === "cliente" ? "Tienda en línea"
           : o.source || "Sin origen";
+
+        const renglones = (o.order_items || []) as Array<
+          Parameters<typeof itemSubtotal>[0] & { product?: string | null }
+        >;
+        const bruto = renglones.reduce((a, it) => a + itemSubtotal(it), 0);
+        const total = bruto - Number(o.discount_amount || 0);
+
+        // Un ticket cuyo producto por kilo aún no se pesa no tiene total real
+        const porPesar = renglones.some(
+          (it) => it.sale_type === "pieza" && !it.is_fixed_price_piece && !Number(it.prepared_kilos || 0)
+        );
+
+        const folio = `TK-${String(o.id).slice(0, 6).toUpperCase()}`;
+        ticketsPorId.set(o.id, {
+          folio,
+          cliente: o.customer_name || "Mostrador",
+          total,
+          porPesar,
+        });
+
+        const cuantos = renglones.length;
+        const resumenProductos = renglones.slice(0, 3).map((it) => it.product).join(", ");
+
         lista.push({
           id: `or-${o.id}`,
           hora: o.created_at,
           categoria: "ticket",
-          titulo: `Ticket TK-${String(o.id).slice(0, 6).toUpperCase()}`,
-          detalle: `${o.customer_name || "Mostrador"} · ${origen}${o.butcher_name ? ` · Atendió ${o.butcher_name}` : ""}`,
+          titulo: `${folio} · ${o.customer_name || "Mostrador"}`,
+          detalle: `${origen}${o.butcher_name ? ` · Atendió ${o.butcher_name}` : ""}${
+            cuantos > 0 ? ` · ${resumenProductos}${cuantos > 3 ? ` y ${cuantos - 3} más` : ""}` : ""
+          }`,
           quien: o.captured_by || o.butcher_name || null,
-          monto: null,
+          monto: porPesar ? null : total,
+          notaMonto: porPesar ? "Por pesar" : null,
         });
+      }
+
+      // Qué abono de CxC corresponde a cada movimiento de caja
+      const abonosPorId = new Map<string, { cliente: string; metodo: string | null }>();
+      for (const p of pagosCxc.data || []) {
+        abonosPorId.set(p.id, { cliente: p.customer_name || "Cliente", metodo: p.payment_method });
       }
 
       for (const m of movimientos.data || []) {
         const metodo = METODOS[m.payment_method || ""] || m.payment_method || "";
         const esCxc = m.type === "cxc_pago";
 
+        // De qué fue el cobro. Antes solo decía "Venta cobrada" sin decir
+        // de cuál ticket, y no había forma de amarrarlo con la venta.
+        const ticket = !esCxc && m.reference_id ? ticketsPorId.get(m.reference_id) : undefined;
+        const abono = esCxc && m.reference_id ? abonosPorId.get(m.reference_id) : undefined;
+
+        let titulo: string;
+        if (esCxc) {
+          titulo = `Cobro de crédito · ${abono?.cliente || "Cliente"}`;
+        } else if (ticket) {
+          titulo = `Cobró ${ticket.folio} · ${ticket.cliente}`;
+        } else {
+          titulo = "Venta cobrada";
+        }
+
+        const partes: string[] = [];
+        if (metodo) partes.push(metodo);
+        if (m.cashier_name) partes.push(`Cajera ${m.cashier_name}`);
+        if (!esCxc && !ticket && m.reference_id) {
+          partes.push(`Ticket TK-${String(m.reference_id).slice(0, 6).toUpperCase()} (de otro día)`);
+        }
+
         lista.push({
           id: `cm-${m.id}`,
           hora: m.created_at,
           categoria: "cobro",
-          titulo: esCxc ? "Cobro de crédito" : "Venta cobrada",
-          detalle: `${metodo}${m.cashier_name ? ` · Cajera ${m.cashier_name}` : ""}`,
+          titulo,
+          detalle: partes.join(" · "),
           quien: m.cashier_name || null,
           monto: Number(m.amount || 0),
           tono: m.is_cancelled ? "alerta" : "normal",
+          notaMonto: m.is_cancelled ? "Cancelado" : null,
         });
 
         if (m.is_cancelled && m.cancelled_at) {
@@ -479,13 +543,25 @@ export default function MovimientosTotalesPage() {
                       </div>
                     </div>
 
-                    {e.monto !== null && (
-                      <div style={{
-                        fontWeight: 900, fontSize: 16, whiteSpace: "nowrap",
-                        color: e.categoria === "gasto" ? C.danger : alerta ? C.danger : C.text,
-                        alignSelf: "center",
-                      }}>
-                        {e.categoria === "gasto" ? "−" : ""}${money(e.monto)}
+                    {(e.monto !== null || e.notaMonto) && (
+                      <div style={{ textAlign: "right", alignSelf: "center", whiteSpace: "nowrap" }}>
+                        {e.monto !== null && (
+                          <div style={{
+                            fontWeight: 900, fontSize: 16,
+                            color: e.categoria === "gasto" ? C.danger : alerta ? C.danger : C.text,
+                            textDecoration: e.notaMonto === "Cancelado" ? "line-through" : "none",
+                          }}>
+                            {e.categoria === "gasto" ? "−" : ""}${money(e.monto)}
+                          </div>
+                        )}
+                        {e.notaMonto && (
+                          <div style={{
+                            fontSize: 11, fontWeight: 800, marginTop: 2,
+                            color: e.notaMonto === "Cancelado" ? C.danger : C.warning,
+                          }}>
+                            {e.notaMonto}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
