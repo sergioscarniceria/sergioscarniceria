@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 import { printCashCut, smartPrintTicket, type CashCutData, type TicketData } from "@/lib/printer";
+import { logAudit } from "@/lib/audit-log";
 import PrinterButton from "@/components/PrinterButton";
 import { moneyRound } from "@/lib/money";
 // jsPDF se carga desde CDN (el paquete npm falla en build con Turbopack/fflate)
@@ -1009,6 +1010,21 @@ export default function CajaPage() {
       return;
     }
 
+    // Cancelar un cobro es de las acciones más delicadas: queda registrado
+    // con nombre, monto y motivo para poder rastrearlo después.
+    logAudit({
+      action: "cancelar_ticket",
+      amount: Number(cancelMovement.amount || 0),
+      entity_type: "cash_movement",
+      entity_id: cancelMovement.id,
+      user_label: emp.name,
+      details: {
+        motivo: cancelReason.trim(),
+        metodo: cancelMovement.payment_method || null,
+        tipo: cancelMovement.type || null,
+      },
+    });
+
     // If there's an associated order, mark it as cancelled too
     if (cancelMovement.reference_id) {
       await supabase
@@ -1361,6 +1377,17 @@ export default function CajaPage() {
       const { error } = await supabase.from("cash_openings").insert([payload]);
       if (error) { alert("Error al guardar apertura. Verifica que las tablas existan."); console.log(error); setSaving(false); return; }
     }
+    logAudit({
+      action: "apertura_caja",
+      amount: Number(payload.initial_amount || 0),
+      entity_type: "cash_opening",
+      details: {
+        descripcion: todayOpening?.id
+          ? `Apertura corregida. Fondo $${payload.initial_amount}`
+          : `Fondo inicial $${payload.initial_amount}`,
+      },
+    });
+
     alert("Apertura de caja guardada");
     await loadOpening();
     setSaving(false);
@@ -1382,6 +1409,16 @@ export default function CajaPage() {
     }]);
 
     if (error) { alert("Error al guardar gasto"); console.log(error); setSaving(false); return; }
+
+    // Queda registrado en la bitácora del día
+    logAudit({
+      action: "gasto_registrado",
+      amount: Number(amt.toFixed(2)),
+      entity_type: "cash_expense",
+      details: {
+        descripcion: `${expConcept.trim()} (${expCategory}, ${expPaymentMethod})`,
+      },
+    });
 
     setExpConcept("");
     setExpAmount("");
@@ -1494,6 +1531,16 @@ export default function CajaPage() {
     // Siempre insertar un nuevo registro de cierre (cada corte es independiente)
     const { error } = await supabase.from("cash_closures").insert([payload]);
     if (error) { alert("Error al guardar cierre"); console.log(error); setSaving(false); return; }
+
+    logAudit({
+      action: "cierre_caja",
+      amount: Number(payload.total_general || 0),
+      entity_type: "cash_closure",
+      user_label: String(payload.closed_by || "") || undefined,
+      details: {
+        descripcion: `Contado $${payload.counted_cash} vs esperado $${payload.expected_cash}. Diferencia $${payload.difference}`,
+      },
+    });
 
     alert("Cierre de caja guardado");
     // Recargar para que el siguiente corte solo cuente movimientos nuevos

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit-log";
 
 type Customer = {
   id: string;
@@ -372,6 +373,16 @@ export default function NuevoPagoCxcPage() {
         .update({ applied_notes: appliedDetails })
         .eq("id", paymentData.id);
     }
+
+    logAudit({
+      action: "cxc_pago",
+      amount: paymentAmount,
+      entity_type: "cxc_payment",
+      entity_id: paymentData.id,
+      details: {
+        descripcion: `Abono de ${selectedCustomer.name} por ${paymentMethod}. Saldo queda en $${newTotalBalance.toFixed(2)}`,
+      },
+    });
 
     // ─── Imprimir ticket de abono ───
     printAbonoTicket({
