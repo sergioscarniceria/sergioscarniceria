@@ -97,23 +97,55 @@ const [dateDraft, setDateDraft] = useState<string>("");
   async function loadOrders() {
     const supabase = getSupabaseClient();
 
-    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const { data, error } = await supabase
-      .from("orders")
-      .select(`*, order_items(*)`)
-      .not("source", "in", "(mostrador,caja_manual)")
-      .gte("created_at", since)
-      .order("delivery_date", { ascending: true })
-      .order("created_at", { ascending: false })
-      .limit(200);
+    // BUG que había: traía 90 días de histórico ordenado del más viejo al más
+    // nuevo, con limit(200). Con 2,500+ pedidos en 90 días, los 200 primeros
+    // eran todos de julio y el pedido de HOY quedaba fuera de la lista.
+    //
+    // Esta pantalla solo necesita lo que está vivo: pendientes (de cualquier
+    // fecha) + lo de hoy + lo futuro. Lo terminado y entregado de hace semanas
+    // no aporta nada aquí y es lo que llenaba el límite.
+    const hace14dias = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
 
+    const [pendientes, recientes] = await Promise.all([
+      // Todo lo que NO se ha cerrado, sin importar la fecha (atrasados y sin fecha)
+      supabase
+        .from("orders")
+        .select(`*, order_items(*)`)
+        .not("source", "in", "(mostrador,caja_manual)")
+        .not("status", "in", "(terminado,cancelado)")
+        .or("delivery_status.is.null,delivery_status.neq.entregado"),
+      // Y lo de hoy en adelante + últimos 14 días aunque ya esté cerrado,
+      // para que se vea lo recién terminado sin tener que buscarlo
+      supabase
+        .from("orders")
+        .select(`*, order_items(*)`)
+        .not("source", "in", "(mostrador,caja_manual)")
+        .gte("delivery_date", hace14dias),
+    ]);
+
+    const error = pendientes.error || recientes.error;
     if (error) {
       console.log(error);
       alert("No se pudieron cargar los pedidos");
       return;
     }
 
-    setOrders((data as Order[]) || []);
+    // Unir sin duplicados (un pedido de hoy pendiente sale en las dos consultas)
+    const porId = new Map<string, Order>();
+    for (const o of [...(pendientes.data || []), ...(recientes.data || [])] as Order[]) {
+      porId.set(o.id, o);
+    }
+
+    const lista = Array.from(porId.values()).sort((a, b) => {
+      const fa = normalizeDateOnly(a.delivery_date) || "9999";
+      const fb = normalizeDateOnly(b.delivery_date) || "9999";
+      if (fa !== fb) return fa < fb ? -1 : 1;
+      return (b.created_at || "") < (a.created_at || "") ? -1 : 1;
+    });
+
+    setOrders(lista);
   }
 
     async function deleteOrder(id: string) {
@@ -341,14 +373,18 @@ const [dateDraft, setDateDraft] = useState<string>("");
       orders.filter((o) => {
         const n = normalizeDateOnly(o.delivery_date);
         if (!n) return false;
-        return n < getTodayDateInput() && o.status !== "terminado" && o.delivery_status !== "entregado";
+        // Un pedido cancelado no está "atrasado": ya no va a salir
+        return n < getTodayDateInput()
+          && o.status !== "terminado"
+          && o.status !== "cancelado"
+          && o.delivery_status !== "entregado";
       })
     );
   }, [orders, filter, search]);
 
   const noDateOrders = useMemo(() => {
     return applyBaseFilters(
-      orders.filter((o) => !normalizeDateOnly(o.delivery_date) && o.status !== "terminado" && o.delivery_status !== "entregado")
+      orders.filter((o) => !normalizeDateOnly(o.delivery_date) && o.status !== "terminado" && o.status !== "cancelado" && o.delivery_status !== "entregado")
     );
   }, [orders, filter, search]);
 
