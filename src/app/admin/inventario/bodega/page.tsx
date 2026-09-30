@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { verificarCodigoEmpleado } from "@/lib/verificar-codigo";
 
 type BodegaItem = {
   id: string;
@@ -134,12 +135,7 @@ export default function InventarioBodegaPage() {
         setMovAuthError("Nombre y código son obligatorios para salidas");
         return;
       }
-      const { data: authCheck } = await supabase
-        .from("employee_codes")
-        .select("name")
-        .eq("code", movAuthCode.trim())
-        .eq("is_active", true)
-        .single();
+      const authCheck = await verificarCodigoEmpleado(movAuthCode.trim());
       if (!authCheck) { setMovAuthError("Código incorrecto"); return; }
     }
 

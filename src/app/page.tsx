@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getSupabaseClient } from "@/lib/supabase";
+import { getSupabaseClient, activarSesionEmpleado, cerrarSesionEmpleado } from "@/lib/supabase";
 import NotificationBell from "@/components/NotificationBell";
 
 // ─── Palette ───
@@ -270,12 +270,22 @@ function PinEntry({ onSuccess }: { onSuccess: (role: string, name: string) => vo
     }, 10000);
 
     try {
-      const { data: appPin } = await supabase.from("app_pins").select("role").eq("pin", pin.trim()).single();
-      if (appPin) { clearTimeout(timeout); onSuccess(appPin.role, ""); setChecking(false); return; }
-      const { data: empCode } = await supabase.from("employee_codes").select("name, role").eq("code", pin.trim()).single();
-      if (empCode) { clearTimeout(timeout); onSuccess(empCode.role, empCode.name); setChecking(false); return; }
+      // El PIN se valida en el servidor (ya no se lee la tabla desde el navegador)
+      // y de regreso viene la identidad del empleado para la base de datos.
+      const res = await fetch("/api/auth/verify-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pin.trim() }),
+      });
       clearTimeout(timeout);
-      setError("PIN incorrecto");
+      if (res.ok) {
+        const data = await res.json();
+        await activarSesionEmpleado(data.session);
+        onSuccess(data.role, data.name || "");
+        setChecking(false);
+        return;
+      }
+      setError(res.status === 429 ? "Demasiados intentos, espera un minuto" : "PIN incorrecto");
       setChecking(false);
     } catch {
       clearTimeout(timeout);
@@ -969,7 +979,7 @@ export default function HomePage() {
                         </div>
                         <NotificationBell />
                       </div>
-                      <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); }}
+                      <button onClick={() => { setEmpRole(null); setEmpName(""); sessionStorage.removeItem("pin_role"); sessionStorage.removeItem("pin_name"); cerrarSesionEmpleado(); }}
                         style={{ padding: "8px 16px", borderRadius: 10, border: `1px solid ${C.border}`, background: "white", color: C.muted, fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
                         Cerrar sesión
                       </button>

@@ -5,6 +5,7 @@ import { itemSubtotal } from "@/lib/itemSubtotal";
 import { reponerInventarioDeVenta } from "@/lib/inventory";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { verificarCodigoEmpleado } from "@/lib/verificar-codigo";
 import * as XLSX from "xlsx";
 import { printCashCut, smartPrintTicket, type CashCutData, type TicketData } from "@/lib/printer";
 import { logAudit } from "@/lib/audit-log";
@@ -818,13 +819,7 @@ export default function CajaPage() {
     setChangeMethodError("");
 
     // Validar codigo de cajera
-    const { data: emp } = await supabase
-      .from("employee_codes")
-      .select("name, code")
-      .eq("code", changeMethodCode.trim())
-      .eq("role", "cajera")
-      .eq("is_active", true)
-      .maybeSingle();
+    const emp = await verificarCodigoEmpleado(changeMethodCode.trim(), ["cajera"]);
 
     if (!emp) {
       setChangeMethodError("Código de cajera incorrecto");
@@ -902,13 +897,7 @@ export default function CajaPage() {
     setChangeMethodError("");
 
     // Validar codigo de cajera
-    const { data: emp } = await supabase
-      .from("employee_codes")
-      .select("name, code")
-      .eq("code", changeMethodCode.trim())
-      .eq("role", "cajera")
-      .eq("is_active", true)
-      .maybeSingle();
+    const emp = await verificarCodigoEmpleado(changeMethodCode.trim(), ["cajera"]);
 
     if (!emp) {
       setChangeMethodError("Código de cajera incorrecto");
@@ -961,13 +950,7 @@ export default function CajaPage() {
     setCancelError("");
 
     // Verify cajera code
-    const { data: emp } = await supabase
-      .from("employee_codes")
-      .select("name, code")
-      .eq("code", cancelCode.trim())
-      .eq("role", "cajera")
-      .eq("is_active", true)
-      .maybeSingle();
+    const emp = await verificarCodigoEmpleado(cancelCode.trim(), ["cajera"]);
 
     if (!emp) {
       setCancelError("Código de cajera incorrecto");

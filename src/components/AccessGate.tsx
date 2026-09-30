@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { activarSesionEmpleado } from "@/lib/supabase";
 
 type AccessGateProps = {
   /** Roles que pueden acceder a esta sección */
@@ -60,6 +61,9 @@ export default function AccessGate({
 
       if (allowedRoles.includes(role) || role === "admin") {
         window.sessionStorage.setItem(SESSION_KEY, role);
+        if (data.name) window.sessionStorage.setItem("pin_name", String(data.name));
+        // Identidad real en la base de datos. Si no llega, se sigue igual que siempre.
+        await activarSesionEmpleado(data.session);
         setAllowed(true);
       } else {
         setError("No tienes acceso a esta sección");

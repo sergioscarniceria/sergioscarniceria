@@ -6,6 +6,7 @@ import { itemsSinPesar } from "@/lib/itemSubtotal";
 import { itemSubtotal } from "@/lib/itemSubtotal";
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
+import { verificarCodigoEmpleado } from "@/lib/verificar-codigo";
 import { resilientQuery } from "@/lib/resilience";
 import { logAudit } from "@/lib/audit-log";
 import QrScanner from "@/components/QrScanner";
@@ -355,13 +356,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
   async function verifyCashier() {
     if (!cashierCode.trim()) { setCashierError("Ingresa tu código"); return; }
-    const { data } = await supabase
-      .from("employee_codes")
-      .select("name, code")
-      .eq("code", cashierCode.trim())
-      .eq("role", "cajera")
-      .eq("is_active", true)
-      .single();
+    const data = await verificarCodigoEmpleado(cashierCode.trim(), ["cajera"]);
     if (!data) { setCashierError("Código incorrecto"); return; }
     setCashierName(data.name);
     setCashierVerified(true);
@@ -1253,13 +1248,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
     // El nombre de quien cancela sale de la lista de empleados, no de la
     // sesión abierta en la tablet: así nadie cancela a nombre de otra.
-    const { data: emp } = await supabase
-      .from("employee_codes")
-      .select("name, code")
-      .eq("code", cancelCode.trim())
-      .eq("role", "cajera")
-      .eq("is_active", true)
-      .maybeSingle();
+    const emp = await verificarCodigoEmpleado(cancelCode.trim(), ["cajera"]);
 
     if (!emp) {
       setCancelError("Código de cajera incorrecto");
