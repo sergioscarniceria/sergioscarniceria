@@ -831,6 +831,11 @@ export default function NuevoPedidoPage() {
       <style>{`
         @media (max-width: 800px) {
           .pedido-main-grid { grid-template-columns: 1fr !important; }
+          /* En celular la fila de producto se apila: nombre arriba, botones abajo.
+             Antes los 5 botones se comían el ancho y el nombre quedaba en una letra. */
+          .prod-row { grid-template-columns: 1fr !important; gap: 10px !important; }
+          .prod-row .prod-btns { width: 100%; }
+          .prod-row .prod-btns button { min-height: 44px; font-size: 14px; }
         }
       `}</style>
       <div style={shellStyle}>
@@ -1085,17 +1090,20 @@ export default function NuevoPedidoPage() {
                   ) : (
                     <div style={listWrapStyle}>
                       {searchedProducts.map((product) => (
-                        <div key={product.id} style={searchProductRowStyle}>
+                        <div key={product.id} className="prod-row" style={searchProductRowStyle}>
                           <div style={{ minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, color: COLORS.text }}>
+                            <div style={{ fontWeight: 700, color: COLORS.text, wordBreak: "break-word" }}>
                               {product.name}
                             </div>
                             <div style={{ color: COLORS.primary, fontWeight: 800, marginTop: 4 }}>
                               ${Math.ceil(getPrice(product))}
+                              <span style={{ color: COLORS.muted, fontWeight: 600, fontSize: 13 }}>
+                                {" "}/ {product.sale_type === "pieza" ? "pza" : "kg"}
+                              </span>
                             </div>
                           </div>
 
-                                                    <div style={productButtonsWrapStyle}>
+                          <div className="prod-btns" style={productButtonsWrapStyle}>
                             <button onClick={() => addProduct(product, "kg")} style={miniLightButtonStyle}>
                               +1 kg
                             </button>
