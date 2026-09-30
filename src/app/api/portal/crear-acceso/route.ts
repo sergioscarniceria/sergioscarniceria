@@ -30,35 +30,9 @@ export async function POST(request: Request) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Ensure customer_profiles table exists and RLS is disabled
-    await supabase.rpc("exec_sql", {
-      sql: `
-        CREATE TABLE IF NOT EXISTS customer_profiles (
-          id UUID PRIMARY KEY,
-          customer_id UUID,
-          full_name TEXT,
-          phone TEXT,
-          email TEXT,
-          customer_type TEXT DEFAULT 'menudeo',
-          role TEXT DEFAULT 'customer',
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        ALTER TABLE customer_profiles DISABLE ROW LEVEL SECURITY;
-      `
-    });
-
-    // Ensure loyalty_accounts exists
-    await supabase.rpc("exec_sql", {
-      sql: `
-        CREATE TABLE IF NOT EXISTS loyalty_accounts (
-          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-          customer_id UUID UNIQUE,
-          points INTEGER DEFAULT 0,
-          created_at TIMESTAMPTZ DEFAULT NOW()
-        );
-        ALTER TABLE loyalty_accounts DISABLE ROW LEVEL SECURITY;
-      `
-    });
+    // Las tablas customer_profiles y loyalty_accounts ya existen.
+    // Antes aquí se recreaban con exec_sql y de paso se APAGABA el RLS en cada alta;
+    // se quitó como parte del cierre de seguridad (30 sep 2026).
 
     // Check if this customer already has portal access
     const { data: existingProfile } = await supabase
@@ -122,21 +96,12 @@ export async function POST(request: Request) {
 
     if (profileError) {
       console.error("Error creating profile:", profileError);
-      // Try direct SQL as fallback
-      const { error: sqlError } = await supabase.rpc("exec_sql", {
-        sql: `INSERT INTO customer_profiles (id, customer_id, full_name, phone, email, customer_type, role)
-              VALUES ('${newUser.user.id}', '${customer_id}', '${customer_name.replace(/'/g, "''")}', ${displayPhone ? `'${displayPhone}'` : 'NULL'}, ${displayEmail ? `'${displayEmail}'` : 'NULL'}, 'menudeo', 'customer')
-              ON CONFLICT (id) DO NOTHING;`
-      });
-
-      if (sqlError) {
-        console.error("SQL fallback also failed:", sqlError);
-        await supabase.auth.admin.deleteUser(newUser.user.id);
-        return NextResponse.json(
-          { error: `Falló el perfil: ${profileError.message}. SQL: ${sqlError.message}` },
-          { status: 500 }
-        );
-      }
+      // Sin fallback por SQL crudo: si falla el insert normal, se revierte el usuario.
+      await supabase.auth.admin.deleteUser(newUser.user.id);
+      return NextResponse.json(
+        { error: `Falló el perfil: ${profileError.message}` },
+        { status: 500 }
+      );
     }
 
     // Create loyalty account (ignore errors)
