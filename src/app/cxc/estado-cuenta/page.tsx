@@ -138,7 +138,7 @@ export default function EstadoCuentaAdminPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       if (error) {
         console.log("Error cargando clientes:", error);

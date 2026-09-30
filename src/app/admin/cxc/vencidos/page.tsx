@@ -108,7 +108,7 @@ export default function CxcVencidosPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       const { data: notesData, error: notesError } = await supabase
         .from("cxc_notes")
@@ -116,7 +116,7 @@ export default function CxcVencidosPage() {
         .gt("balance_due", 0)
         .order("due_date", { ascending: true })
         .order("note_date", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       if (customersError) {
         console.log("Error cargando clientes:", customersError);

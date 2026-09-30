@@ -110,7 +110,7 @@ export default function CxcVencidosPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       // CRÍTICO: quitar limit para no perder notas viejas vencidas
       const { data: notesData, error: notesError } = await supabase

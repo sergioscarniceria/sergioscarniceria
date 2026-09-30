@@ -149,7 +149,7 @@ export default function AdminCxcPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       // CRÍTICO: cargar TODAS las notas abiertas + 300 pagadas para no perder saldos
       const [openRes, paidRes] = await Promise.all([
@@ -165,7 +165,7 @@ export default function AdminCxcPage() {
           .lte("balance_due", 0)
           .order("note_date", { ascending: false })
           .order("created_at", { ascending: false })
-          .limit(300),
+          .range(0, 9999),
       ]);
       const notesData = [
         ...((openRes.data as any[]) || []),

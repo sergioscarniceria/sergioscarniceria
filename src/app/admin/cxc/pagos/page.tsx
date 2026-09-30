@@ -92,7 +92,7 @@ export default function CxcPagosPage() {
         query = query.lte("payment_date", dateTo);
       }
 
-      const { data, error } = await query.limit(500);
+      const { data, error } = await query.range(0, 9999);
 
       if (error) {
         console.log("Error cargando pagos:", error);

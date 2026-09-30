@@ -126,7 +126,7 @@ export default function NuevoPagoCxcPage() {
         .gt("balance_due", 0)
         .order("note_date", { ascending: true })
         .order("created_at", { ascending: true })
-        .limit(200);
+        .range(0, 9999);
 
       if (error) {
         console.log(error);

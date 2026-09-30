@@ -110,7 +110,7 @@ export default function EstadoCuentaAdminPage() {
         .from("customers")
         .select("id, name, phone, email, credit_enabled, credit_limit, credit_days")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 9999);
 
       if (error) {
         console.log("Error cargando clientes:", error);
@@ -135,7 +135,7 @@ export default function EstadoCuentaAdminPage() {
         .eq("customer_id", customer.id)
         .order("note_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(500);
+        .range(0, 9999);
 
       const { data: paymentsData, error: paymentsError } = await supabase
         .from("cxc_payments")
@@ -143,7 +143,7 @@ export default function EstadoCuentaAdminPage() {
         .eq("customer_id", customer.id)
         .order("payment_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(500);
+        .range(0, 9999);
 
       if (notesError) {
         console.log("Error cargando notas:", notesError);

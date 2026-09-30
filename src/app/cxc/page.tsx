@@ -458,7 +458,7 @@ export default function AdminCxcPage() {
           .lte("balance_due", 0)
           .order("note_date", { ascending: false })
           .order("created_at", { ascending: false })
-          .limit(300),
+          .range(0, 9999),
       ]);
 
       if (customersError) {

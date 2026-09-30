@@ -92,7 +92,7 @@ export default function CxcPagosPage() {
         query = query.lte("payment_date", dateTo);
       }
 
-      query = query.limit(500);
+      query = query.range(0, 9999);
 
       const { data, error } = await query;
 

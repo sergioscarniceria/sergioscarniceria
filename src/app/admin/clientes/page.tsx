@@ -93,11 +93,15 @@ export default function AdminClientesPage() {
   async function loadCustomers() {
     setLoading(true);
     try {
+      // Sin límite de 500: ya hay más de 550 clientes y los de la S en
+      // adelante quedaban fuera de la lista (Tia Lety, Lupita, etc.).
+      // range(0, 4999) cubre hasta 5,000 clientes; el default de Supabase
+      // corta en 1,000 si no se especifica.
       const { data, error } = await supabase
         .from("customers")
         .select("*")
         .order("name", { ascending: true })
-        .limit(500);
+        .range(0, 4999);
 
       if (error) {
         console.log(error);
@@ -110,7 +114,7 @@ export default function AdminClientesPage() {
       const { data: profiles } = await supabase
         .from("customer_profiles")
         .select("customer_id")
-        .limit(500);
+        .range(0, 4999);
 
       if (profiles) {
         const accessMap: Record<string, boolean> = {};
