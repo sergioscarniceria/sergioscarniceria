@@ -93,6 +93,7 @@ const METODOS: Record<string, string> = {
   mercado_pago: "Mercado Pago",
   tarjeta_mp: "Tarjeta (MP)",
   mixto: "Mixto",
+  repartidor: "Repartidor",
 };
 
 export default function MovimientosTotalesPage() {
@@ -126,7 +127,7 @@ export default function MovimientosTotalesPage() {
           .select("id, customer_name, created_at, butcher_name, captured_by, source, status, payment_status, discount_amount, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cash_movements")
-          .select("id, type, source, amount, payment_method, reference_id, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by")
+          .select("id, type, source, amount, payment_method, reference_id, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by, cash_received, change_given, delivery_person, delivery_cash_received_at")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cxc_notes")
           .select("id, customer_name, note_number, total_amount, created_at")
@@ -258,6 +259,15 @@ export default function MovimientosTotalesPage() {
 
         const partes: string[] = [];
         if (metodo) partes.push(metodo);
+        if (m.payment_method === "efectivo" && Number(m.cash_received || 0) > 0) {
+          partes.push(`Pagó con $${Number(m.cash_received).toFixed(0)} · cambio $${Number(m.change_given || 0).toFixed(0)}`);
+        }
+        if (m.payment_method === "repartidor") {
+          partes.push(`🛵 Se lo llevó ${m.delivery_person || "repartidor"} (efectivo pendiente)`);
+        }
+        if (m.payment_method_original === "repartidor" && m.delivery_cash_received_at) {
+          partes.push(`🛵 ${m.delivery_person || "Repartidor"} ya entregó el efectivo`);
+        }
         if (m.cashier_name) partes.push(`Cajera ${m.cashier_name}`);
         if (!esCxc && !ticket && m.reference_id) {
           partes.push(`Ticket TK-${String(m.reference_id).slice(0, 6).toUpperCase()} (de otro día)`);

@@ -54,6 +54,10 @@ type Movement = {
   payment_method_changed_at?: string | null;
   payment_method_changed_by?: string | null;
   payment_method_change_reason?: string | null;
+  cash_received?: number | null;
+  change_given?: number | null;
+  delivery_person?: string | null;
+  delivery_cash_received_at?: string | null;
 };
 
 type OrderItem = {
@@ -297,6 +301,7 @@ function methodName(m?: string | null) {
   if (m === "tarjeta") return "Tarjeta";
   if (m === "transferencia") return "Transferencia";
   if (m === "mercado_pago" || m === "tarjeta_mp") return "Mercado Pago";
+  if (m === "repartidor") return "Repartidor (efectivo pendiente)";
   return m;
 }
 
@@ -1126,18 +1131,21 @@ export default function CajaPage() {
     const ventasTarjeta = sum(ventas, "tarjeta");
     const ventasTransferencia = sum(ventas, "transferencia");
     const ventasMercadoPago = sum(ventas, "mercado_pago") + sum(ventas, "tarjeta_mp");
+    // Cobros que se llevó un repartidor y aún no entrega el efectivo:
+    // cuentan como venta del día, pero NO están en el cajón todavía.
+    const ventasRepartidor = sum(ventas, "repartidor");
     const cxcEfectivo = sum(cxc, "efectivo");
     const cxcTarjeta = sum(cxc, "tarjeta");
     const cxcTransferencia = sum(cxc, "transferencia");
     const cxcMercadoPago = sum(cxc, "mercado_pago") + sum(cxc, "tarjeta_mp");
 
-    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia + ventasMercadoPago;
+    const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia + ventasMercadoPago + ventasRepartidor;
     const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia + cxcMercadoPago;
     const totalEfectivoIngreso = ventasEfectivo + cxcEfectivo;
     const totalTarjeta = ventasTarjeta + cxcTarjeta;
     const totalTransferencia = ventasTransferencia + cxcTransferencia;
     const totalMercadoPago = ventasMercadoPago + cxcMercadoPago;
-    const totalGeneral = totalEfectivoIngreso + totalTarjeta + totalTransferencia + totalMercadoPago;
+    const totalGeneral = totalEfectivoIngreso + totalTarjeta + totalTransferencia + totalMercadoPago + ventasRepartidor;
 
     // Filtrar gastos posteriores al último corte (si existe)
     const activeExpenses = todayClosure?.created_at
@@ -1163,7 +1171,7 @@ export default function CajaPage() {
     const ticketPromedio = ticketCount > 0 ? totalVentas / ticketCount : 0;
 
     return {
-      ventasEfectivo, ventasTarjeta, ventasTransferencia, ventasMercadoPago,
+      ventasEfectivo, ventasTarjeta, ventasTransferencia, ventasMercadoPago, ventasRepartidor,
       cxcEfectivo, cxcTarjeta, cxcTransferencia, cxcMercadoPago,
       totalVentas, totalCxc,
       totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalMercadoPago, totalGeneral,
@@ -1791,6 +1799,7 @@ export default function CajaPage() {
     const ventasEf = active.filter((m: any) => m.type === "venta" && m.payment_method === "efectivo").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const ventasTj = active.filter((m: any) => m.type === "venta" && m.payment_method === "tarjeta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const ventasTr = active.filter((m: any) => m.type === "venta" && m.payment_method === "transferencia").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    const ventasRep = active.filter((m: any) => m.type === "venta" && m.payment_method === "repartidor").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const cxcEf = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "efectivo").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const cxcTj = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "tarjeta").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
     const cxcTr = active.filter((m: any) => m.type === "cxc_pago" && m.payment_method === "transferencia").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
@@ -1812,6 +1821,11 @@ export default function CajaPage() {
     doc.text(`$${money(cxcEf)}`, marginL + 70, y, { align: "right" });
     doc.text(`$${money(cxcTj)}`, marginL + 110, y, { align: "right" });
     doc.text(`$${money(cxcTr)}`, marginR - 2, y, { align: "right" });
+    if (ventasRep > 0) {
+      y += 5;
+      doc.text("Con repartidores (efectivo pendiente)", marginL + 2, y);
+      doc.text(`$${money(ventasRep)}`, marginR - 2, y, { align: "right" });
+    }
     y += 5;
     separator();
     doc.setFont("helvetica", "bold");
@@ -2472,6 +2486,9 @@ export default function CajaPage() {
               <HeroCard label="Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} meta="Fondo + ingresos - gastos" green />
               <HeroCard label="Tarjeta" value={`$${money(stats.totalTarjeta)}`} meta="Ventas + CxC" />
               <HeroCard label="Transferencia" value={`$${money(stats.totalTransferencia)}`} meta="Ventas + CxC" />
+              {stats.ventasRepartidor > 0 && (
+                <HeroCard label="🛵 Con repartidores" value={`$${money(stats.ventasRepartidor)}`} meta="Cobrado, efectivo aún no en caja" />
+              )}
               <HeroCard label="Gastos del día" value={`$${money(stats.totalGastos)}`} meta={`${expenses.length} gasto${expenses.length === 1 ? "" : "s"}`} />
               <HeroCard label="Total general" value={`$${money(stats.totalGeneral)}`} meta={`${stats.totalMovements} mov.`} />
             </div>
@@ -2547,8 +2564,23 @@ export default function CajaPage() {
                               {methodName(m.payment_method)} — {fmtDateTime(m.created_at)}
                               {m.cashier_name && <span> — {m.cashier_name}</span>}
                             </div>
+                            {m.payment_method === "efectivo" && m.cash_received != null && Number(m.cash_received) > 0 && (
+                              <div style={{ color: C.muted, fontSize: 12.5, marginTop: 2 }}>
+                                💵 Pagó con <b>${money(m.cash_received)}</b> · Cambio <b>${money(m.change_given || 0)}</b>
+                              </div>
+                            )}
+                            {m.payment_method === "repartidor" && (
+                              <div style={{ color: "#b86a0f", fontSize: 12.5, marginTop: 2, fontWeight: 700 }}>
+                                🛵 Se lo llevó {m.delivery_person || "repartidor"} · efectivo aún no entregado en caja
+                              </div>
+                            )}
+                            {m.payment_method_original === "repartidor" && m.delivery_cash_received_at && (
+                              <div style={{ color: C.muted, fontSize: 12.5, marginTop: 2 }}>
+                                🛵 {m.delivery_person || "Repartidor"} entregó el efectivo {fmtDateTime(m.delivery_cash_received_at)}
+                              </div>
+                            )}
                           </div>
-                          <div style={{ ...amtBadge, background: m.payment_method === "efectivo" ? C.success : m.payment_method === "tarjeta" ? C.info : C.warning }}>
+                          <div style={{ ...amtBadge, background: m.payment_method === "efectivo" ? C.success : m.payment_method === "tarjeta" ? C.info : m.payment_method === "repartidor" ? "#b86a0f" : C.warning }}>
                             ${money(m.amount)}
                           </div>
                         </div>
@@ -2880,6 +2912,11 @@ export default function CajaPage() {
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>
+              {stats.ventasRepartidor > 0 && (
+                <div style={{ fontSize: 12.5, color: "#b86a0f", fontWeight: 700, paddingTop: 2 }}>
+                  🛵 Efectivo con repartidores (pendiente de entregar): ${money(stats.ventasRepartidor)}. No se cuenta en el cajón hasta que marquen "Dinero entregado".
+                </div>
+              )}
               {canjePuntos.pesos > 0 && (
                 <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
                   ⭐ Informativo: hoy se canjearon {canjePuntos.canjes} vez(ces) por
@@ -2978,6 +3015,11 @@ export default function CajaPage() {
               <div style={{ borderTop: `2px solid ${C.border}`, paddingTop: 10 }}>
                 <SummaryRow label="= Efectivo esperado" value={`$${money(stats.efectivoEsperado)}`} bold />
               </div>
+              {stats.ventasRepartidor > 0 && (
+                <div style={{ fontSize: 12.5, color: "#b86a0f", fontWeight: 700, paddingTop: 2 }}>
+                  🛵 Efectivo con repartidores (pendiente de entregar): ${money(stats.ventasRepartidor)}. No se cuenta en el cajón hasta que marquen "Dinero entregado".
+                </div>
+              )}
               {canjePuntos.pesos > 0 && (
                 <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
                   ⭐ Informativo: hoy se canjearon {canjePuntos.canjes} vez(ces) por

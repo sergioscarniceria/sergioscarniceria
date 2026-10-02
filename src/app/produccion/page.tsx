@@ -25,6 +25,7 @@ type Order = {
   customer_name: string;
   status: string;
   notes: string;
+  butcher_notes?: string | null;
   payment_status?: string | null;
   payment_method?: string | null;
   butcher_name?: string | null;
@@ -836,6 +837,11 @@ function Section({
               {o.notes ? (
                 <div style={notesBoxStyle}>
                   <b>Notas:</b> {o.notes}
+                </div>
+              ) : null}
+              {o.butcher_notes ? (
+                <div style={{ ...notesBoxStyle, background: "#fff3cd", border: "2px solid #e0a800", fontWeight: 700 }}>
+                  🔪 <b>Para el carnicero:</b> {o.butcher_notes}
                 </div>
               ) : null}
 

@@ -129,6 +129,8 @@ export default function NuevoPedidoPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState("");
+  const [butcherNotes, setButcherNotes] = useState("");
+  const [driverNotes, setDriverNotes] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState(getTodayDateInput());
   const [takenBy, setTakenBy] = useState("");
@@ -387,6 +389,8 @@ export default function NuevoPedidoPage() {
 
     setCart([]);
     setNotes("");
+    setButcherNotes("");
+    setDriverNotes("");
   }
 
     function cartTotal() {
@@ -515,6 +519,8 @@ export default function NuevoPedidoPage() {
             ? `${finalNotes} | Descuento mayoreo ${discountPct}%`
             : finalNotes,
           delivery_status: "pendiente",
+          butcher_notes: butcherNotes.trim() || null,
+          driver_notes: driverNotes.trim() || null,
           delivery_address: deliveryAddress.trim(),
           delivery_date: deliveryDate,
           captured_by: takenByText,
@@ -557,6 +563,8 @@ export default function NuevoPedidoPage() {
 
     setCart([]);
     setNotes("");
+    setButcherNotes("");
+    setDriverNotes("");
     setTakenBy("");
     setSelectedCustomer(null);
     setCustomerSearch("");
@@ -1370,6 +1378,18 @@ export default function NuevoPedidoPage() {
                 placeholder="Notas del pedido"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
+                style={textareaStyle}
+              />
+              <textarea
+                placeholder="🔪 Notas para el carnicero (corte, grosor, sin hueso...)"
+                value={butcherNotes}
+                onChange={(e) => setButcherNotes(e.target.value)}
+                style={textareaStyle}
+              />
+              <textarea
+                placeholder="🛵 Notas para el repartidor (referencias, horario, a quién entregar...)"
+                value={driverNotes}
+                onChange={(e) => setDriverNotes(e.target.value)}
                 style={textareaStyle}
               />
 

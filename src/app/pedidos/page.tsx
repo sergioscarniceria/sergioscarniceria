@@ -25,6 +25,8 @@ type Order = {
   customer_name: string;
   status: string;
   notes?: string;
+  butcher_notes?: string | null;
+  driver_notes?: string | null;
   created_at?: string;
   butcher_name?: string | null;
   delivery_date?: string | null;
@@ -620,6 +622,16 @@ const [dateDraft, setDateDraft] = useState<string>("");
         {o.notes ? (
           <div style={notesStyle}>
             <b>Notas:</b> {o.notes}
+          </div>
+        ) : null}
+        {o.butcher_notes ? (
+          <div style={{ ...notesStyle, background: "#fff3cd" }}>
+            🔪 <b>Carnicero:</b> {o.butcher_notes}
+          </div>
+        ) : null}
+        {o.driver_notes ? (
+          <div style={{ ...notesStyle, background: "#e8f1ff" }}>
+            🛵 <b>Repartidor:</b> {o.driver_notes}
           </div>
         ) : null}
                 <div style={cardActionsStyle}>

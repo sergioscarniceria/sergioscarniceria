@@ -18,6 +18,7 @@ type Order = {
   delivery_driver?: string | null;
   delivery_date?: string | null;
   delivery_notes?: string | null;
+  driver_notes?: string | null;
   notes?: string | null;
   created_at?: string | null;
   payment_status?: string | null;
@@ -166,7 +167,7 @@ export default function RepartidoresPage() {
         .select(`
           id, customer_name, status, delivery_status, delivery_started_at,
           delivered_at, delivery_address, delivery_driver, delivery_date,
-          delivery_notes, notes, created_at, payment_status, payment_method,
+          delivery_notes, driver_notes, notes, created_at, payment_status, payment_method,
           customers ( phone, address )
         `)
         .not("source", "in", "(mostrador,caja_manual)")
@@ -651,6 +652,11 @@ export default function RepartidoresPage() {
                         📝 Nota del cliente
                       </div>
                       {cleanCustomerNote(o.notes)}
+                    </div>
+                  )}
+                  {o.driver_notes && (
+                    <div style={{ padding: 10, borderRadius: 12, background: "#fff3cd", border: "2px solid #e0a800", color: C.text, fontSize: 14, fontWeight: 700, marginBottom: 12 }}>
+                      🛵 Para ti: {o.driver_notes}
                     </div>
                   )}
                   {o.delivery_notes && (
