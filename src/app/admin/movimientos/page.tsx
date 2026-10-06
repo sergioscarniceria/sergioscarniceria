@@ -127,7 +127,7 @@ export default function MovimientosTotalesPage() {
           .select("id, customer_name, created_at, butcher_name, captured_by, source, status, payment_status, discount_amount, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cash_movements")
-          .select("id, type, source, amount, payment_method, reference_id, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by, cash_received, change_given, delivery_person, delivery_cash_received_at")
+          .select("id, type, source, amount, payment_method, reference_id, created_at, cashier_name, is_cancelled, cancel_reason, cancelled_by, cancelled_at, payment_method_original, payment_method_changed_at, payment_method_changed_by, cash_received, change_given, delivery_person, delivery_cash_received_at, delivery_change_out")
           .gte("created_at", desde).lte("created_at", hasta),
         supabase.from("cxc_notes")
           .select("id, customer_name, note_number, total_amount, created_at")
@@ -249,7 +249,9 @@ export default function MovimientosTotalesPage() {
         const abono = esCxc && m.reference_id ? abonosPorId.get(m.reference_id) : undefined;
 
         let titulo: string;
-        if (esCxc) {
+        if (m.type === "entrega_repartidor") {
+          titulo = `🛵 ${m.delivery_person || "Repartidor"} entregó efectivo de otro día${ticket ? ` · ${ticket.folio} · ${ticket.cliente}` : ""}`;
+        } else if (esCxc) {
           titulo = `Cobro de crédito · ${abono?.cliente || "Cliente"}`;
         } else if (ticket) {
           titulo = `Cobró ${ticket.folio} · ${ticket.cliente}`;
@@ -264,6 +266,7 @@ export default function MovimientosTotalesPage() {
         }
         if (m.payment_method === "repartidor") {
           partes.push(`🛵 Se lo llevó ${m.delivery_person || "repartidor"} (efectivo pendiente)`);
+          if (Number(m.delivery_change_out || 0) > 0) partes.push(`Se llevó $${Number(m.delivery_change_out).toFixed(0)} de cambio · debe traer $${(Number(m.amount || 0) + Number(m.delivery_change_out)).toFixed(0)}`);
         }
         if (m.payment_method_original === "repartidor" && m.delivery_cash_received_at) {
           partes.push(`🛵 ${m.delivery_person || "Repartidor"} ya entregó el efectivo`);

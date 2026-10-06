@@ -58,6 +58,7 @@ type Movement = {
   change_given?: number | null;
   delivery_person?: string | null;
   delivery_cash_received_at?: string | null;
+  delivery_change_out?: number | null;
 };
 
 type OrderItem = {
@@ -292,6 +293,7 @@ function typeName(t?: string | null) {
   if (t === "cxc_pago") return "Cobro CxC";
   if (t === "venta") return "Venta";
   if (t === "gasto") return "Gasto";
+  if (t === "entrega_repartidor") return "Repartidor entregó efectivo (de otro día)";
   return t || "Movimiento";
 }
 
@@ -1134,6 +1136,14 @@ export default function CajaPage() {
     // Cobros que se llevó un repartidor y aún no entrega el efectivo:
     // cuentan como venta del día, pero NO están en el cajón todavía.
     const ventasRepartidor = sum(ventas, "repartidor");
+    // Cambio que la cajera dio de caja a repartidores que aún no regresan: salió del cajón.
+    const cambioRepartidorPendiente = ventas
+      .filter((m) => m.payment_method === "repartidor" && !m.delivery_cash_received_at)
+      .reduce((a, m) => a + Number(m.delivery_change_out || 0), 0);
+    // Repartidor que trajo hoy el efectivo de un cobro de otro día: entra al cajón de hoy, no es venta nueva.
+    const entregasRepartidor = active
+      .filter((m) => m.type === "entrega_repartidor")
+      .reduce((a, m) => a + Number(m.amount || 0), 0);
     const cxcEfectivo = sum(cxc, "efectivo");
     const cxcTarjeta = sum(cxc, "tarjeta");
     const cxcTransferencia = sum(cxc, "transferencia");
@@ -1141,7 +1151,7 @@ export default function CajaPage() {
 
     const totalVentas = ventasEfectivo + ventasTarjeta + ventasTransferencia + ventasMercadoPago + ventasRepartidor;
     const totalCxc = cxcEfectivo + cxcTarjeta + cxcTransferencia + cxcMercadoPago;
-    const totalEfectivoIngreso = ventasEfectivo + cxcEfectivo;
+    const totalEfectivoIngreso = ventasEfectivo + cxcEfectivo + entregasRepartidor;
     const totalTarjeta = ventasTarjeta + cxcTarjeta;
     const totalTransferencia = ventasTransferencia + cxcTransferencia;
     const totalMercadoPago = ventasMercadoPago + cxcMercadoPago;
@@ -1165,13 +1175,13 @@ export default function CajaPage() {
       .reduce((a, e) => a + Number(e.amount || 0), 0);
     // Si ya hay un corte previo, el fondo inicial del siguiente periodo es el contado del corte anterior
     const fondoInicial = todayClosure?.counted_cash != null ? Number(todayClosure.counted_cash) : (todayOpening?.initial_amount || 0);
-    const efectivoEsperado = fondoInicial + totalEfectivoIngreso - totalGastosEfectivo;
+    const efectivoEsperado = fondoInicial + totalEfectivoIngreso - totalGastosEfectivo - cambioRepartidorPendiente;
 
     const ticketCount = ventas.length;
     const ticketPromedio = ticketCount > 0 ? totalVentas / ticketCount : 0;
 
     return {
-      ventasEfectivo, ventasTarjeta, ventasTransferencia, ventasMercadoPago, ventasRepartidor,
+      ventasEfectivo, ventasTarjeta, ventasTransferencia, ventasMercadoPago, ventasRepartidor, cambioRepartidorPendiente, entregasRepartidor,
       cxcEfectivo, cxcTarjeta, cxcTransferencia, cxcMercadoPago,
       totalVentas, totalCxc,
       totalEfectivoIngreso, totalTarjeta, totalTransferencia, totalMercadoPago, totalGeneral,
@@ -1825,6 +1835,18 @@ export default function CajaPage() {
       y += 5;
       doc.text("Con repartidores (efectivo pendiente)", marginL + 2, y);
       doc.text(`$${money(ventasRep)}`, marginR - 2, y, { align: "right" });
+    }
+    const cambioRepPend = active.filter((m: any) => m.type === "venta" && m.payment_method === "repartidor" && !m.delivery_cash_received_at).reduce((a: number, m: any) => a + Number(m.delivery_change_out || 0), 0);
+    if (cambioRepPend > 0) {
+      y += 5;
+      doc.text("Cambio que se llevaron repartidores (sale del cajón)", marginL + 2, y);
+      doc.text(`-$${money(cambioRepPend)}`, marginR - 2, y, { align: "right" });
+    }
+    const entregasRep = active.filter((m: any) => m.type === "entrega_repartidor").reduce((a: number, m: any) => a + Number(m.amount || 0), 0);
+    if (entregasRep > 0) {
+      y += 5;
+      doc.text("Repartidores entregaron efectivo de otro día", marginL + 2, y);
+      doc.text(`$${money(entregasRep)}`, marginR - 2, y, { align: "right" });
     }
     y += 5;
     separator();
@@ -2572,6 +2594,12 @@ export default function CajaPage() {
                             {m.payment_method === "repartidor" && (
                               <div style={{ color: "#b86a0f", fontSize: 12.5, marginTop: 2, fontWeight: 700 }}>
                                 🛵 Se lo llevó {m.delivery_person || "repartidor"} · efectivo aún no entregado en caja
+                                {Number(m.delivery_change_out || 0) > 0 && <> · se llevó ${money(m.delivery_change_out)} de cambio (debe traer ${money(Number(m.amount || 0) + Number(m.delivery_change_out || 0))})</>}
+                              </div>
+                            )}
+                            {m.type === "entrega_repartidor" && (
+                              <div style={{ color: C.muted, fontSize: 12.5, marginTop: 2 }}>
+                                🛵 {m.delivery_person || "Repartidor"} trajo el efectivo de un cobro de otro día (ticket + cambio). Entra al cajón de hoy.
                               </div>
                             )}
                             {m.payment_method_original === "repartidor" && m.delivery_cash_received_at && (
@@ -2917,6 +2945,14 @@ export default function CajaPage() {
                   🛵 Efectivo con repartidores (pendiente de entregar): ${money(stats.ventasRepartidor)}. No se cuenta en el cajón hasta que marquen "Dinero entregado".
                 </div>
               )}
+              {stats.cambioRepartidorPendiente > 0 && (
+                <SummaryRow label="(-) Cambio que se llevaron repartidores" value={`-$${money(stats.cambioRepartidorPendiente)}`} color={C.danger} />
+              )}
+              {stats.entregasRepartidor > 0 && (
+                <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
+                  🛵 Incluye ${money(stats.entregasRepartidor)} que repartidores trajeron hoy de cobros de otro día.
+                </div>
+              )}
               {canjePuntos.pesos > 0 && (
                 <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
                   ⭐ Informativo: hoy se canjearon {canjePuntos.canjes} vez(ces) por
@@ -3018,6 +3054,14 @@ export default function CajaPage() {
               {stats.ventasRepartidor > 0 && (
                 <div style={{ fontSize: 12.5, color: "#b86a0f", fontWeight: 700, paddingTop: 2 }}>
                   🛵 Efectivo con repartidores (pendiente de entregar): ${money(stats.ventasRepartidor)}. No se cuenta en el cajón hasta que marquen "Dinero entregado".
+                </div>
+              )}
+              {stats.cambioRepartidorPendiente > 0 && (
+                <SummaryRow label="(-) Cambio que se llevaron repartidores" value={`-$${money(stats.cambioRepartidorPendiente)}`} color={C.danger} />
+              )}
+              {stats.entregasRepartidor > 0 && (
+                <div style={{ fontSize: 12.5, color: C.muted, paddingTop: 2 }}>
+                  🛵 Incluye ${money(stats.entregasRepartidor)} que repartidores trajeron hoy de cobros de otro día.
                 </div>
               )}
               {canjePuntos.pesos > 0 && (

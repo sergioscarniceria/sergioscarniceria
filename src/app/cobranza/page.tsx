@@ -25,6 +25,7 @@ type PendienteRepartidor = {
   reference_id: string;   // orders.id
   amount: number;
   delivery_person: string;
+  delivery_change_out: number; // cambio de caja que se llevó para el cliente
   created_at: string;
   customer_name: string;
 };
@@ -259,6 +260,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   const [repartidores, setRepartidores] = useState<string[]>([]);
   const [pendientesRepartidor, setPendientesRepartidor] = useState<PendienteRepartidor[]>([]);
   const [entregandoId, setEntregandoId] = useState<string | null>(null);
+  // Paso 2 del modal repartidor: ya se eligió quién, ¿se lleva cambio de caja?
+  const [repartidorElegido, setRepartidorElegido] = useState<string | null>(null);
+  const [repCambio, setRepCambio] = useState("");
 
   // Calculadora de cambio (venta manual)
   const [showManualCashCalc, setShowManualCashCalc] = useState(false);
@@ -487,7 +491,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       supabase.from("employees").select("name, position").eq("is_active", true).order("name"),
       supabase
         .from("cash_movements")
-        .select("id, reference_id, amount, delivery_person, created_at")
+        .select("id, reference_id, amount, delivery_person, delivery_change_out, created_at")
         .eq("payment_method", "repartidor")
         .is("delivery_cash_received_at", null)
         .eq("is_cancelled", false)
@@ -506,7 +510,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         const { data: ords } = await supabase.from("orders").select("id, customer_name").in("id", ids);
         for (const o of ords || []) nombres.set(o.id, o.customer_name || "Mostrador");
       }
-      setPendientesRepartidor(movs.map((m) => ({ ...m, amount: Number(m.amount || 0), customer_name: nombres.get(m.reference_id) || "Mostrador" })));
+      setPendientesRepartidor(movs.map((m) => ({ ...m, amount: Number(m.amount || 0), delivery_change_out: Number(m.delivery_change_out || 0), customer_name: nombres.get(m.reference_id) || "Mostrador" })));
     }
 
     if (customersRes.fromCache) console.log("[Resilience] Clientes cargados desde cache");
@@ -838,16 +842,50 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
    * cuando físicamente llegó al cajón), y el pedido sale de la lista.
    */
   async function marcarDineroEntregado(pend: PendienteRepartidor) {
-    if (!confirm(`¿${pend.delivery_person} ya entregó los $${money(pend.amount)} de ${pend.customer_name}?`)) return;
+    const debeEntregar = pend.amount + (pend.delivery_change_out || 0);
+    const detalle = pend.delivery_change_out > 0
+      ? ` (ticket $${money(pend.amount)} + cambio que se llevó $${money(pend.delivery_change_out)})`
+      : "";
+    if (!confirm(`¿${pend.delivery_person} ya entregó los $${money(debeEntregar)} de ${pend.customer_name}?${detalle}`)) return;
     setEntregandoId(pend.id);
-    const { error } = await supabase
-      .from("cash_movements")
-      .update({
-        payment_method: "efectivo",
-        payment_method_original: "repartidor",
-        delivery_cash_received_at: new Date().toISOString(),
-      })
-      .eq("id", pend.id);
+    const ahora = new Date();
+    const fechaLocal = (d: Date) => d.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City" });
+    const mismoDia = fechaLocal(new Date(pend.created_at)) === fechaLocal(ahora);
+    let error: { message: string } | null = null;
+    if (mismoDia) {
+      // Mismo día: el cobro pasa a efectivo normal y entra al corte de hoy.
+      const res = await supabase
+        .from("cash_movements")
+        .update({
+          payment_method: "efectivo",
+          payment_method_original: "repartidor",
+          delivery_cash_received_at: ahora.toISOString(),
+        })
+        .eq("id", pend.id);
+      error = res.error;
+    } else {
+      // Se llevó el dinero de un día anterior (salió al cierre). El corte de ese
+      // día ya quedó con la venta "pendiente con repartidor"; el efectivo entra
+      // HOY como un ingreso aparte (ticket + cambio) para que cuadre el cajón de hoy.
+      const res1 = await supabase
+        .from("cash_movements")
+        .update({ delivery_cash_received_at: ahora.toISOString() })
+        .eq("id", pend.id);
+      error = res1.error;
+      if (!error) {
+        const res2 = await supabase.from("cash_movements").insert([{
+          type: "entrega_repartidor",
+          source: "cobranza",
+          amount: moneyRound(debeEntregar),
+          payment_method: "efectivo",
+          reference_id: pend.reference_id,
+          cashier_name: cashierName || null,
+          delivery_person: pend.delivery_person,
+          delivery_cash_received_at: ahora.toISOString(),
+        }]);
+        error = res2.error;
+      }
+    }
     setEntregandoId(null);
     if (error) { alert("No se pudo registrar la entrega: " + error.message); return; }
     logAudit({
@@ -856,9 +894,37 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       entity_type: "cash_movement",
       entity_id: pend.id,
       user_label: cashierName || undefined,
-      details: { descripcion: `Repartidor ${pend.delivery_person} entregó efectivo de ${pend.customer_name}` },
+      details: { descripcion: `Repartidor ${pend.delivery_person} entregó $${money(debeEntregar)} de ${pend.customer_name}${detalle}` },
     });
     setPendientesRepartidor((prev) => prev.filter((x) => x.id !== pend.id));
+  }
+
+  /** Reimprime el ticket (ya con descuento y método repartidor) de un pendiente. */
+  async function reimprimirTicketRepartidor(pend: PendienteRepartidor) {
+    const { data: o, error } = await supabase
+      .from("orders")
+      .select("id, customer_name, discount_amount, order_items(product, kilos, price, quantity, sale_type, is_fixed_price_piece, prepared_kilos)")
+      .eq("id", pend.reference_id)
+      .maybeSingle();
+    if (error || !o) { alert("No se encontró el ticket"); return; }
+    const items = (o.order_items || []) as any[];
+    const subtotal = items.reduce((a, it) => a + itemSubtotal(it), 0);
+    const disc = Number(o.discount_amount || 0);
+    smartPrintTicket({
+      folio: ticketFolio(o.id),
+      customerName: o.customer_name,
+      cashier: cashierName || null,
+      items: items.map((it) => ({
+        product: it.product, kilos: it.kilos, price: it.price, quantity: it.quantity,
+        sale_type: it.sale_type, is_fixed_price_piece: it.is_fixed_price_piece, prepared_kilos: it.prepared_kilos,
+      })),
+      subtotal,
+      discount: disc > 0 ? disc : undefined,
+      total: moneyRound(Math.max(0, subtotal - disc)),
+      qrData: o.id,
+      type: "cobro",
+      paymentMethod: "efectivo",
+    });
   }
 
   /**
@@ -867,7 +933,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
    */
   async function markTicketPaid(
     method: Exclude<PaymentMethod, "credito">,
-    extra: { cashReceived?: number; deliveryPerson?: string } = {}
+    extra: { cashReceived?: number; deliveryPerson?: string; changeOut?: number } = {}
   ) {
     if (!selectedTicket) return;
     if (method === "repartidor" && !extra.deliveryPerson) {
@@ -971,6 +1037,9 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       if (method === "repartidor") {
         mov.delivery_person = extra.deliveryPerson;
         mov.delivery_cash_received_at = null;
+        // Cambio que la cajera le dio de caja para el cliente: sale del cajón
+        // y el repartidor debe regresar ticket + cambio. Va en el primer ticket.
+        mov.delivery_change_out = idx === 0 && extra.changeOut && extra.changeOut > 0 ? moneyRound(extra.changeOut) : 0;
       }
       return mov;
     });
@@ -2523,7 +2592,7 @@ if (cashError) {
                 {pendientesRepartidor.length > 0 && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ ...miniTitleStyle, color: "#b86a0f" }}>
-                      🛵 Efectivo con repartidores · ${money(pendientesRepartidor.reduce((a, x) => a + x.amount, 0))}
+                      🛵 Efectivo con repartidores · ${money(pendientesRepartidor.reduce((a, x) => a + x.amount + (x.delivery_change_out || 0), 0))}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
                       {pendientesRepartidor.map((pend) => (
@@ -2539,7 +2608,12 @@ if (cashError) {
                             </div>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0 }}>
-                            <div style={{ fontWeight: 900, color: "#b86a0f", fontSize: 18 }}>${money(pend.amount)}</div>
+                            <div style={{ fontWeight: 900, color: "#b86a0f", fontSize: 18 }}>${money(pend.amount + (pend.delivery_change_out || 0))}</div>
+                            {pend.delivery_change_out > 0 && (
+                              <div style={{ fontSize: 11.5, color: "#8a5410", fontWeight: 700 }}>
+                                Ticket ${money(pend.amount)} + cambio ${money(pend.delivery_change_out)}
+                              </div>
+                            )}
                             <button
                               onClick={() => marcarDineroEntregado(pend)}
                               disabled={entregandoId === pend.id}
@@ -2551,6 +2625,17 @@ if (cashError) {
                               }}
                             >
                               {entregandoId === pend.id ? "..." : "✅ Dinero entregado"}
+                            </button>
+                            <button
+                              onClick={() => reimprimirTicketRepartidor(pend)}
+                              title="Reimprimir ticket con descuento"
+                              style={{
+                                marginTop: 4, marginLeft: 6, padding: "7px 10px", borderRadius: 10,
+                                border: "1.5px solid rgba(184,106,15,0.35)", background: "white",
+                                color: "#8a5410", fontWeight: 800, fontSize: 12, cursor: "pointer",
+                              }}
+                            >
+                              🖨️
                             </button>
                           </div>
                         </div>
@@ -3388,12 +3473,47 @@ if (cashError) {
                         <div style={{ width: "100%", maxWidth: 420, background: "white", borderRadius: 18, padding: 22, boxShadow: COLORS.shadow, border: `1px solid ${COLORS.border}` }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                             <h3 style={{ margin: 0, color: "#b86a0f", fontSize: 18 }}>🛵 ¿Quién se lo lleva?</h3>
-                            <button onClick={() => setShowRepartidor(false)} style={{ width: 36, height: 36, borderRadius: 999, border: "none", background: "#efe8df", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>✕</button>
+                            <button onClick={() => { setShowRepartidor(false); setRepartidorElegido(null); setRepCambio(""); }} style={{ width: 36, height: 36, borderRadius: 999, border: "none", background: "#efe8df", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer" }}>✕</button>
                           </div>
                           <p style={{ margin: "0 0 14px", color: COLORS.muted, fontSize: 13.5, lineHeight: 1.5 }}>
                             El pedido queda como cobrado por <b>${money(combinedFinalTotal())}</b>, pero el efectivo se registra a nombre del repartidor hasta que lo entregue en caja.
                           </p>
-                          {repartidores.length === 0 ? (
+                          {repartidorElegido ? (() => {
+                            const totalTicket = combinedFinalTotal();
+                            const cambio = Math.max(0, Number(repCambio || 0));
+                            const debeTraer = totalTicket + cambio;
+                            const confirmar = () => {
+                              const nombre = repartidorElegido;
+                              setShowRepartidor(false); setRepartidorElegido(null); setRepCambio("");
+                              markTicketPaid("repartidor", { deliveryPerson: nombre, changeOut: cambio });
+                            };
+                            return (
+                              <div>
+                                <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 10 }}>
+                                  Se lo lleva <span style={{ color: "#b86a0f" }}>{repartidorElegido}</span>
+                                  <button onClick={() => setRepartidorElegido(null)} style={{ marginLeft: 10, border: "none", background: "transparent", color: COLORS.muted, fontSize: 12.5, cursor: "pointer", textDecoration: "underline" }}>cambiar</button>
+                                </div>
+                                <div style={{ fontSize: 13.5, color: COLORS.muted, marginBottom: 6 }}>¿Se lleva cambio de caja para el cliente?</div>
+                                <input
+                                  type="number" inputMode="decimal" min={0} step={1} placeholder="$0 = sin cambio"
+                                  value={repCambio} onChange={(e) => setRepCambio(e.target.value)} autoFocus
+                                  style={{ width: "100%", padding: "14px", borderRadius: 12, border: `1.5px solid ${COLORS.border}`, fontSize: 22, fontWeight: 800, textAlign: "center", boxSizing: "border-box" }}
+                                />
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                                  {[20, 50, 100, 200].map((q) => (
+                                    <button key={q} onClick={() => setRepCambio(String(q))} style={{ flex: 1, padding: "10px 6px", borderRadius: 10, border: `1.5px solid rgba(184,106,15,0.35)`, background: Number(repCambio) === q ? "rgba(184,106,15,0.25)" : "white", fontWeight: 800, cursor: "pointer" }}>${q}</button>
+                                  ))}
+                                </div>
+                                <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: "rgba(184,106,15,0.10)", fontSize: 14, lineHeight: 1.6 }}>
+                                  Ticket <b>${money(totalTicket)}</b>{cambio > 0 && <> + cambio <b>${money(cambio)}</b></>}
+                                  <br />Debe regresar a caja: <b style={{ fontSize: 18, color: "#b86a0f" }}>${money(debeTraer)}</b>
+                                </div>
+                                <button disabled={saving} onClick={confirmar} style={{ marginTop: 14, width: "100%", padding: "16px", borderRadius: 14, border: "none", background: "#b86a0f", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer" }}>
+                                  {cambio > 0 ? `Confirmar · se lleva $${money(cambio)} de cambio` : "Confirmar · sin cambio"}
+                                </button>
+                              </div>
+                            );
+                          })() : repartidores.length === 0 ? (
                             <div style={emptyBoxStyle}>No hay personal activo registrado</div>
                           ) : (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -3401,7 +3521,7 @@ if (cashError) {
                                 <button
                                   key={nombre}
                                   disabled={saving}
-                                  onClick={() => { setShowRepartidor(false); markTicketPaid("repartidor", { deliveryPerson: nombre }); }}
+                                  onClick={() => { setRepartidorElegido(nombre); setRepCambio(""); }}
                                   style={{
                                     padding: "16px 10px", borderRadius: 14, border: "1.5px solid rgba(184,106,15,0.35)",
                                     background: "rgba(184,106,15,0.08)", color: COLORS.text, fontWeight: 800, fontSize: 16, cursor: "pointer",
