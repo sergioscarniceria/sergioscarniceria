@@ -709,6 +709,13 @@ export default function AdminClientesPage() {
                     Ver tarjeta
                   </button>
 
+                  <Link
+                    href={`/admin/crm?customer_id=${c.id}${c.phone ? `&phone=${encodeURIComponent(c.phone)}` : ""}`}
+                    style={{ ...miniLinkButtonStyle, background: "rgba(53,92,125,0.10)", color: "#355c7d" }}
+                  >
+                    💬 Ver CRM
+                  </Link>
+
                   {c.phone && c.client_pin && (
                     <button
                       onClick={() => {
