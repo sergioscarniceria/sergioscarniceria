@@ -84,6 +84,9 @@ type ManualLine = {
   price: string;
 };
 
+// Estados en los que un ticket ya NO se puede cobrar ni mandar a crédito
+const TICKET_CERRADO = new Set(["pagado", "cancelado", "credito_autorizado", "credito"]);
+
 const COLORS = {
   bg: "#f7f1e8",
   bgSoft: "#fbf8f3",
@@ -567,6 +570,50 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     return true;
   }
 
+  /**
+   * Antes de cobrar o mandar a crédito, vuelve a leer el estado REAL de los
+   * tickets en la base. Si alguno ya está pagado, cancelado o en crédito
+   * (p. ej. se pasó dos veces, o hay otra pantalla abierta), avisa y detiene.
+   * Devuelve true si hay que detener.
+   */
+  async function bloquearSiTicketCerrado(): Promise<boolean> {
+    const ids = allSelectedTickets().map((t) => t.id);
+    if (ids.length === 0) return false;
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, payment_status, payment_method, customer_name")
+      .in("id", ids);
+
+    if (error || !data) {
+      alert("No se pudo verificar el estado del ticket. Intenta de nuevo.");
+      return true;
+    }
+
+    const cerrados = data.filter((o) => TICKET_CERRADO.has(o.payment_status || ""));
+    if (cerrados.length === 0) return false;
+
+    const describe = (s: string | null) =>
+      s === "pagado" ? "ya fue COBRADO"
+      : s === "cancelado" ? "está CANCELADO"
+      : "ya se mandó a CRÉDITO";
+
+    const lista = cerrados
+      .map((o) => `• ${ticketFolio(o.id)} ${describe(o.payment_status)}${o.customer_name ? ` (${o.customer_name})` : ""}`)
+      .join("\n");
+
+    alert(
+      "Este ticket ya no se puede cobrar:\n\n" + lista + "\n\n" +
+      "Si está en crédito, se cobra desde Cuentas por Cobrar."
+    );
+
+    // Refrescar para que la pantalla muestre el estado real
+    setSelectedTicket(null);
+    setExtraTickets([]);
+    loadData();
+    return true;
+  }
+
   function ticketTotal(ticket: Ticket | null) {
     if (!ticket) return 0;
     return (ticket.order_items || []).reduce((acc, item) => acc + itemSubtotal(item), 0);
@@ -942,6 +989,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     }
 
     if (bloquearSiFaltaPeso()) return;
+    if (await bloquearSiTicketCerrado()) return;
 
     const allTickets = allSelectedTickets();
     setSaving(true);
@@ -1187,6 +1235,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   async function markTicketPaidMixed() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
+    if (await bloquearSiTicketCerrado()) return;
 
     const mEf = Number(mixedEfectivo || 0);
     const mTa = Number(mixedTarjeta || 0);
@@ -1678,6 +1727,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   async function sendTicketToCredit() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
+    if (await bloquearSiTicketCerrado()) return;
 
     // El canje solo aplica cuando el cliente paga. Si se manda a crédito,
     // la nota se genera SIN ese descuento; mejor avisar que cobrarle de más.
@@ -2739,7 +2789,7 @@ if (cashError) {
                         </div>
                         <div style={ticketMetaStyle}>
                           Cliente: <b>{selectedTicket.customer_name || "Mostrador"}</b>
-                          {!editMode && selectedTicket.payment_status !== "pagado" && (
+                          {!editMode && !TICKET_CERRADO.has(selectedTicket.payment_status || "") && (
                             <button
                               onClick={() => { setChangingCustomer(!changingCustomer); setCustomerSearch(""); }}
                               style={{ marginLeft: 8, background: "none", border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "2px 10px", cursor: "pointer", fontSize: 12, color: COLORS.primary, fontWeight: 600 }}
@@ -3095,6 +3145,29 @@ if (cashError) {
                       </div>
                     )}
 
+                    {!editMode && (selectedTicket.payment_status === "credito_autorizado" || selectedTicket.payment_status === "credito") && (
+                      <div style={{
+                        padding: "20px 16px",
+                        borderRadius: 18,
+                        background: "rgba(217,119,6,0.10)",
+                        border: `2px solid ${COLORS.warning}`,
+                        textAlign: "center",
+                        marginTop: 12,
+                      }}>
+                        <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: COLORS.warning, marginBottom: 4 }}>
+                          Ticket enviado a crédito
+                        </div>
+                        <div style={{ fontSize: 14, color: COLORS.muted }}>
+                          Cliente: <b>{selectedTicket.customer_name || "—"}</b>
+                          {selectedTicket.paid_at ? ` · ${new Date(selectedTicket.paid_at).toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}` : ""}
+                        </div>
+                        <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 6 }}>
+                          Se cobra desde Cuentas por Cobrar.
+                        </div>
+                      </div>
+                    )}
+
                     {!editMode && selectedTicket.payment_status === "cancelado" && (
                       <div style={{
                         padding: "20px 16px",
@@ -3111,7 +3184,7 @@ if (cashError) {
                       </div>
                     )}
 
-                    {!editMode && selectedTicket.payment_status !== "pagado" && selectedTicket.payment_status !== "cancelado" && (<>
+                    {!editMode && !TICKET_CERRADO.has(selectedTicket.payment_status || "") && (<>
                     <div style={discountSectionStyle}>
                       <div style={{ fontWeight: 700, color: COLORS.text, marginBottom: 8 }}>
                         Descuento adicional
