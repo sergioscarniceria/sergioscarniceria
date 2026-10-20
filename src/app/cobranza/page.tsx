@@ -80,9 +80,36 @@ type Customer = {
 type ManualLine = {
   id: string;
   product: string;
-  kilos: string;
+  kilos: string;      // kilos si es por kilo, piezas si es por pieza
   price: string;
+  isPieza?: boolean;  // producto del catálogo con precio fijo por pieza
 };
+
+// Renglón de venta manual → campos de order_items.
+// Si es pieza: se guarda en quantity (no en kilos) para que los reportes
+// por kilo no sumen bolsas de hielo o tacos como si fueran kilos de carne.
+function manualLineToItem(line: ManualLine) {
+  const qty = Number(Number(line.kilos || 0).toFixed(3));
+  const price = Number(Number(line.price || 0).toFixed(2));
+  if (line.isPieza) {
+    return {
+      product: line.product.trim(),
+      kilos: null as number | null,
+      quantity: qty,
+      price,
+      sale_type: "pieza" as const,
+      is_fixed_price_piece: true,
+    };
+  }
+  return {
+    product: line.product.trim(),
+    kilos: qty,
+    quantity: null as number | null,
+    price,
+    sale_type: "kg" as const,
+    is_fixed_price_piece: false,
+  };
+}
 
 // Estados en los que un ticket ya NO se puede cobrar ni mandar a crédito
 const TICKET_CERRADO = new Set(["pagado", "cancelado", "credito_autorizado", "credito"]);
@@ -2075,9 +2102,7 @@ async function saveManualCredit() {
 
   const itemsPayload = manualLines.map((line) => ({
     order_id: orderData.id,
-    product: line.product.trim(),
-    kilos: Number(Number(line.kilos || 0).toFixed(3)),
-    price: Number(Number(line.price || 0).toFixed(2)),
+    ...manualLineToItem(line),
   }));
 
   const { error: itemsError } = await supabase
@@ -2155,9 +2180,9 @@ async function saveManualCredit() {
       itemsPayload.map((it) => ({
         product: it.product,
         kilos: it.kilos,
-        quantity: null,
-        sale_type: "kg",
-        is_fixed_price_piece: false,
+        quantity: it.quantity,
+        sale_type: it.sale_type,
+        is_fixed_price_piece: it.is_fixed_price_piece,
       })),
       {
         referencia: `venta manual credito ${orderData.id.slice(0, 6)}`,
@@ -2174,15 +2199,18 @@ async function saveManualCredit() {
     customerName: cleanCustomerName,
     attendant: null,
     cashier: cashierName || null,
-    items: manualLines.map((ln) => ({
-      product: ln.product.trim(),
-      kilos: Number(ln.kilos || 0),
-      price: Number(ln.price || 0),
-      quantity: null,
-      sale_type: "kg",
-      is_fixed_price_piece: false,
-      prepared_kilos: null,
-    })),
+    items: manualLines.map((ln) => {
+      const it = manualLineToItem(ln);
+      return {
+        product: it.product,
+        kilos: it.kilos ?? 0,
+        price: it.price,
+        quantity: it.quantity,
+        sale_type: it.sale_type,
+        is_fixed_price_piece: it.is_fixed_price_piece,
+        prepared_kilos: null,
+      };
+    }),
     subtotal: manualSubtotal,
     discount: manualDiscountAmount,
     total: manualTotal,
@@ -2261,9 +2289,7 @@ if (customerMode === "existente" && selectedCustomerId) {
 
   const itemsPayload = manualLines.map((line) => ({
     order_id: orderData.id,
-    product: line.product.trim(),
-    kilos: Number(Number(line.kilos || 0).toFixed(3)),
-    price: Number(Number(line.price || 0).toFixed(2)),
+    ...manualLineToItem(line),
   }));
 
   const { error: itemsError } = await supabase
@@ -2284,9 +2310,9 @@ if (customerMode === "existente" && selectedCustomerId) {
       itemsPayload.map((it) => ({
         product: it.product,
         kilos: it.kilos,
-        quantity: null,
-        sale_type: "kg",
-        is_fixed_price_piece: false,
+        quantity: it.quantity,
+        sale_type: it.sale_type,
+        is_fixed_price_piece: it.is_fixed_price_piece,
       })),
       { referencia: `venta manual ${orderData.id.slice(0, 6)}`, createdBy: cashierName || "cajera" }
     );
@@ -2316,13 +2342,18 @@ if (cashError) {
 }
   // Auto-imprimir ticket de venta manual
   try {
-    const manualItems = manualLines.map((line) => ({
-      product: line.product.trim(),
-      kilos: Number(line.kilos || 0),
-      price: Number(line.price || 0),
-      sale_type: (line as any).sale_type || "kg",
-    }));
-    const printSubtotal = manualItems.reduce((a, i) => a + i.kilos * i.price, 0);
+    const manualItems = manualLines.map((line) => {
+      const it = manualLineToItem(line);
+      return {
+        product: it.product,
+        kilos: it.kilos ?? 0,
+        price: it.price,
+        quantity: it.quantity,
+        sale_type: it.sale_type,
+        is_fixed_price_piece: it.is_fixed_price_piece,
+      };
+    });
+    const printSubtotal = manualLines.reduce((a, l) => a + Number(l.kilos || 0) * Number(l.price || 0), 0);
     const printDiscount = manualDiscountAmount;
     const ticketForPrint: TicketData = {
       folio: orderData.id,
@@ -4148,6 +4179,7 @@ if (cashError) {
                                 product: p.name,
                                 kilos: "1",
                                 price: String(isPieza ? p.fixed_piece_price : p.price),
+                                isPieza,
                               }]);
                               setProductSearchManual("");
                             }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14 }}>
@@ -4183,7 +4215,7 @@ if (cashError) {
                           onChange={(e) =>
                             updateManualLine(line.id, "kilos", e.target.value)
                           }
-                          placeholder="Kilos/Cant"
+                          placeholder={line.isPieza ? "Piezas" : "Kilos"}
                           style={inputMiniStyle}
                         />
 
