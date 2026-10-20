@@ -510,7 +510,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         "cobranza_customers"
       ),
       resilientQuery(
-        () => supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").order("name", { ascending: true }),
+        () => supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").eq("is_active", true).order("name", { ascending: true }),
         "cobranza_products"
       ),
     ]);

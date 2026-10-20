@@ -309,6 +309,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
         supabase
           .from("products")
           .select("id, name, price, category, fixed_piece_price, is_excluded_from_discount")
+          .eq("is_active", true)
           .order("category", { ascending: true })
           .order("name", { ascending: true }),
       "ventas_products"
