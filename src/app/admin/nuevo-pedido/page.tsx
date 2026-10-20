@@ -282,6 +282,10 @@ export default function NuevoPedidoPage() {
     // se aplica al subtotal del ticket (no al precio individual)
     const price = Number(product.price || 0);
 
+    // Un producto con precio fijo por pieza (hielo, tacos, refrescos) SIEMPRE
+    // se captura por pieza, aunque la cajera toque "+1 kg" o "$".
+    if (Number(product.fixed_piece_price || 0) > 0) mode = "piece";
+
     if (mode === "piece") {
       const quantityText = prompt(`¿Cuántas piezas de ${product.name}?`);
       if (!quantityText) return;

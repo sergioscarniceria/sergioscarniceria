@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { itemSubtotal } from "@/lib/itemSubtotal";
 import { reponerInventarioDeVenta } from "@/lib/inventory";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { getSupabaseClient } from "@/lib/supabase";
 import { verificarCodigoEmpleado } from "@/lib/verificar-codigo";
 import * as XLSX from "xlsx";
@@ -352,6 +352,9 @@ export default function CajaPage() {
   const [tab, setTab] = useState<Tab>("resumen");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Candado síncrono contra doble clic en "Guardar corte": el estado React
+  // tarda un render en aplicarse, el ref se bloquea al instante.
+  const closureLockRef = useRef(false);
   const [dateFrom, setDateFrom] = useState(today);
   const [dateTo, setDateTo] = useState(today);
 
@@ -1438,9 +1441,28 @@ export default function CajaPage() {
   }
 
   async function saveClosure() {
+    if (closureLockRef.current) return; // segundo clic: ignorar
+    closureLockRef.current = true;
+    setSaving(true);
+    try {
+      await saveClosureInner();
+    } finally {
+      closureLockRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function saveClosureInner() {
     const counted = Number(countedCash || 0);
     if (countedCash === "" || isNaN(counted) || counted < 0) {
       alert("Captura un efectivo contado válido");
+      return;
+    }
+
+    // El corte siempre es de HOY: si el filtro de fechas está en otro día,
+    // los totales en pantalla no corresponden y el corte saldría mal.
+    if (dateFrom !== today || dateTo !== today) {
+      alert("Para guardar el corte, el filtro de fechas debe estar en el día de hoy.");
       return;
     }
 
@@ -1450,7 +1472,7 @@ export default function CajaPage() {
     const { data: uncollected } = await supabase
       .from("orders")
       .select("id, customer_name, created_at, status, source")
-      .in("payment_status", ["pendiente", null as any])
+      .or("payment_status.eq.pendiente,payment_status.is.null")
       .gte("created_at", todayStart)
       .lte("created_at", todayEnd);
 
@@ -1502,8 +1524,6 @@ export default function CajaPage() {
       return;
     }
 
-    setSaving(true);
-
     const closedBy = (() => {
       try { return sessionStorage.getItem("pin_name") || sessionStorage.getItem("pin_role") || null; }
       catch { return null; }
@@ -1531,7 +1551,7 @@ export default function CajaPage() {
 
     // Siempre insertar un nuevo registro de cierre (cada corte es independiente)
     const { error } = await supabase.from("cash_closures").insert([payload]);
-    if (error) { alert("Error al guardar cierre"); console.log(error); setSaving(false); return; }
+    if (error) { alert("Error al guardar cierre"); console.log(error); return; }
 
     logAudit({
       action: "cierre_caja",
@@ -1550,7 +1570,6 @@ export default function CajaPage() {
     setCountedCash("");
     setClosureNotes("");
     setClosureDenoms({});
-    setSaving(false);
   }
 
   // ─── Exportar cierre a PDF ─────────────────────────────────

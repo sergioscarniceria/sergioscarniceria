@@ -26,6 +26,22 @@ export async function POST(request: Request) {
 
     const cleaned: string[] = [];
 
+    // 0. NUNCA borrar historial financiero. Si el cliente tiene ventas,
+    //    notas de crédito o movimientos de caja, se bloquea el borrado:
+    //    esos registros sostienen los cortes y reportes históricos.
+    const [{ count: nOrders }, { count: nNotes }, { count: nMovs }] = await Promise.all([
+      supabase.from("orders").select("id", { count: "exact", head: true }).eq("customer_id", customer_id),
+      supabase.from("cxc_notes").select("id", { count: "exact", head: true }).eq("customer_id", customer_id),
+      supabase.from("cash_movements").select("id", { count: "exact", head: true }).eq("customer_id", customer_id),
+    ]);
+    if ((nOrders || 0) > 0 || (nNotes || 0) > 0 || (nMovs || 0) > 0) {
+      return NextResponse.json({
+        error:
+          `Este cliente tiene historial (${nOrders || 0} pedidos, ${nNotes || 0} notas de crédito, ${nMovs || 0} movimientos de caja) ` +
+          `y no se puede borrar sin descuadrar cortes y reportes. Desactívalo o quítale el crédito en lugar de eliminarlo.`,
+      }, { status: 409 });
+    }
+
     // 1. Find and delete auth user via customer_profiles
     const { data: profile } = await supabase
       .from("customer_profiles")

@@ -204,6 +204,19 @@ export default function CobranzaPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Candado síncrono contra doble clic en cobrar / mixto / crédito.
+  // `saving` tarda un render en aplicarse; el ref se cierra al instante,
+  // así un segundo clic (o dos pantallas) no alcanza a entrar en paralelo.
+  const cobroLockRef = useRef(false);
+  async function conCandadoDeCobro(fn: () => Promise<void>) {
+    if (cobroLockRef.current) return;
+    cobroLockRef.current = true;
+    try {
+      await fn();
+    } finally {
+      cobroLockRef.current = false;
+    }
+  }
   const [tab, setTab] = useState<TabMode>("ticket");
 
   // Timeout global: si saving lleva >25s, resetear para no quedarse colgado
@@ -1009,6 +1022,13 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     method: Exclude<PaymentMethod, "credito">,
     extra: { cashReceived?: number; deliveryPerson?: string; changeOut?: number } = {}
   ) {
+    await conCandadoDeCobro(() => markTicketPaidInner(method, extra));
+  }
+
+  async function markTicketPaidInner(
+    method: Exclude<PaymentMethod, "credito">,
+    extra: { cashReceived?: number; deliveryPerson?: string; changeOut?: number } = {}
+  ) {
     if (!selectedTicket) return;
     if (method === "repartidor" && !extra.deliveryPerson) {
       alert("Elige qué repartidor se lleva el pedido.");
@@ -1075,14 +1095,26 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         orderUpdate.notes = existing ? `${existing} | ${groupNote}` : groupNote;
       }
 
-      const { error } = await supabase.from("orders").update(orderUpdate).eq("id", ticket.id);
-      if (error) {
-        console.log(error);
-        alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+      // UPDATE condicional: solo si el ticket sigue abierto en la BD.
+      // Si otra pantalla lo cobró un instante antes, no se escribe nada.
+      const { data: updRows, error } = await supabase
+        .from("orders")
+        .update(orderUpdate)
+        .eq("id", ticket.id)
+        .or("payment_status.eq.pendiente,payment_status.is.null")
+        .select("id");
+      if (error || !updRows || updRows.length === 0) {
+        if (error) console.log(error);
+        alert(
+          error
+            ? `No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`
+            : `El ticket ${ticket.id.slice(0, 6)} ya fue cobrado, cancelado o mandado a crédito desde otra pantalla. No se cobró de nuevo.`
+        );
         // El canje ya restó puntos: devolverlos para que el cliente no
         // se quede sin puntos y sin descuento.
         await revertirCanje(selectedTicket.id);
         setSaving(false);
+        loadData();
         return;
       }
     }
@@ -1260,6 +1292,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   }
 
   async function markTicketPaidMixed() {
+    await conCandadoDeCobro(markTicketPaidMixedInner);
+  }
+
+  async function markTicketPaidMixedInner() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
     if (await bloquearSiTicketCerrado()) return;
@@ -1330,13 +1366,23 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         orderUpdate.notes = [existing, mixedDetail, groupNote].filter(Boolean).join(" | ");
       }
 
-      const { error } = await supabase.from("orders").update(orderUpdate).eq("id", ticket.id);
-      if (error) {
-        alert(`No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`);
+      const { data: updRows, error } = await supabase
+        .from("orders")
+        .update(orderUpdate)
+        .eq("id", ticket.id)
+        .or("payment_status.eq.pendiente,payment_status.is.null")
+        .select("id");
+      if (error || !updRows || updRows.length === 0) {
+        alert(
+          error
+            ? `No se pudo registrar el pago del ticket ${ticket.id.slice(0, 6)}`
+            : `El ticket ${ticket.id.slice(0, 6)} ya fue cobrado, cancelado o mandado a crédito desde otra pantalla. No se cobró de nuevo.`
+        );
         // El canje ya restó puntos: devolverlos para que el cliente no
         // se quede sin puntos y sin descuento.
         await revertirCanje(selectedTicket.id);
         setSaving(false);
+        loadData();
         return;
       }
     }
@@ -1752,6 +1798,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   }
 
   async function sendTicketToCredit() {
+    await conCandadoDeCobro(sendTicketToCreditInner);
+  }
+
+  async function sendTicketToCreditInner() {
     if (!selectedTicket) return;
     if (bloquearSiFaltaPeso()) return;
     if (await bloquearSiTicketCerrado()) return;
@@ -1786,6 +1836,43 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
     setSaving(true);
 
+    // 1) RESERVAR los tickets con un UPDATE condicional (solo si siguen
+    //    pendientes). Es la compuerta atómica: si otra pantalla ya los
+    //    cobró o ya los mandó a crédito, aquí no se escribe nada y no se
+    //    crea ninguna nota duplicada.
+    const idsAReservar = allSelectedTickets().map((t) => t.id);
+    const { data: reservados, error: reservaError } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "credito_autorizado",
+        payment_method: "credito",
+        paid_at: new Date().toISOString(),
+      })
+      .in("id", idsAReservar)
+      .or("payment_status.eq.pendiente,payment_status.is.null")
+      .select("id");
+
+    if (reservaError || !reservados || reservados.length !== idsAReservar.length) {
+      if (reservaError) console.log(reservaError);
+      // Si solo se reservó una parte (grupo de tickets), regresar esos a pendiente
+      if (reservados && reservados.length > 0 && reservados.length !== idsAReservar.length) {
+        await supabase
+          .from("orders")
+          .update({ payment_status: "pendiente", payment_method: null, paid_at: null })
+          .in("id", reservados.map((r) => r.id));
+      }
+      alert(
+        reservaError
+          ? "No se pudo mandar a crédito. Intenta de nuevo."
+          : "Alguno de los tickets ya fue cobrado, cancelado o mandado a crédito desde otra pantalla. No se generó nota."
+      );
+      setSaving(false);
+      setSelectedTicket(null);
+      setExtraTickets([]);
+      loadData();
+      return;
+    }
+
     const noteDate = todayDateString();
     const dueDate = addDaysToDate(
       noteDate,
@@ -1818,7 +1905,8 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
           due_date: dueDate,
           source_type: "ticket",
           subtotal: moneyRound(subtotal),
-          discount_amount: moneyRound(descuento),
+          // Incluye el descuento de mayoreo: así subtotal − descuento = total
+          discount_amount: moneyRound(descuento + mayoreoDesc),
           total_amount: moneyRound(finalTotal),
           balance_due: moneyRound(finalTotal),
           status: "abierta",
@@ -1830,7 +1918,12 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
 
     if (noteError || !noteData) {
       console.log(noteError);
-      alert("No se pudo generar la nota de crédito");
+      // Devolver los tickets a pendiente: no quedó nota, no deben quedar en crédito
+      await supabase
+        .from("orders")
+        .update({ payment_status: "pendiente", payment_method: null, paid_at: null })
+        .in("id", idsAReservar);
+      alert("No se pudo generar la nota de crédito. El ticket sigue pendiente.");
       setSaving(false);
       return;
     }
@@ -1870,22 +1963,8 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       }
     }
 
+    // (Los tickets ya quedaron en credito_autorizado desde la reserva de arriba.)
     const allTicketIds = allTickets.map((t) => t.id);
-    const { error: orderError } = await supabase
-      .from("orders")
-      .update({
-        payment_status: "credito_autorizado",
-        payment_method: "credito",
-        paid_at: new Date().toISOString(),
-      })
-      .in("id", allTicketIds);
-
-    if (orderError) {
-      console.log(orderError);
-      alert("La nota se creó, pero no se actualizó el ticket");
-      setSaving(false);
-      return;
-    }
 
     // Imprimir 2 tickets con pagaré integrado
     const allPrintItems = allTickets.flatMap((t) =>
@@ -2155,7 +2234,7 @@ async function saveManualCredit() {
     cxc_note_id: noteData.id,
     product: line.product.trim(),
     quantity: Number(Number(line.kilos || 0).toFixed(3)),
-    unit: "kg",
+    unit: line.isPieza ? "pieza" : "kg",
     price: Number(Number(line.price || 0).toFixed(2)),
     line_total: Number(
       (Number(line.kilos || 0) * Number(line.price || 0)).toFixed(2)
