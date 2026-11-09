@@ -690,11 +690,23 @@ async function deleteTicket(id: string) {
     return;
   }
 
-  if (!confirm("¿Seguro que quieres eliminar este ticket? Esta acción no se puede deshacer.")) return;
+  const motivo = prompt("¿Por qué se elimina este ticket? (queda registrado en Cancelados)");
+  if (motivo === null) return;
+  if (!motivo.trim()) { alert("Escribe el motivo."); return; }
 
-  // Eliminar items y luego el order
-  await supabase.from("order_items").delete().eq("order_id", id);
-  const { error } = await supabase.from("orders").delete().eq("id", id);
+  // No se borra: se marca como cancelado para que quede rastro
+  // (quién, cuándo, por qué y qué llevaba) en Admin > Cancelados.
+  const { error } = await supabase
+    .from("orders")
+    .update({
+      status: "cancelado",
+      payment_status: "cancelado",
+      canceled_at: new Date().toISOString(),
+      cancel_reason: `Eliminado desde mostrador: ${motivo.trim()}`,
+      cancelled_by: "admin (mostrador)",
+    })
+    .eq("id", id)
+    .neq("status", "entregado");
 
   if (error) {
     alert("Error al eliminar: " + error.message);

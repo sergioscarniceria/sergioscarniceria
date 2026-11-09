@@ -31,6 +31,7 @@ const moduleCategories = {
     items: [
       { title: "Dashboard ventas", href: "/admin/dashboard", desc: "Resumen del negocio" },
       { title: "Movimientos totales", href: "/admin/movimientos", desc: "Todo lo que pasó en el día, minuto a minuto" },
+      { title: "Cancelados", href: "/admin/cancelados", desc: "Tickets y cobros cancelados: quién, motivo, artículos y monto" },
       { title: "Gráficas", href: "/admin/graficas", desc: "Comportamiento de productos y clientes en el tiempo" },
       { title: "Historial clientes", href: "/admin/historial-clientes", desc: "Cuanto ha comprado cada cliente" },
       { title: "CRM WhatsApp", href: "/admin/crm", desc: "Lo que sabemos de cada cliente: gustos, pedidos, notas" },
