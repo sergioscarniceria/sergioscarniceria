@@ -49,6 +49,7 @@ type CatalogProduct = {
   category: string | null;
   fixed_piece_price?: number | null;
   is_excluded_from_discount?: boolean | null;
+  is_active?: boolean | null;
 };
 
 type Ticket = {
@@ -438,8 +439,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     if (clientMatch) {
       const custId = clientMatch[1].toLowerCase();
       // Filtrar tickets del cliente
+      // Solo tickets realmente abiertos: los cobrados, cancelados y los que
+      // ya están en crédito NO se juntan a la cuenta.
       const customerTickets = tickets.filter(
-        (t) => t.customer_id?.toLowerCase() === custId && t.payment_status !== "pagado" && t.payment_status !== "cancelado"
+        (t) => t.customer_id?.toLowerCase() === custId && !TICKET_CERRADO.has(t.payment_status || "")
       );
       if (customerTickets.length === 1) {
         openTicket(customerTickets[0].id);
@@ -457,14 +460,19 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     // Buscar ticket con el texto escaneado
     const { full, short: shortCode } = extractTicketId(trimmed);
 
-    // Primero buscar en tickets locales
-    const localMatch = tickets.find((ticket) => {
-      const id = String(ticket.id).toLowerCase();
-      const short = id.slice(0, 6);
-      if (full && id === full) return true;
-      if (shortCode && short === shortCode) return true;
-      return false;
-    });
+    // Primero buscar en tickets locales. Si viene el UUID completo, SOLO se
+    // acepta coincidencia exacta (la lista local incluye tickets ya cobrados
+    // de las últimas 24 h y no queremos abrir uno por parecido de folio).
+    let localMatch: Ticket | undefined;
+    if (full) {
+      localMatch = tickets.find((t) => String(t.id).toLowerCase() === full);
+    } else if (shortCode) {
+      const candidatos = tickets.filter((t) => String(t.id).toLowerCase().slice(0, 6) === shortCode);
+      // Si hay varios con el mismo folio corto, preferir el que sigue abierto
+      localMatch =
+        candidatos.find((t) => !TICKET_CERRADO.has(t.payment_status || "")) ||
+        (candidatos.length === 1 ? candidatos[0] : undefined);
+    }
 
     if (localMatch) {
       openTicket(localMatch.id);
@@ -523,7 +531,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         "cobranza_customers"
       ),
       resilientQuery(
-        () => supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount").eq("is_active", true).order("name", { ascending: true }),
+        () => supabase.from("products").select("id, name, price, category, fixed_piece_price, is_excluded_from_discount, is_active").order("name", { ascending: true }),
         "cobranza_products"
       ),
     ]);
@@ -714,8 +722,26 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     }, 0);
   }
 
+  /**
+   * REGLA: no hay descuento sobre descuento. Si algún ticket de la cuenta ya
+   * trae descuento (mayoreo / cliente, grabado desde Ventas) o se está
+   * canjeando puntos, el descuento manual queda bloqueado. Devuelve el motivo
+   * o null si sí se permite.
+   */
+  function motivoBloqueoDescuento(): string | null {
+    const ts = allSelectedTickets();
+    const yaConDescuento = ts.some(
+      (t) => Number(t.discount_amount || 0) > 0 || Number(t.discount_percent || 0) > 0
+    );
+    if (yaConDescuento) return "Este ticket ya trae un descuento aplicado. No se permite descuento sobre descuento.";
+    if (puntosACanjear > 0) return "Se están canjeando puntos. No se puede combinar con descuento manual.";
+    if (ts.length > 0 && discountableSubtotal(ts) <= 0) return "Ningún producto de este ticket admite descuento.";
+    return null;
+  }
+
   function calcDiscount(subtotal: number): number {
     if (discountMode === "none" || !discountValue) return 0;
+    if (motivoBloqueoDescuento()) return 0;
     const val = Number(discountValue.replace(",", "."));
     if (!val || val <= 0) return 0;
     // Solo aplicar descuento sobre la parte descontable
@@ -767,6 +793,30 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
   });
 }, [tickets, ticketSearch, hideUnprepared]);
 
+  /**
+   * ÚNICO punto por donde se pone un ticket en pantalla. Limpia TODO lo que
+   * pertenece al ticket anterior (descuento manual, puntos a canjear, tickets
+   * agrupados, montos de mixto/efectivo, modo edición). Antes el descuento se
+   * quedaba "pegado" de un ticket al siguiente.
+   */
+  function seleccionarTicket(t: Ticket | null) {
+    setSelectedTicket(t);
+    setExtraTickets([]);
+    setDiscountMode("none");
+    setDiscountValue("");
+    setPuntosACanjear(0);
+    setCashReceived("");
+    setMixedEfectivo("");
+    setMixedTarjeta("");
+    setMixedTransferencia("");
+    setShowMixedPay(false);
+    setShowCashCalc(false);
+    setEditMode(false);
+    setChangingCustomer(false);
+    setRepartidorElegido(null);
+    setRepCambio("");
+  }
+
   async function openTicket(id: string) {
     const { data, error } = await supabase
       .from("orders")
@@ -782,10 +832,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       return;
     }
 
-    setSelectedTicket(data as Ticket);
-    setExtraTickets([]);
-    setDiscountMode("none");
-    setDiscountValue("");
+    seleccionarTicket(data as Ticket);
   }
 
   // Agregar otro ticket a la cuenta (multi-cobro)
@@ -798,6 +845,15 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       .eq("id", id)
       .single();
     if (error || !data) { alert("No se pudo agregar el ticket"); return; }
+    // Nunca juntar a la cuenta un ticket que ya está cobrado, cancelado o en crédito
+    if (TICKET_CERRADO.has((data as Ticket).payment_status || "")) {
+      const st = (data as Ticket).payment_status;
+      alert(
+        `El ticket ${ticketFolio(id)} ${st === "pagado" ? "ya está cobrado" : st === "cancelado" ? "está cancelado" : "ya está en crédito"} ` +
+        `y no se puede juntar a esta cuenta.`
+      );
+      return;
+    }
     setExtraTickets((prev) => [...prev, data as Ticket]);
   }
 
@@ -892,7 +948,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         .single();
 
       if (!error && data) {
-        setSelectedTicket(data as Ticket);
+        seleccionarTicket(data as Ticket);
         return true;
       }
     }
@@ -909,7 +965,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         .limit(5);
 
       if (!error && data && data.length === 1) {
-        setSelectedTicket(data[0] as Ticket);
+        seleccionarTicket(data[0] as Ticket);
         return true;
       }
 
@@ -3089,12 +3145,12 @@ if (cashError) {
                               />
                               {editProductSearch.trim() && (
                                 <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 10, maxHeight: 200, overflowY: "auto" as const, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
-                                  {catalogProducts.filter((p) => p.name.toLowerCase().includes(editProductSearch.toLowerCase())).slice(0, 15).map((p) => (
+                                  {catalogProducts.filter((p) => p.is_active !== false && p.name.toLowerCase().includes(editProductSearch.toLowerCase())).slice(0, 15).map((p) => (
                                     <div key={p.id} onClick={() => addCatalogProductToEdit(p)} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, fontSize: 14 }}>
                                       {p.name} — {p.fixed_piece_price ? `${money(p.fixed_piece_price)}/pza` : `${money(p.price)}/kg`}
                                     </div>
                                   ))}
-                                  {catalogProducts.filter((p) => p.name.toLowerCase().includes(editProductSearch.toLowerCase())).length === 0 && (
+                                  {catalogProducts.filter((p) => p.is_active !== false && p.name.toLowerCase().includes(editProductSearch.toLowerCase())).length === 0 && (
                                     <div style={{ padding: "10px 14px", color: COLORS.muted, fontSize: 14 }}>Sin resultados</div>
                                   )}
                                 </div>
@@ -3300,6 +3356,20 @@ if (cashError) {
                         Descuento adicional
                       </div>
 
+                      {motivoBloqueoDescuento() ? (
+                        <div style={{
+                          padding: "10px 12px", borderRadius: 10, fontSize: 13,
+                          background: "rgba(166,106,16,0.10)", border: `1px solid ${COLORS.warning}`, color: COLORS.text,
+                        }}>
+                          🔒 {motivoBloqueoDescuento()}
+                        </div>
+                      ) : (<>
+                      {excludedSubtotal(allSelectedTickets()) > 0 && (
+                        <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>
+                          Hay ${money(excludedSubtotal(allSelectedTickets()))} en productos sin descuento; el descuento solo aplica al resto.
+                        </div>
+                      )}
+
                       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                         <button
                           onClick={() => { setDiscountMode("none"); setDiscountValue(""); }}
@@ -3344,6 +3414,7 @@ if (cashError) {
                           style={inputStyle}
                         />
                       )}
+                      </>)}
                     </div>
 
                     {/* Tickets agrupados — desglose completo */}
@@ -4250,7 +4321,7 @@ if (cashError) {
                       />
                       {productSearchManual.trim() && (
                         <div style={{ position: "absolute" as const, top: "100%", left: 0, right: 0, zIndex: 50, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 10, maxHeight: 220, overflowY: "auto" as const, boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}>
-                          {catalogProducts.filter((p) => p.name.toLowerCase().includes(productSearchManual.toLowerCase())).slice(0, 15).map((p) => (
+                          {catalogProducts.filter((p) => p.is_active !== false && p.name.toLowerCase().includes(productSearchManual.toLowerCase())).slice(0, 15).map((p) => (
                             <div key={p.id} onClick={() => {
                               const isPieza = !!p.fixed_piece_price;
                               setManualLines((prev) => [...prev, {
@@ -4265,7 +4336,7 @@ if (cashError) {
                               {p.name} — {p.fixed_piece_price ? `$${p.fixed_piece_price}/pza` : `$${p.price}/kg`}
                             </div>
                           ))}
-                          {catalogProducts.filter((p) => p.name.toLowerCase().includes(productSearchManual.toLowerCase())).length === 0 && (
+                          {catalogProducts.filter((p) => p.is_active !== false && p.name.toLowerCase().includes(productSearchManual.toLowerCase())).length === 0 && (
                             <div style={{ padding: "10px 14px", color: COLORS.muted, fontSize: 14 }}>Sin resultados — usa "Renglón libre"</div>
                           )}
                         </div>
