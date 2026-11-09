@@ -373,14 +373,16 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
       return;
     }
 
-    // Unir sin duplicados, mas nuevo primero
+    // Unir sin duplicados, MÁS VIEJO PRIMERO: los carniceros atienden en
+    // orden de llegada, así el ticket que lleva más tiempo esperando queda
+    // hasta arriba y no se le olvida a nadie.
     const porId = new Map<string, Ticket>();
     for (const t of ((recientesRes.data as Ticket[]) || [])) porId.set(t.id, t);
     for (const t of ((pendientesRes.data as Ticket[]) || [])) porId.set(t.id, t);
 
     const merged = Array.from(porId.values()).sort(
       (a, b) =>
-        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
     );
 
     setTickets(merged);
