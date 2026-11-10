@@ -13,6 +13,8 @@ type Product = {
   fixed_piece_price?: number | null;
   is_active?: boolean | null;
   visible_online?: boolean | null;
+  availability?: "siempre" | "sobre_pedido" | null;
+  agotado_fecha?: string | null;
   is_excluded_from_points?: boolean | null;
   is_excluded_from_discount?: boolean | null;
   category?: string | null;
@@ -268,6 +270,24 @@ const [recommendSearch, setRecommendSearch] = useState("");
       return;
     }
 
+    await loadProducts();
+  }
+
+  /**
+   * Siempre en existencia vs sobre pedido. "Sobre pedido" se puede pedir en
+   * línea, pero avisa que el tiempo de entrega depende de lo que haya.
+   */
+  async function toggleAvailability(product: Product) {
+    const nextValue = (product.availability || "siempre") === "siempre" ? "sobre_pedido" : "siempre";
+    const { error } = await supabase
+      .from("products")
+      .update({ availability: nextValue })
+      .eq("id", product.id);
+    if (error) {
+      console.log(error);
+      alert("No se pudo cambiar la disponibilidad");
+      return;
+    }
     await loadProducts();
   }
 
@@ -744,6 +764,19 @@ const [recommendSearch, setRecommendSearch] = useState("");
                       title="Controla si el producto aparece en la tienda en línea. No afecta mostrador ni pedidos por teléfono."
                     >
                       {(product.visible_online ?? true) ? "Visible en línea" : "Oculto en línea"}
+                    </button>
+                    <button
+                      onClick={() => toggleAvailability(product)}
+                      style={{
+                        ...discountButtonStyle,
+                        background: (product.availability || "siempre") === "siempre"
+                          ? "rgba(31,122,77,0.10)"
+                          : "rgba(166,106,16,0.12)",
+                        color: (product.availability || "siempre") === "siempre" ? COLORS.success : "#a66a10",
+                      }}
+                      title="Siempre en existencia: se vende normal. Sobre pedido: en la tienda en línea avisa que se prepara y que el tiempo de entrega depende de lo que haya."
+                    >
+                      {(product.availability || "siempre") === "siempre" ? "Siempre en existencia" : "Sobre pedido"}
                     </button>
                     <button
                       onClick={() => togglePoints(product)}

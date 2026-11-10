@@ -29,6 +29,8 @@ type Product = {
   category: string | null;
   fixed_piece_price?: number | null;
   is_excluded_from_discount?: boolean;
+  availability?: "siempre" | "sobre_pedido" | null;
+  agotado_fecha?: string | null;
 };
 type Ticket = {
   id: string;
@@ -160,6 +162,9 @@ export default function VentasPage() {
   const [saving, setSaving] = useState(false);
 
  const [products, setProducts] = useState<Product[]>([]);
+ // Existencias: el carnicero marca "se acabó hoy"; se restablece solo al día siguiente
+ const [showExistencias, setShowExistencias] = useState(false);
+ const [existenciasSearch, setExistenciasSearch] = useState("");
 const [customers, setCustomers] = useState<Customer[]>([]);
 const [tickets, setTickets] = useState<Ticket[]>([]);
 const [items, setItems] = useState<Item[]>([]);
@@ -301,6 +306,23 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
     return () => clearInterval(hb);
   }, []);
 
+  function hoyMX(): string {
+    return new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" }); // YYYY-MM-DD
+  }
+  function agotadoHoy(p: Product): boolean {
+    return !!p.agotado_fecha && p.agotado_fecha === hoyMX();
+  }
+  async function toggleAgotadoHoy(p: Product) {
+    const quien = attendant || "carnicero";
+    const nuevo = agotadoHoy(p) ? null : hoyMX();
+    const { error } = await supabase
+      .from("products")
+      .update({ agotado_fecha: nuevo, agotado_por: nuevo ? quien : null })
+      .eq("id", p.id);
+    if (error) { alert("No se pudo actualizar la existencia"); return; }
+    setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, agotado_fecha: nuevo } : x)));
+  }
+
   async function loadProducts() {
     setLoading(true);
 
@@ -308,7 +330,7 @@ const [scaleConnected, setScaleConnected] = useState<boolean>(false);
       () =>
         supabase
           .from("products")
-          .select("id, name, price, category, fixed_piece_price, is_excluded_from_discount")
+          .select("id, name, price, category, fixed_piece_price, is_excluded_from_discount, availability, agotado_fecha")
           .eq("is_active", true)
           .order("category", { ascending: true })
           .order("name", { ascending: true }),
@@ -1142,6 +1164,13 @@ const paidTickets = useMemo(() => {
             >
               {isPOS ? "✕ Salir POS" : "🖥 Modo POS"}
             </button>
+            <button
+              onClick={() => { setShowExistencias(true); setExistenciasSearch(""); }}
+              style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: products.some(agotadoHoy) ? "rgba(180,35,24,0.10)" : "white", color: products.some(agotadoHoy) ? COLORS.danger : COLORS.text, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}
+              title="Marca lo que se acabó hoy para que no se pida en línea. Se restablece solo mañana."
+            >
+              📋 Existencias{products.filter(agotadoHoy).length > 0 ? ` (${products.filter(agotadoHoy).length} agotados)` : ""}
+            </button>
             {prodOrders.length > 0 && (
               <button onClick={() => setShowProdOrders(!showProdOrders)} style={{ padding: "14px 20px", borderRadius: 14, border: `1px solid ${COLORS.border}`, background: showProdOrders ? COLORS.success : "rgba(31,122,77,0.10)", color: showProdOrders ? "white" : COLORS.success, fontWeight: 800, cursor: "pointer", fontSize: 16, minHeight: 48 }}>
                 📦 Pedidos ({prodOrders.length})
@@ -1918,6 +1947,62 @@ const paidTickets = useMemo(() => {
       )}
 
       {/* Hold sale modal */}
+      {/* ═══ EXISTENCIAS: marcar lo que se acabó hoy ═══ */}
+      {showExistencias && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setShowExistencias(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "rgba(255,255,255,0.97)", borderRadius: 22, padding: 20, maxWidth: 560, width: "100%", maxHeight: "85vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 50px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <h3 style={{ margin: 0, color: COLORS.text, fontSize: 20 }}>Existencias de hoy</h3>
+              <button onClick={() => setShowExistencias(false)} style={{ border: "none", background: "transparent", fontSize: 22, cursor: "pointer", color: COLORS.muted }}>✕</button>
+            </div>
+            <p style={{ margin: "0 0 10px", color: COLORS.muted, fontSize: 13 }}>
+              Toca un producto cuando <b>se acabe</b>: la tienda en línea deja de ofrecerlo hoy. Mañana vuelve a estar disponible solo.
+              {products.filter(agotadoHoy).length > 0 && (
+                <> Agotados hoy: <b style={{ color: COLORS.danger }}>{products.filter(agotadoHoy).map((p) => p.name).join(", ")}</b>.</>
+              )}
+            </p>
+            <input
+              value={existenciasSearch}
+              onChange={(e) => setExistenciasSearch(e.target.value)}
+              placeholder="Buscar producto..."
+              style={{ padding: "12px 14px", borderRadius: 12, border: `1px solid ${COLORS.border}`, fontSize: 16, marginBottom: 10 }}
+            />
+            <div style={{ overflowY: "auto", flex: 1, display: "grid", gap: 6 }}>
+              {products
+                .filter((p) => p.name.toLowerCase().includes(existenciasSearch.toLowerCase()))
+                .sort((a, b) => Number(agotadoHoy(b)) - Number(agotadoHoy(a)) || (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name))
+                .map((p) => {
+                  const ag = agotadoHoy(p);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => toggleAgotadoHoy(p)}
+                      style={{
+                        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                        padding: "12px 14px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                        border: `2px solid ${ag ? COLORS.danger : COLORS.border}`,
+                        background: ag ? "rgba(180,35,24,0.08)" : "white",
+                        minHeight: 48,
+                      }}
+                    >
+                      <span>
+                        <span style={{ fontWeight: 800, color: COLORS.text, fontSize: 15 }}>{p.name}</span>
+                        <span style={{ color: COLORS.muted, fontSize: 12, marginLeft: 8 }}>{p.category || ""}</span>
+                        {(p.availability || "siempre") === "sobre_pedido" && (
+                          <span style={{ color: COLORS.warning, fontSize: 11, fontWeight: 700, marginLeft: 8 }}>SOBRE PEDIDO</span>
+                        )}
+                      </span>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: ag ? COLORS.danger : COLORS.success, whiteSpace: "nowrap" }}>
+                        {ag ? "AGOTADO HOY ✕" : "Hay ✓"}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showHoldModal && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={() => setShowHoldModal(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "rgba(255,255,255,0.95)", borderRadius: 22, padding: 24, maxWidth: 380, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,0.2)" }}>

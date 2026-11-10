@@ -13,7 +13,21 @@ type Product = {
   fixed_piece_price: number | null;
   is_active: boolean;
   image_url: string | null;
+  availability?: "siempre" | "sobre_pedido" | null;
+  agotado_fecha?: string | null;
 };
+
+// Existencias: "agotado hoy" lo marca el carnicero en mostrador y solo cuenta
+// ese día (fecha de México). "Sobre pedido" se puede pedir, pero avisa.
+function hoyMX(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+}
+function agotadoHoy(p: Product): boolean {
+  return !!p.agotado_fecha && p.agotado_fecha === hoyMX();
+}
+function esSobrePedido(p: Product): boolean {
+  return (p.availability || "siempre") === "sobre_pedido";
+}
 
 type CartItem = {
   productId: string;
@@ -105,7 +119,7 @@ export default function TiendaPage() {
       const supabase = getSupabaseClient();
       const { data } = await supabase
         .from("products")
-        .select("id, name, price, category, sale_type, fixed_piece_price, is_active, image_url")
+        .select("id, name, price, category, sale_type, fixed_piece_price, is_active, image_url, availability, agotado_fecha")
         .eq("is_active", true)
         // Los precios de mayoreo, canal y ganado en pie no se muestran al publico
         .eq("visible_online", true)
@@ -147,6 +161,10 @@ export default function TiendaPage() {
 
   const addToCart = useCallback((p: Product, qty: number) => {
     if (qty <= 0) return;
+    if (agotadoHoy(p)) {
+      alert(`${p.name} se agotó por hoy. Mañana vuelve a estar disponible.`);
+      return;
+    }
     const saleType = p.sale_type === "pieza" ? "pieza" as const : "kg" as const;
     const precioFijoPorPieza = Number(p.fixed_piece_price || 0) > 0;
     const price = precioFijoPorPieza ? Number(p.fixed_piece_price) : p.price;
@@ -183,6 +201,11 @@ export default function TiendaPage() {
       return;
     }
     if (cart.length === 0) return;
+    const agotados = cart.filter((c) => { const pr = products.find((x) => x.id === c.productId); return pr && agotadoHoy(pr); });
+    if (agotados.length > 0) {
+      alert(`Se agotó por hoy: ${agotados.map((c) => c.name).join(", ")}. Quítalo del carrito para continuar.`);
+      return;
+    }
     const deliveryTime = new Date(deliveryDateTime);
     const minTime = new Date();
     minTime.setMinutes(minTime.getMinutes() + 55);
@@ -200,7 +223,11 @@ export default function TiendaPage() {
         customer_name: name.trim(),
         status: "nuevo",
         source: "app_cliente",
-        notes: `Tel: ${phone.trim()} | ${notes.trim() || "Sin notas"}`,
+        notes: `Tel: ${phone.trim()} | ${notes.trim() || "Sin notas"}${
+          cart.some((c) => { const pr = products.find((x) => x.id === c.productId); return pr && esSobrePedido(pr); })
+            ? " | ⚠ Incluye productos SOBRE PEDIDO: confirmar tiempo de entrega con el cliente"
+            : ""
+        }`,
         delivery_address: address.trim(),
         delivery_date: deliveryDateTime,
         delivery_status: "pendiente",
@@ -800,7 +827,24 @@ export default function TiendaPage() {
                           </span>
                         </div>
 
-                        {saleType === "pieza" ? (
+                        {agotadoHoy(p) && (
+                          <div style={{ fontSize: 11, fontWeight: 800, color: "#b42318", background: "rgba(180,35,24,0.10)", borderRadius: 8, padding: "4px 8px", marginBottom: 8, textAlign: "center" }}>
+                            AGOTADO POR HOY
+                          </div>
+                        )}
+                        {!agotadoHoy(p) && esSobrePedido(p) && (
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#a66a10", background: "rgba(166,106,16,0.12)", borderRadius: 8, padding: "4px 8px", marginBottom: 8, textAlign: "center", lineHeight: 1.25 }}>
+                            SOBRE PEDIDO · te confirmamos tiempo de entrega
+                          </div>
+                        )}
+                        {agotadoHoy(p) ? (
+                          <button disabled style={{
+                            width: "100%", padding: "8px 0", borderRadius: 10, border: "none",
+                            background: "rgba(0,0,0,0.08)", color: C.muted, fontWeight: 700, fontSize: 12, cursor: "not-allowed",
+                          }}>
+                            No disponible hoy
+                          </button>
+                        ) : saleType === "pieza" ? (
                           <button onClick={() => addToCart(p, 1)} style={{
                             width: "100%", padding: "8px 0", borderRadius: 10, border: "none",
                             background: inCart ? C.primaryBgStrong : C.gradient,

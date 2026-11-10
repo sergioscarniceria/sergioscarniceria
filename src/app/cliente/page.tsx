@@ -15,7 +15,21 @@ type Product = {
   category?: string | null;
   fixed_piece_price?: number | null;
   recommended_with?: string[] | null;
+  availability?: "siempre" | "sobre_pedido" | null;
+  agotado_fecha?: string | null;
 };
+
+// Existencias: "agotado hoy" lo marca el carnicero en mostrador (solo cuenta
+// la fecha de hoy en México). "Sobre pedido" se puede pedir, pero avisa.
+function hoyMX(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+}
+function agotadoHoy(p: Product): boolean {
+  return !!p.agotado_fecha && p.agotado_fecha === hoyMX();
+}
+function esSobrePedido(p: Product): boolean {
+  return (p.availability || "siempre") === "sobre_pedido";
+}
 
 type CartItem = {
   name: string;
@@ -1068,6 +1082,10 @@ export default function ClientePage() {
   }
 
   function addProduct(product: Product, mode: "kg" | "half" | "money" | "custom" | "pieza") {
+    if (agotadoHoy(product)) {
+      alert(`${product.name} se agotó por hoy. Mañana vuelve a estar disponible.`);
+      return;
+    }
     const piece = isPieceProduct(product);
     // FIX doble descuento: guardar precio BASE en el cart
     const price = Number(product.price || 0);
@@ -1304,6 +1322,12 @@ export default function ClientePage() {
       return;
     }
 
+    const agotados = cart.filter((c) => { const pr = products.find((x) => x.name === c.name); return pr && agotadoHoy(pr); });
+    if (agotados.length > 0) {
+      alert(`Se agotó por hoy: ${agotados.map((c) => c.name).join(", ")}. Quítalo del carrito para continuar.`);
+      return;
+    }
+
     if (!address.trim()) {
       alert("Agrega tu dirección antes de enviar el pedido");
       return;
@@ -1350,7 +1374,11 @@ export default function ClientePage() {
           customer_name: profile.full_name || email,
           status: "nuevo",
           source: "cliente",
-          notes,
+          notes: `${notes || ""}${
+            cart.some((c) => { const pr = products.find((x) => x.name === c.name); return pr && esSobrePedido(pr); })
+              ? `${notes ? " | " : ""}⚠ Incluye productos SOBRE PEDIDO: confirmar tiempo de entrega con el cliente`
+              : ""
+          }` || null,
           delivery_address: address,
           delivery_date: deliveryDate,
           delivery_status: "pendiente",
@@ -2060,10 +2088,20 @@ export default function ClientePage() {
                                   ? `$${Math.ceil(Number(p.fixed_piece_price))}/pza`
                                   : `$${Math.ceil(getPrice(p))}/kg`}
                               </div>
+                              {agotadoHoy(p) && (
+                                <div style={{ fontSize: 11, fontWeight: 800, color: "#b42318", marginTop: 4 }}>AGOTADO POR HOY</div>
+                              )}
+                              {!agotadoHoy(p) && esSobrePedido(p) && (
+                                <div style={{ fontSize: 11, fontWeight: 700, color: "#a66a10", marginTop: 4 }}>Sobre pedido · te confirmamos tiempo de entrega</div>
+                              )}
                             </div>
 
                             <div style={productButtonsWrapStyle}>
-                              {isPieceProduct(p) ? (
+                              {agotadoHoy(p) ? (
+                                <button disabled style={{ ...lightMiniButtonStyle, opacity: 0.5, cursor: "not-allowed" }}>
+                                  No hay hoy
+                                </button>
+                              ) : isPieceProduct(p) ? (
                                 <>
                                   <button onClick={() => addProduct(p, "kg")} style={lightMiniButtonStyle}>
                                     +1 pza
