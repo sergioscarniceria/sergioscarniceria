@@ -6,6 +6,7 @@ export type AuditAction =
   | "cobro_transferencia"
   | "cobro_credito"
   | "cancelar_ticket"
+  | "devolucion_ticket"
   | "apertura_caja"
   | "cierre_caja"
   | "reconteo"

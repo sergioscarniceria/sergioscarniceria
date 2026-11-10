@@ -418,6 +418,9 @@ export default function CajaPage() {
   const [mixMethodB, setMixMethodB] = useState("tarjeta");
   const [reprintingId, setReprintingId] = useState<string | null>(null);
   const [cancelCode, setCancelCode] = useState("");
+  // Devolución / cambio de un ticket YA ENTREGADO: solo con PIN de administrador
+  const [devolucionMode, setDevolucionMode] = useState(false);
+  const [cambioFolio, setCambioFolio] = useState("");
   const [cancelReason, setCancelReason] = useState("");
   const [cancelSaving, setCancelSaving] = useState(false);
   const [cancelError, setCancelError] = useState("");
@@ -959,17 +962,41 @@ export default function CajaPage() {
     setCancelSaving(true);
     setCancelError("");
 
-    // Verify cajera code
-    const emp = await verificarCodigoEmpleado(cancelCode.trim(), ["cajera"]);
+    // ¿Quién autoriza? Cancelación normal: código de cajera.
+    // Devolución / cambio de ticket entregado: SOLO PIN de administrador.
+    let emp: { name: string } | null = null;
 
-    if (!emp) {
-      setCancelError("Código de cajera incorrecto");
-      setCancelSaving(false);
-      return;
+    if (devolucionMode) {
+      try {
+        const res = await fetch("/api/auth/verify-pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pin: cancelCode.trim() }),
+        });
+        const data = res.ok ? await res.json() : null;
+        if (!data || data.role !== "admin") {
+          setCancelError("Solo el administrador puede autorizar una devolución. PIN incorrecto o sin permiso.");
+          setCancelSaving(false);
+          return;
+        }
+        emp = { name: `${data.name || data.label || "Administrador"} (admin)` };
+      } catch {
+        setCancelError("No se pudo verificar el PIN. Intenta de nuevo.");
+        setCancelSaving(false);
+        return;
+      }
+    } else {
+      emp = await verificarCodigoEmpleado(cancelCode.trim(), ["cajera"]);
+      if (!emp) {
+        setCancelError("Código de cajera incorrecto");
+        setCancelSaving(false);
+        return;
+      }
     }
 
-    // Un ticket YA ENTREGADO no se puede cancelar: la mercancía ya salió
-    if (cancelMovement.reference_id) {
+    // Un ticket YA ENTREGADO no se cancela con código de cajera: la mercancía
+    // ya salió. Solo se puede registrar como devolución con PIN de admin.
+    if (cancelMovement.reference_id && !devolucionMode) {
       const { data: ord } = await supabase
         .from("orders")
         .select("status")
@@ -978,23 +1005,37 @@ export default function CajaPage() {
 
       if (ord && ord.status === "entregado") {
         setCancelError(
-          "Este ticket YA FUE ENTREGADO al cliente y no se puede cancelar. La mercancía ya salió. Si hay un error, regístralo como devolución."
+          "Este ticket YA FUE ENTREGADO al cliente. Si el cliente regresó la mercancía, márcalo abajo como \"Devolución / cambio\" y pide el PIN de administrador."
         );
         setCancelSaving(false);
         return;
       }
     }
 
-    // Update cash_movement as cancelled
-    const { error } = await supabase
+    // Motivo final (en devolución se deja rastro del ticket de cambio)
+    const motivoFinal = devolucionMode
+      ? `Devolución: ${cancelReason.trim()}${cambioFolio.trim() ? ` (cambiado por ${cambioFolio.trim()})` : ""}`
+      : cancelReason.trim();
+
+    // Update cash_movement as cancelled (condicional: solo si no estaba ya cancelado)
+    const { data: updRows, error } = await supabase
       .from("cash_movements")
       .update({
         is_cancelled: true,
-        cancel_reason: cancelReason.trim(),
+        cancel_reason: motivoFinal,
         cancelled_by: emp.name,
         cancelled_at: new Date().toISOString(),
       })
-      .eq("id", cancelMovement.id);
+      .eq("id", cancelMovement.id)
+      .eq("is_cancelled", false)
+      .select("id");
+
+    if (!error && (!updRows || updRows.length === 0)) {
+      setCancelError("Este movimiento ya estaba cancelado.");
+      setCancelSaving(false);
+      await loadMovements();
+      return;
+    }
 
     if (error) {
       console.error(error);
@@ -1006,15 +1047,16 @@ export default function CajaPage() {
     // Cancelar un cobro es de las acciones más delicadas: queda registrado
     // con nombre, monto y motivo para poder rastrearlo después.
     logAudit({
-      action: "cancelar_ticket",
+      action: devolucionMode ? "devolucion_ticket" : "cancelar_ticket",
       amount: Number(cancelMovement.amount || 0),
       entity_type: "cash_movement",
       entity_id: cancelMovement.id,
       user_label: emp.name,
       details: {
-        motivo: cancelReason.trim(),
+        motivo: motivoFinal,
         metodo: cancelMovement.payment_method || null,
         tipo: cancelMovement.type || null,
+        cambiado_por: devolucionMode ? (cambioFolio.trim() || null) : null,
       },
     });
 
@@ -1026,7 +1068,7 @@ export default function CajaPage() {
           status: "cancelado",
           payment_status: "cancelado",
           canceled_at: new Date().toISOString(),
-          cancel_reason: cancelReason.trim(),
+          cancel_reason: motivoFinal,
           cancelled_by: emp.name,
         })
         .eq("id", cancelMovement.reference_id);
@@ -1049,12 +1091,16 @@ export default function CajaPage() {
       }
     }
 
-    alert(`Movimiento cancelado por ${emp.name}. Motivo: ${cancelReason.trim()}`);
+    alert(devolucionMode
+      ? `Devolución registrada por ${emp.name}. ${motivoFinal}`
+      : `Movimiento cancelado por ${emp.name}. Motivo: ${cancelReason.trim()}`);
 
     // Refresh
     setCancelMovement(null);
     setCancelCode("");
     setCancelReason("");
+    setDevolucionMode(false);
+    setCambioFolio("");
     setCancelSaving(false);
     await loadMovements();
   }
@@ -2662,7 +2708,7 @@ export default function CajaPage() {
                           >
                             Cambiar método
                           </button>
-                          <button onClick={() => { setCancelMovement(m); setCancelCode(""); setCancelReason(""); setCancelError(""); }} style={cancelBtnSt}>
+                          <button onClick={() => { setCancelMovement(m); setCancelCode(""); setCancelReason(""); setCancelError(""); setDevolucionMode(false); setCambioFolio(""); }} style={cancelBtnSt}>
                             Cancelar
                           </button>
                         </div>
@@ -3738,7 +3784,7 @@ export default function CajaPage() {
         <div style={modalOverlay}>
           <div style={modalCard}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <h2 style={{ margin: 0, color: C.danger, fontSize: 20 }}>Cancelar movimiento</h2>
+              <h2 style={{ margin: 0, color: C.danger, fontSize: 20 }}>{devolucionMode ? "Devolución / cambio" : "Cancelar movimiento"}</h2>
               <button onClick={() => setCancelMovement(null)} style={closeBtn}>✕</button>
             </div>
 
@@ -3753,26 +3799,58 @@ export default function CajaPage() {
               </div>
             )}
 
+            {/* Devolución / cambio: para tickets YA ENTREGADOS. Solo admin. */}
+            <label style={{
+              display: "flex", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 12, marginBottom: 14, cursor: "pointer",
+              background: devolucionMode ? "rgba(166,106,16,0.10)" : "rgba(0,0,0,0.03)",
+              border: `1px solid ${devolucionMode ? C.warning : C.border}`,
+            }}>
+              <input
+                type="checkbox"
+                checked={devolucionMode}
+                onChange={(e) => { setDevolucionMode(e.target.checked); setCancelCode(""); setCancelError(""); }}
+                style={{ marginTop: 3 }}
+              />
+              <div>
+                <div style={{ fontWeight: 800, color: C.text, fontSize: 14 }}>Devolución / cambio de mercancía</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+                  El cliente ya se había llevado la carne y la regresó o la cambió. <b>Solo con PIN de administrador.</b>
+                </div>
+              </div>
+            </label>
+
             <div style={{ marginBottom: 14 }}>
-              <div style={fieldLabel}>Código de cajera *</div>
+              <div style={fieldLabel}>{devolucionMode ? "PIN de administrador *" : "Código de cajera *"}</div>
               <input
                 type="password"
                 value={cancelCode}
                 onChange={(e) => setCancelCode(e.target.value)}
-                placeholder="Ingresa tu código"
+                placeholder={devolucionMode ? "PIN del administrador" : "Ingresa tu código"}
                 style={inputSt}
               />
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={fieldLabel}>Motivo de cancelación *</div>
+              <div style={fieldLabel}>{devolucionMode ? "Motivo de la devolución *" : "Motivo de cancelación *"}</div>
               <textarea
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Escribe por qué se cancela este cobro..."
+                placeholder={devolucionMode ? "Ej: regresó todo el pedido y se llevó otra cosa" : "Escribe por qué se cancela este cobro..."}
                 style={{ ...textareaSt, minHeight: 80 }}
               />
             </div>
+
+            {devolucionMode && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={fieldLabel}>Folio del ticket nuevo (si fue cambio)</div>
+                <input
+                  value={cambioFolio}
+                  onChange={(e) => setCambioFolio(e.target.value)}
+                  placeholder="Ej: TK-46ef2d (opcional)"
+                  style={inputSt}
+                />
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 10 }}>
               <button
@@ -3780,7 +3858,7 @@ export default function CajaPage() {
                 disabled={cancelSaving}
                 style={{ ...btnDanger, flex: 1, opacity: cancelSaving ? 0.65 : 1 }}
               >
-                {cancelSaving ? "Cancelando..." : "Confirmar cancelación"}
+                {cancelSaving ? "Guardando..." : devolucionMode ? "Confirmar devolución" : "Confirmar cancelación"}
               </button>
               <button onClick={() => setCancelMovement(null)} style={{ ...btnSec, flex: 1 }}>
                 Volver
