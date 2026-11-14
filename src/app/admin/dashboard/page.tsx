@@ -1841,6 +1841,9 @@ export default function AdminDashboardPage() {
         </Section>
 
         <Section id="productos" title="Ventas por producto" count={filteredProductStats.length}>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, padding: "8px 12px", borderRadius: 10, background: "rgba(53,92,125,0.07)", border: "1px solid rgba(53,92,125,0.15)" }}>
+            Aquí se cuenta <b>todo el producto que salió</b>: contado, tarjeta, transferencia <b>y crédito</b>. Las ventas a crédito no entran en los totales de dinero de arriba hasta que se cobran.
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14, alignItems: "center" }}>
             <button onClick={setTodayFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Hoy</button>
             <button onClick={setWeekFilter} style={{ ...secondaryButtonStyle, padding: "6px 14px", fontSize: 13 }}>Semana</button>
