@@ -1193,7 +1193,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       // por si después hay duda. Se registra en el primer ticket del cobro.
       if (method === "efectivo" && idx === 0 && extra.cashReceived && extra.cashReceived > 0) {
         mov.cash_received = moneyRound(extra.cashReceived);
-        mov.change_given = moneyRound(Math.max(0, extra.cashReceived - finalTotal));
+        // El cliente paga el total REDONDEADO (el que ve en pantalla); el cambio
+        // se calcula contra ese mismo número. Antes se restaba el total con
+        // centavos y quedaba registrado $1 de más en casi todos los cobros.
+        mov.change_given = Math.max(0, moneyRound(extra.cashReceived) - moneyRound(finalTotal));
       }
       // Repartidor: el efectivo todavía no está en caja. Queda a nombre de quien
       // se lo llevó hasta que lo entregue (delivery_cash_received_at).
