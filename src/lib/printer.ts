@@ -313,6 +313,8 @@ export type TicketItem = {
   is_fixed_price_piece?: boolean | null;
   prepared_kilos?: number | null;
   total?: number;
+  /** Precio unitario YA con descuento (solo si a este renglón le tocó descuento) */
+  discountedPrice?: number | null;
 };
 
 export type TicketData = {
@@ -886,14 +888,26 @@ function buildCreditTicketWithPagare(ticket: TicketData, copy: "NEGOCIO" | "CLIE
       const qty = Number(item.quantity) || 0;
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${qty} pza x $${money(price)}`, `$${money(total)}`));
+      if (item.discountedPrice != null) {
+        b.push(...line(`  Con descuento: $${item.discountedPrice.toFixed(2)}/pza`));
+      }
     } else {
       const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       const price = Number(item.price) || 0;
       b.push(...twoColumns(`  ${kg.toFixed(3)}kg x $${money(price)}`, `$${money(total)}`));
+      if (item.discountedPrice != null) {
+        b.push(...line(`  Con descuento: $${item.discountedPrice.toFixed(2)}/kg`));
+      }
     }
   }
 
   b.push(...separatorLine("-"));
+
+  // ── Subtotal / descuento (para que el cliente vea que sí se le aplicó) ──
+  if (ticket.discount && ticket.discount > 0) {
+    b.push(...twoColumns("Subtotal:", `$${money(ticket.subtotal)}`));
+    b.push(...twoColumns("Descuento:", `-$${money(ticket.discount)}`));
+  }
 
   // ── Total ──
   b.push(...CMD.BOLD_ON);
@@ -1017,7 +1031,10 @@ async function browserPrintCreditTicket(ticket: TicketData): Promise<void> {
       const kg = Number(item.prepared_kilos ?? item.kilos ?? 0);
       detail = `${kg.toFixed(3)}kg x $${money(Number(item.price) || 0)}`;
     }
-    itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small></td><td style="text-align:right">$${money(total)}</td></tr>`;
+    const descLinea = item.discountedPrice != null
+      ? `<br><small><b>Con descuento: $${item.discountedPrice.toFixed(2)}/${item.sale_type === "pieza" && item.is_fixed_price_piece ? "pza" : "kg"}</b></small>`
+      : "";
+    itemsHtml += `<tr><td>${item.product}<br><small>${detail}</small>${descLinea}</td><td style="text-align:right;white-space:nowrap;padding-left:4px">$${money(total)}</td></tr>`;
   }
 
   const qrSrcCredito = ticket.qrData ? await qrDataUrl(ticket.qrData) : "";
@@ -1045,6 +1062,8 @@ async function browserPrintCreditTicket(ticket: TicketData): Promise<void> {
         <table>${itemsHtml}</table>
         <div class="sep"></div>
         <table>
+          ${ticket.discount && ticket.discount > 0 ? `<tr><td>Subtotal</td><td style="text-align:right">$${money(ticket.subtotal)}</td></tr>
+          <tr><td>Descuento</td><td style="text-align:right">-$${money(ticket.discount)}</td></tr>` : ""}
           <tr class="total"><td>TOTAL</td><td style="text-align:right">$${money(ticket.total)}</td></tr>
           <tr><td>Metodo</td><td style="text-align:right">CREDITO</td></tr>
           ${ticket.dueDate ? `<tr><td>Vence</td><td style="text-align:right">${ticket.dueDate}</td></tr>` : ""}
@@ -1058,7 +1077,7 @@ async function browserPrintCreditTicket(ticket: TicketData): Promise<void> {
         <p>La cantidad de:</p>
         <p class="monto">$${money(ticket.total)} MXN</p>
         <p>Por concepto de: Compra de productos cárnicos a crédito.</p>
-        <p>Fecha: ${dateStr}${ticket.dueDate ? ` &nbsp;|&nbsp; Fecha de pago: ${ticket.dueDate}` : ""}</p>
+        <p>Fecha: ${dateStr}</p>${ticket.dueDate ? `<p>Fecha de pago: ${ticket.dueDate}</p>` : ""}
         <div class="firma">
           <div class="firma-linea"></div>
           <strong>Firma del deudor</strong><br>
@@ -1075,12 +1094,14 @@ async function browserPrintCreditTicket(ticket: TicketData): Promise<void> {
 <style>
   @page{size:80mm auto;margin:0}
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:'Courier New',Consolas,monospace;font-size:12px;font-weight:700;width:80mm;padding:3mm;color:#000;-webkit-print-color-adjust:exact}
+  /* La impresora térmica de 80mm solo imprime ~72mm: se dejan 6mm por lado
+     para que los importes de la derecha no salgan cortados. */
+  body{font-family:'Courier New',Consolas,monospace;font-size:12px;font-weight:700;width:80mm;padding:3mm 6mm;color:#000;-webkit-print-color-adjust:exact;overflow-wrap:anywhere}
   .copy{page-break-after:always;padding-bottom:4mm}
   .copy:last-child{page-break-after:auto}
-  h1{font-size:20px;text-align:center;margin-bottom:4px;font-weight:900}
+  h1{font-size:16px;text-align:center;margin-bottom:4px;font-weight:900}
   .logo{text-align:center;margin-bottom:4px}
-  .logo img{width:45mm;height:auto}
+  .logo img{width:40mm;max-width:100%;height:auto}
   .credit-label{text-align:center;font-weight:900;font-size:14px;margin:4px 0;padding:4px;background:#f0f0f0;border-radius:4px}
   .sep{border-top:2px dashed #000;margin:5px 0}
   .sep-double{border-top:3px solid #000;margin:6px 0}

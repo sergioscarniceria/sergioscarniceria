@@ -2026,6 +2026,12 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
     const allTicketIds = allTickets.map((t) => t.id);
 
     // Imprimir 2 tickets con pagaré integrado
+    // Descuento total (mayoreo/cliente + manual) repartido solo entre los
+    // productos que SÍ admiten descuento, para imprimir en la nota a cuánto
+    // le salió cada kilo / pieza.
+    const descTotalNota = moneyRound(descuento + mayoreoDesc);
+    const baseDescontable = discountableSubtotal(allTickets);
+    const fraccionDesc = descTotalNota > 0 && baseDescontable > 0 ? Math.min(1, descTotalNota / baseDescontable) : 0;
     const allPrintItems = allTickets.flatMap((t) =>
       (t.order_items || []).map((item) => ({
         product: item.product,
@@ -2036,6 +2042,10 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
         is_fixed_price_piece: item.is_fixed_price_piece,
         fixed_piece_price: item.fixed_piece_price,
         prepared_kilos: item.prepared_kilos,
+        discountedPrice:
+          fraccionDesc > 0 && !isProductExcludedFromDiscount(item.product)
+            ? Number((Number(item.price || 0) * (1 - fraccionDesc)).toFixed(2))
+            : null,
       }))
     );
     const creditTicket: TicketData = {
@@ -2045,7 +2055,7 @@ const [manualDiscountValue, setManualDiscountValue] = useState("");
       cashier: null,
       items: allPrintItems,
       subtotal: subtotal,
-      discount: moneyRound(descuento),
+      discount: descTotalNota,
       total: moneyRound(finalTotal),
       paymentMethod: "credito",
       qrData: selectedTicket.id,
@@ -4905,9 +4915,18 @@ if (cashError) {
                           <span>{qty} {isPieza ? "pza" : "kg"} x ${money(item.price)}</span>
                           <span style={{ fontWeight: 700 }}>${money(lineTotal)}</span>
                         </div>
+                        {item.discountedPrice != null && (
+                          <div style={{ fontWeight: 800 }}>Con descuento: ${item.discountedPrice.toFixed(2)}/{isPieza ? "pza" : "kg"}</div>
+                        )}
                       </div>
                     );
                   })}
+                  {Number(creditPrintTicket.discount || 0) > 0 && (
+                    <div style={{ color: "#000", marginBottom: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Subtotal</span><span>${money(creditPrintTicket.subtotal)}</span></div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}><span>Descuento</span><span>-${money(Number(creditPrintTicket.discount || 0))}</span></div>
+                    </div>
+                  )}
 
                   <div style={{ borderTop: "1px dashed #000", margin: "6px 0" }} />
 
