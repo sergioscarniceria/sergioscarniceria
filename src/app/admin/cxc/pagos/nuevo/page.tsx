@@ -181,7 +181,7 @@ export default function NuevoPagoCxcPage() {
     paymentMethod: string;
     appliedDetails: { noteNumber: string; applied: number; newBalance: number }[];
     newTotalBalance: number;
-  }) {
+  }, preWin?: Window | null) {
     const methodLabel: Record<string, string> = {
       efectivo: "Efectivo",
       tarjeta: "Tarjeta",
@@ -234,7 +234,13 @@ export default function NuevoPagoCxcPage() {
       <script>window.onload=function(){window.print();setTimeout(function(){window.close()},600);}</script>
     </body></html>`;
 
-    const win = window.open("", "_blank", "width=320,height=600");
+    // Se usa la ventana que se abrió en el mismo clic de "Guardar". Si se abre
+    // hasta aquí (después de guardar), el navegador la bloquea cuando la base
+    // tarda unos segundos y el recibo no sale.
+    const win =
+      preWin && !preWin.closed
+        ? preWin
+        : window.open("", "_blank", "width=320,height=600");
     if (win) {
       win.document.write(html);
       win.document.close();
@@ -277,6 +283,14 @@ export default function NuevoPagoCxcPage() {
     return;
   }
 
+  // Abrir la ventana del recibo AHORA, dentro del clic, para que el navegador
+  // no la bloquee. Se llena al terminar de guardar.
+  const receiptWin = window.open("", "_blank", "width=320,height=600");
+  let receiptUsed = false;
+  const closeUnusedReceipt = () => {
+    if (!receiptUsed && receiptWin && !receiptWin.closed) receiptWin.close();
+  };
+
   setSaving(true);
 
   const { data: paymentData, error: paymentError } = await supabase
@@ -297,6 +311,7 @@ export default function NuevoPagoCxcPage() {
 
   if (paymentError || !paymentData) {
     console.log(paymentError);
+    closeUnusedReceipt();
     alert("No se pudo guardar el pago");
     setSaving(false);
     return;
@@ -380,6 +395,7 @@ if (cashMovementError) {
     return acc + (aplicada ? aplicada.newBalance : Number(n.balance_due || 0));
   }, 0);
 
+  receiptUsed = true;
   printAbonoTicket({
     customerName: selectedCustomer.name,
     paymentDate,
@@ -387,7 +403,7 @@ if (cashMovementError) {
     paymentMethod,
     appliedDetails,
     newTotalBalance: saldoRestante,
-  });
+  }, receiptWin);
 
   alert("Pago registrado y aplicado correctamente");
 
